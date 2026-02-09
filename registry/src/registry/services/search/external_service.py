@@ -5,9 +5,9 @@ from registry_db.models.extended_mcp_server import ExtendedMCPServer
 from registry_db.vector.enum.enums import RerankerProvider, SearchType
 from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
-logger = logging.getLogger(__name__)
-
 from .base import VectorSearchService
+
+logger = logging.getLogger(__name__)
 
 
 class ExternalVectorSearchService(VectorSearchService):

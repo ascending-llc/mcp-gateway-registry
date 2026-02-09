@@ -5,8 +5,6 @@ import secrets
 import time
 from typing import Any
 
-from registry_db.database.redis_client import get_redis_client
-
 from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.models.oauth_models import (
@@ -17,6 +15,7 @@ from registry.models.oauth_models import (
     OAuthTokens,
 )
 from registry.schemas.enums import OAuthFlowStatus
+from registry_db.database.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 

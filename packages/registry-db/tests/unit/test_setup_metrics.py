@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+
 from registry_db.telemetry import setup_metrics
 
 

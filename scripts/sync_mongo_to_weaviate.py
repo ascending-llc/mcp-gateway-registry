@@ -25,11 +25,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+from registry.services.server_service import server_service_v1
 from registry_db.database.mongodb import MongoDB
 from registry_db.models.extended_mcp_server import ExtendedMCPServer
 from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
-
-from registry.services.server_service import server_service_v1
 
 mcp_server_repo = get_mcp_server_repo()
 

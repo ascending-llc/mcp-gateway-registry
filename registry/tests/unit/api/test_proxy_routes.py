@@ -9,7 +9,6 @@ import httpx
 import pytest
 from fastapi import HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
-from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 from registry.api.proxy_routes import (
     MCPGW_PATH,
@@ -19,6 +18,7 @@ from registry.api.proxy_routes import (
 )
 from registry.schemas.errors import AuthenticationError, MissingUserIdError, OAuthReAuthRequiredError, OAuthTokenError
 from registry.schemas.proxy_tool_schema import ToolExecutionRequest, ToolExecutionResponse
+from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 
 @pytest.mark.unit

@@ -3,12 +3,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from beanie import PydanticObjectId
-from registry_db.models import IUser
-from registry_db.models._generated.token import Token
 
 from registry.models.emus import TokenType
 from registry.models.oauth_models import OAuthTokens
 from registry.services.user_service import user_service
+from registry_db.models import IUser
+from registry_db.models._generated.token import Token
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +258,7 @@ class TokenService:
         refresh_token = await self.get_oauth_refresh_token(user_id, service_name)
 
         # Convert to OAuthTokens object
-        return OAuthTokens(
+        return OAuthTokens(  # nosec B106 - "Bearer" is token type, not token value
             access_token=client_token.token,
             refresh_token=refresh_token.token if refresh_token else None,
             token_type="Bearer",

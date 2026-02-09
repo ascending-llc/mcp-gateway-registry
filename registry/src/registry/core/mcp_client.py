@@ -17,13 +17,13 @@ from authlib.oauth2.rfc8414 import AuthorizationServerMetadata
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
-from registry_db.database.redis_client import get_redis_client
 
 from registry.core.config import settings
 
 # Internal imports
 from registry.core.mcp_config import mcp_config
 from registry.core.server_strategies import get_server_strategy
+from registry_db.database.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 

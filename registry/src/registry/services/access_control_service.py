@@ -5,15 +5,15 @@ from typing import Any
 from beanie import PydanticObjectId
 from fastapi import HTTPException
 from fastapi import status as http_status
-from registry_db.models._generated import (
-    IAccessRole,
-)
-from registry_db.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 
 from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
 from registry.services.group_service import group_service
 from registry.services.user_service import user_service
+from registry_db.models._generated import (
+    IAccessRole,
+)
+from registry_db.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 
 logger = logging.getLogger(__name__)
 

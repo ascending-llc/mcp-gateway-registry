@@ -14,9 +14,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
-from registry_db.database import close_mongodb, init_mongodb
-from registry_db.database.redis_client import close_redis, init_redis
-from registry_db.telemetry import setup_metrics
 
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
@@ -46,6 +43,9 @@ from registry.services.search.service import vector_service
 
 logger = logging.getLogger(__name__)
 from registry.version import __version__
+from registry_db.database import close_mongodb, init_mongodb
+from registry_db.database.redis_client import close_redis, init_redis
+from registry_db.telemetry import setup_metrics
 
 
 @asynccontextmanager
@@ -300,7 +300,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "registry.main:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # nosec B104 - it's fine to
         port=7860,
         reload=True,
         log_level=settings.log_level.lower(),

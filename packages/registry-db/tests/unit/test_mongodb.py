@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from registry_db.database.mongodb import MongoDB, close_mongodb, init_mongodb
 
 

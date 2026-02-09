@@ -1,14 +1,13 @@
 import logging
 from typing import Any
 
-from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-
 from registry.auth.oauth import FlowStateManager, get_flow_state_manager, parse_scope
 from registry.auth.oauth.oauth_client import OAuthClient
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.services.oauth.token_service import token_service
 from registry.utils.crypto_utils import decrypt_auth_fields
+from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 logger = logging.getLogger(__name__)
 
