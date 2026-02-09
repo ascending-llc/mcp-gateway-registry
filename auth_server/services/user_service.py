@@ -3,7 +3,6 @@ User service for auth server - handles user lookups from MongoDB.
 """
 
 import logging
-from datetime import UTC, datetime
 
 from packages.models import IUser
 
@@ -50,45 +49,6 @@ class UserService:
             return None
         except Exception as e:
             logger.error(f"Error resolving user_id from MongoDB: {type(e).__name__}: {e}")
-            return None
-
-    async def create_user(self, user_info: dict) -> str | None:
-        """
-        Create a new user in MongoDB.
-
-        Args:
-            user_info: Dictionary containing user information (name, username, email, idp_id)
-
-        Returns:
-            user_id as string if created, None on error
-        """
-        try:
-            existing_user = await IUser.find_one()
-            new_user = IUser(
-                name=user_info.get("name"),
-                username=user_info.get("username"),
-                email=user_info.get("email") or user_info.get("username"),
-                emailVerified=False,
-                role="ADMIN" if not existing_user else "USER",
-                provider="openid",
-                openidId=user_info.get("idp_id"),
-                idOnTheSource=user_info.get("idp_id"),
-                plugins=[],
-                termsAccepted=False,
-                backupCodes=[],
-                refreshToken=[],
-                favorites=[],
-                createdAt=datetime.now(UTC),
-                updatedAt=datetime.now(UTC),
-            )
-
-            created_user = await new_user.create()
-            logger.info(
-                f"Created new user record in MongoDB with id: {created_user.id} for username: {user_info.get('username')}"
-            )
-            return str(created_user.id)
-        except Exception as e:
-            logger.error(f"Error creating new user for username: {user_info.get('username')}: {e}")
             return None
 
 

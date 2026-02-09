@@ -293,105 +293,79 @@ class TestOAuth2CallbackStandardFlow:
                 assert user_info["groups"] == ["/admin", "/users"]
                 assert user_info["idp_id"] == "keycloak-sub-789"
 
-    @patch("auth_server.routes.oauth_flow.exchange_code_for_token")
-    @patch("auth_server.routes.oauth_flow.get_user_info")
-    def test_oauth_callback_user_id_not_resolved(
-        self, mock_get_user_info, mock_exchange_token, test_client_oauth_callback, clear_device_storage
-    ):
-        """Test oauth2_callback creates user when resolve_user_id returns None."""
-        # Mock OAuth provider responses
-        mock_exchange_token.return_value = {"access_token": "provider_token", "id_token": "provider_id"}
-        mock_get_user_info.return_value = {
-            "sub": "new-oauth-user-id",
-            "preferred_username": "newuser",
-            "email": "new@example.com",
-            "name": "New User",
-            "groups": [],
-        }
+    def test_oauth_callback_user_id_not_resolved(self, test_client_oauth_callback, clear_device_storage):
+        """Test oauth2_callback when user_id cannot be resolved (user not in MongoDB)."""
+        with patch("auth_server.routes.oauth_flow.exchange_code_for_token") as mock_exchange:
+            with patch("auth_server.routes.oauth_flow.get_user_info") as mock_get_user:
+                with patch("auth_server.routes.oauth_flow.user_service") as mock_service:
+                    # User not found in MongoDB
+                    mock_service.resolve_user_id = AsyncMock(return_value=None)
 
-        with patch("auth_server.routes.oauth_flow.user_service") as mock_user_service:
-            with patch("auth_server.routes.oauth_flow.settings") as mock_settings:
-                # First call to resolve_user_id returns None (user not found)
-                # This triggers create_user to be called
-                mock_user_service.resolve_user_id = AsyncMock(return_value=None)
-
-                # create_user returns the new user_id
-                mock_user_service.create_user = AsyncMock(return_value="507f1f77bcf86cd799439099")
-
-                mock_settings.oauth2_config = {
-                    "providers": {
-                        "keycloak": {
-                            "enabled": True,
-                            "client_id": "test-client",
-                            "client_secret": "test-secret",
-                            "token_url": "http://keycloak/token",
-                            "user_info_url": "http://keycloak/userinfo",
-                            "username_claim": "preferred_username",
-                            "email_claim": "email",
-                            "name_claim": "name",
-                            "groups_claim": "groups",
-                        }
+                    mock_exchange.return_value = {"access_token": "token", "id_token": "id"}
+                    mock_get_user.return_value = {
+                        "sub": "new-user",
+                        "preferred_username": "newuser",
+                        "email": "new@example.com",
+                        "name": "New User",
+                        "groups": [],
                     }
-                }
-                mock_settings.registry_url = "http://localhost:3000"
-                mock_settings.registry_app_name = "registry-internal-client"
-                mock_settings.auth_server_external_url = "http://localhost:8888"
-                mock_settings.auth_server_url = "http://localhost:8888"
-                mock_settings.oauth_session_ttl_seconds = 600
-                mock_settings.secret_key = "test-secret-key"
 
-                from itsdangerous import URLSafeTimedSerializer
+                    with patch("auth_server.routes.oauth_flow.settings") as mock_settings:
+                        mock_settings.oauth2_config = {
+                            "providers": {
+                                "keycloak": {
+                                    "enabled": True,
+                                    "client_id": "test",
+                                    "client_secret": "secret",
+                                    "token_url": "http://keycloak/token",
+                                    "user_info_url": "http://keycloak/userinfo",
+                                    "username_claim": "preferred_username",
+                                    "email_claim": "email",
+                                    "name_claim": "name",
+                                    "groups_claim": "groups",
+                                }
+                            }
+                        }
+                        mock_settings.registry_url = "http://localhost:3000"
+                        mock_settings.registry_app_name = "registry-internal-client"
+                        mock_settings.auth_server_external_url = "http://localhost:8888"
+                        mock_settings.auth_server_url = "http://localhost:8888"
+                        mock_settings.oauth_session_ttl_seconds = 600
+                        mock_settings.secret_key = "test-secret-key"
 
-                test_signer = URLSafeTimedSerializer("test-secret-key")
+                        from itsdangerous import URLSafeTimedSerializer
 
-                session_data = {
-                    "state": "test-state",
-                    "client_state": None,
-                    "provider": "keycloak",
-                    "redirect_uri": "http://localhost:3000/redirect",
-                }
-                temp_session = test_signer.dumps(session_data)
+                        test_signer = URLSafeTimedSerializer("test-secret-key")
 
-                with patch("auth_server.routes.oauth_flow.signer", test_signer):
-                    response = test_client_oauth_callback.get(
-                        f"{API_PREFIX}/oauth2/callback/keycloak",
-                        params={"code": "new-user-code", "state": "test-state"},
-                        cookies={"oauth2_temp_session": temp_session},
-                        follow_redirects=False,
-                    )
+                        session_data = {
+                            "state": "test-state",
+                            "client_state": None,
+                            "provider": "keycloak",
+                            "redirect_uri": "http://localhost:3000/redirect",
+                        }
+                        temp_session = test_signer.dumps(session_data)
 
-                # Should redirect with authorization code (not error)
-                assert response.status_code == 302
-                location = response.headers["location"]
-                assert "code=" in location
+                        with patch("auth_server.routes.oauth_flow.signer", test_signer):
+                            response = test_client_oauth_callback.get(
+                                f"{API_PREFIX}/oauth2/callback/keycloak",
+                                params={"code": "code", "state": "test-state"},
+                                cookies={"oauth2_temp_session": temp_session},
+                                follow_redirects=False,
+                            )
 
-                # Verify resolve_user_id was called first
-                mock_user_service.resolve_user_id.assert_called_once()
-                resolve_call_args = mock_user_service.resolve_user_id.call_args[0][0]
-                assert resolve_call_args["username"] == "newuser"
-                assert resolve_call_args["email"] == "new@example.com"
+                            # Still should generate authorization code (user_id is None)
+                            assert response.status_code == 302
+                            location = response.headers["location"]
 
-                # Verify create_user was called after resolve_user_id returned None
-                mock_user_service.create_user.assert_called_once()
-                create_call_args = mock_user_service.create_user.call_args[0][0]
-                assert create_call_args["username"] == "newuser"
-                assert create_call_args["email"] == "new@example.com"
-                assert create_call_args["name"] == "New User"
-                assert create_call_args["idp_id"] == "new-oauth-user-id"
+                            import urllib.parse
 
-                # Extract and verify authorization code contains the new user_id
-                import urllib.parse
+                            parsed_url = urllib.parse.urlparse(location)
+                            query_params = urllib.parse.parse_qs(parsed_url.query)
+                            auth_code = query_params.get("code", [None])[0]
 
-                parsed_url = urllib.parse.urlparse(location)
-                query_params = urllib.parse.parse_qs(parsed_url.query)
-                auth_code = query_params.get("code", [None])[0]
-                assert auth_code is not None
-
-                code_data = authorization_codes_storage[auth_code]
-                # Verify the created user_id is in the authorization code
-                assert code_data["user_info"]["user_id"] == "507f1f77bcf86cd799439099"
-                assert code_data["user_info"]["username"] == "newuser"
-                assert code_data["user_info"]["email"] == "new@example.com"
+                            code_data = authorization_codes_storage[auth_code]
+                            # user_id will be None when not found
+                            assert "user_info" in code_data
 
 
 @pytest.mark.integration
