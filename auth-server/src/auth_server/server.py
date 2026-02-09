@@ -14,8 +14,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import database utilities
-from packages.database import close_mongodb, init_mongodb
-from packages.telemetry import setup_metrics
+from registry_db.database import close_mongodb, init_mongodb
+from registry_db.telemetry import setup_metrics
 
 from .core.config import settings
 

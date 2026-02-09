@@ -59,16 +59,17 @@ where = ["src"]
 [tool.setuptools.package-data]
 auth_server = ["py.typed", "*.yml", "*.yaml", "*.json"]
 
+# Tasks of this specific workspace member should be run from the member directory, i.e. `./auth-server`.
 [tool.poe.tasks]
-# Development server (runs from parent directory)
-dev = { shell = "cd .. && uv run uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888" }
+# Development server
+dev = { shell = "uv run uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888" }
 
-# Run all tests (use parent's environment)
-test = { shell = "cd .. && uv run pytest auth_server/tests/ -v" }
-test-cov = { shell = "cd .. && uv run pytest auth_server/tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml" }
+# Run all tests
+test = { shell = "uv run pytest tests/ -v" }
+test-cov = { shell = "uv run pytest tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml" }
 
 # Run unit tests only
-test-unit = { shell = "cd .. && uv run pytest auth_server/tests/ -v -m unit" }
+test-unit = { shell = "uv run pytest tests/ -v -m unit" }
 
 # Run integration tests only
-test-integration = { shell = "cd .. && uv run pytest auth_server/tests/ -v -m integration" }
+test-integration = { shell = "uv run pytest tests/ -v -m integration" }

@@ -31,7 +31,7 @@ def test_client(auth_server_app) -> Generator[TestClient, None, None]:
     # Mock MongoDB initialization to prevent actual connection attempts
     with (
         patch("auth_server.server.init_mongodb"),
-        patch("packages.database.mongodb.MongoDB.connect_db"),
+        patch("registry_db.database.mongodb.MongoDB.connect_db"),
         TestClient(auth_server_app) as client,
     ):
         yield client

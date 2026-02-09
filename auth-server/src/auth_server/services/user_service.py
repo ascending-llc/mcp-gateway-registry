@@ -4,7 +4,7 @@ User service for auth server - handles user lookups from MongoDB.
 
 import logging
 
-from packages.models import IUser
+from registry_db.models import IUser
 
 logger = logging.getLogger(__name__)
 
