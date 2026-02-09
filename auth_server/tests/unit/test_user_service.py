@@ -64,7 +64,7 @@ class TestUserService:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "user_count, expected_role", 
+        "user_count, expected_role",
         [
             (0, "ADMIN"),  # First user should be ADMIN
             (1, "USER"),   # Subsequent users should be USER
@@ -105,7 +105,7 @@ class TestUserService:
             assert call_kwargs["email"] == "newuser@example.com"
             assert call_kwargs["role"] == expected_role
             assert result == "507f1f77bcf86cd799439015"
-            
+
     @pytest.mark.asyncio
     async def test_resolve_user_id_no_username_only_email(self):
         """Test resolving user_id when only email is provided."""

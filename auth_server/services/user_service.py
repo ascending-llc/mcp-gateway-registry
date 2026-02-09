@@ -45,7 +45,7 @@ class UserService:
                 if user:
                     logger.debug(f"✓ Resolved user_id from MongoDB by email: {user.id} for email: {email}")
                     return str(user.id)
-            
+
             # If not found create new user
             logger.warning(f"User not found in MongoDB for username: {username}, email: {email}. Creating new user record.")
             user_count = await IUser.count()
