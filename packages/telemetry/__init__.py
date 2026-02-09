@@ -72,7 +72,7 @@ class SafeOTLPMetricExporter:
             return
         try:
             return self._exporter.shutdown(*args, **kwargs)
-        except Exception:
+        except Exception:  # nosec B110 - intentional suppression during teardown
             pass
 
     def force_flush(self, *args, **kwargs):
@@ -81,7 +81,7 @@ class SafeOTLPMetricExporter:
             return
         try:
             return self._exporter.force_flush(*args, **kwargs)
-        except Exception:
+        except Exception:  # nosec B110 - intentional suppression during teardown
             pass
 
 
@@ -133,13 +133,14 @@ def setup_metrics(service_name: str, otlp_endpoint: str | None = None, enable_me
                         aggregation=ExplicitBucketHistogramAggregation(boundaries=LATENCY_BUCKETS),
                     )
                 ]
-                # Set meter provider if we have any readers
+                # Always set meter provider with views so that histogram
+                # bucket boundaries are applied regardless of reader config.
+                provider = MeterProvider(resource=resource, metric_readers=readers, views=views)
+                metrics.set_meter_provider(provider)
                 if readers:
-                    provider = MeterProvider(resource=resource, metric_readers=readers, views=views)
-                    metrics.set_meter_provider(provider)
                     logger.info(f"Metrics initialized with {len(readers)} reader(s)")
                 else:
-                    logger.warning("No metric readers configured")
+                    logger.warning("No metric readers configured - metrics will not be exported")
 
             except Exception as e:
                 logger.warning(f"Metrics setup failed: {e}")
@@ -156,5 +157,5 @@ def shutdown_telemetry():
         provider = metrics.get_meter_provider()
         if hasattr(provider, "shutdown"):
             provider.shutdown(timeout_millis=1000)
-    except Exception:
+    except Exception:  # nosec B110 - intentional suppression during teardown
         pass
