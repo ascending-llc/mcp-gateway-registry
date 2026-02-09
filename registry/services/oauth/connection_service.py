@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -6,7 +7,8 @@ from typing import Any
 from registry.schemas.enums import ConnectionState
 from registry.services.oauth.base import Connection, ConnectionManager
 from registry.services.server_service import server_service_v1
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

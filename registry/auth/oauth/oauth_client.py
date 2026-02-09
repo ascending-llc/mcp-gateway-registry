@@ -1,5 +1,6 @@
 """OAuth client using Authlib for OAuth 2.0 operations with PKCE support."""
 
+import logging
 import secrets
 from typing import Any
 
@@ -7,7 +8,8 @@ from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
 from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthTokens
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class OAuthClient:

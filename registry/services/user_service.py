@@ -1,9 +1,11 @@
+import logging
 from datetime import UTC, datetime
 
 from beanie import PydanticObjectId
 
 from packages.models import IUser
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:

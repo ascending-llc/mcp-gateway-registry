@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,7 +14,8 @@ from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
 from registry.services.group_service import group_service
 from registry.services.user_service import user_service
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class ACLService:

@@ -69,6 +69,7 @@ Storage Structure:
 }
 """
 
+import logging
 import re
 from datetime import datetime
 from typing import Any, ClassVar
@@ -77,7 +78,7 @@ from beanie import Document, Insert, PydanticObjectId, Replace, Save, before_eve
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 from pymongo import IndexModel
 
-from registry.utils.log import logger
+logger = logging.getLogger(__name__)
 
 # ========== Constants ==========
 

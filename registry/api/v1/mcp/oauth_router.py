@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Any
 from urllib.parse import quote
@@ -13,7 +14,8 @@ from registry.schemas.enums import ConnectionState, OAuthFlowStatus
 from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.services.oauth.token_service import token_service
 from registry.services.server_service import server_service_v1
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/mcp", tags=["oauth"])
 
