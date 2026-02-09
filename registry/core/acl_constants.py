@@ -54,3 +54,4 @@ class ResourceType(StrEnum):
     AGENT = "agent"
     PROMPTGROUP = "promptGroup"
     MCPSERVER = "mcpServer"
+    A2AAGENT = "a2aAgent"

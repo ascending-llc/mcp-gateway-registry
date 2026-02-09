@@ -436,19 +436,33 @@ def _update_config_from_request(
     # Handle mutually exclusive authentication fields: oauth and apiKey
     # If one is being updated, remove the other from config
     if "oauth" in update_dict:
-        # When oauth is provided, remove apiKey field and store oauth
+        # When oauth is provided, remove apiKey field
         if "apiKey" in config:
             del config["apiKey"]
-        # Store oauth with all its fields
-        config["oauth"] = update_dict["oauth"]
+        # Merge oauth fields (upsert operation - only update provided fields)
+        existing_oauth = config.get("oauth", {})
+        if existing_oauth and isinstance(existing_oauth, dict):
+            # Merge new oauth fields with existing ones
+            existing_oauth.update(update_dict["oauth"])
+            config["oauth"] = existing_oauth
+        else:
+            # No existing oauth, use the new one
+            config["oauth"] = update_dict["oauth"]
         # Remove from update_dict to avoid duplicate processing
         del update_dict["oauth"]
     elif "apiKey" in update_dict:
-        # When apiKey is provided, remove oauth field and store apiKey
+        # When apiKey is provided, remove oauth field
         if "oauth" in config:
             del config["oauth"]
-        # Store apiKey with all its fields
-        config["apiKey"] = update_dict["apiKey"]
+        # Merge apiKey fields (upsert operation - only update provided fields)
+        existing_apiKey = config.get("apiKey", {})
+        if existing_apiKey and isinstance(existing_apiKey, dict):
+            # Merge new apiKey fields with existing ones
+            existing_apiKey.update(update_dict["apiKey"])
+            config["apiKey"] = existing_apiKey
+        else:
+            # No existing apiKey, use the new one
+            config["apiKey"] = update_dict["apiKey"]
         # Remove from update_dict to avoid duplicate processing
         del update_dict["apiKey"]
 
