@@ -46,6 +46,7 @@ dev = [
     "factory-boy>=3.3.0",
     "faker>=24.0.0",
     "poethepoet>=0.24.0",
+    "types-pyyaml>=6.0.12.20250915",
 ]
 
 # Vector search with embedded FAISS (optional, adds ~2-3GB)

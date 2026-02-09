@@ -127,7 +127,7 @@ known-first-party = ["registry", "auth_server", "packages/*"]
 [tool.ruff.lint.per-file-ignores]
 # Import order matters in __init__.py to avoid circular imports
 # NOTICE
-"packages/vector/__init__.py" = ["I001"]
+"packages/registry-db/src/registry_db/vector/__init__.py" = ["I001"]
 
 [tool.ruff.format]
 quote-style = "double"

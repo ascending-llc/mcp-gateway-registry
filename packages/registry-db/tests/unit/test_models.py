@@ -5,8 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from beanie import PydanticObjectId
 from pydantic import ValidationError
-
-from packages.models.extended_mcp_server import ExtendedMCPServer, MCPServerDocument
+from registry_db.models.extended_mcp_server import ExtendedMCPServer, MCPServerDocument
 
 
 class TestExtendedMCPServerStructure:

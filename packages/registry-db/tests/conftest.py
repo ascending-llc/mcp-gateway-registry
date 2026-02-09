@@ -6,7 +6,7 @@ import pytest
 from beanie import PydanticObjectId
 
 # Import factories for use in tests
-pytest_plugins = ["packages.tests.fixtures.factories"]
+pytest_plugins = ["tests.fixtures.factories"]
 
 
 @pytest.fixture

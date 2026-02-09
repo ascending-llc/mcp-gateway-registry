@@ -1,1 +1,1 @@
-"""Unit tests package for packages."""
+"""Unit tests package for registry_db."""

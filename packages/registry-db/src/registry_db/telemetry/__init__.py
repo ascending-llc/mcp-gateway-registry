@@ -7,7 +7,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
-from packages.telemetry.decorators import (
+from .decorators import (
     create_timed_context,
     track_duration,
 )

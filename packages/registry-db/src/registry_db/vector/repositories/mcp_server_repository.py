@@ -10,10 +10,10 @@ from typing import Any
 
 from langchain_core.documents import Document
 
-from packages.models import ExtendedMCPServer
-from packages.models.enums import ServerEntityType
-from packages.vector.client import DatabaseClient, initialize_database
-from packages.vector.repository import Repository
+from ...models import ExtendedMCPServer
+from ...models.enums import ServerEntityType
+from ..client import DatabaseClient, initialize_database
+from ..repository import Repository
 
 logger = logging.getLogger(__name__)
 

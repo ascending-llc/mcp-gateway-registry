@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 
-from packages.core.config import settings
-
+from ...core.config import settings
 from ..enum.enums import EmbeddingProvider, VectorStoreType
 
 

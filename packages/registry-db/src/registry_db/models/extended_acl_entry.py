@@ -9,7 +9,7 @@ from beanie import PydanticObjectId
 from pydantic import Field
 from pymongo import IndexModel
 
-from packages.models._generated.aclEntry import IAclEntry
+from ._generated.aclEntry import IAclEntry
 
 
 class ExtendedAclEntry(IAclEntry):

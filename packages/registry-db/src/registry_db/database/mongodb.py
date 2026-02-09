@@ -11,8 +11,8 @@ from urllib.parse import quote_plus
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from packages.core.config import settings
-from packages.models._generated import (
+from ..core.config import settings
+from ..models._generated import (
     IAccessRole,
     IAction,
     IGroup,
@@ -20,9 +20,9 @@ from packages.models._generated import (
     Key,
     Token,
 )
-from packages.models.a2a_agent import A2AAgent
-from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
-from packages.models.extended_mcp_server import (
+from ..models.a2a_agent import A2AAgent
+from ..models.extended_acl_entry import ExtendedAclEntry as IAclEntry
+from ..models.extended_mcp_server import (
     ExtendedMCPServer as MCPServerDocument,
 )
 

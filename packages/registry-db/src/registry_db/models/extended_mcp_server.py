@@ -54,8 +54,8 @@ from langchain_core.documents import Document as LangChainDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import Field
 
-from packages.core.config import settings
-from packages.models.enums import ServerEntityType
+from ..core.config import settings
+from ..models.enums import ServerEntityType
 
 logger = logging.getLogger(__name__)
 
