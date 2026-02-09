@@ -15,10 +15,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
+from registry_db.database import close_mongodb, init_mongodb
+from registry_db.database.redis_client import close_redis, init_redis
+from registry_db.telemetry import setup_metrics
 
-from packages.database import close_mongodb, init_mongodb
-from packages.database.redis_client import close_redis, init_redis
-from packages.telemetry import setup_metrics
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.api.proxy_routes import router as proxy_router

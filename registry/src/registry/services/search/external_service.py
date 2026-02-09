@@ -1,9 +1,9 @@
 import logging
 from typing import Any
 
-from packages.models.extended_mcp_server import ExtendedMCPServer
-from packages.vector.enum.enums import RerankerProvider, SearchType
-from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_db.models.extended_mcp_server import ExtendedMCPServer
+from registry_db.vector.enum.enums import RerankerProvider, SearchType
+from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 logger = logging.getLogger(__name__)
 

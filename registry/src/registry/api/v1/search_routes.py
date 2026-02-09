@@ -5,10 +5,10 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from registry_db.models.enums import ServerEntityType
+from registry_db.vector.enum.enums import SearchType
+from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
-from packages.models.enums import ServerEntityType
-from packages.vector.enum.enums import SearchType
-from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.auth.dependencies import CurrentUser
 from registry.core.telemetry_decorators import track_registry_operation
 from registry.services.search.service import faiss_service

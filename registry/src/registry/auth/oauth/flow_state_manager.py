@@ -5,7 +5,8 @@ import secrets
 import time
 from typing import Any
 
-from packages.database.redis_client import get_redis_client
+from registry_db.database.redis_client import get_redis_client
+
 from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.models.oauth_models import (

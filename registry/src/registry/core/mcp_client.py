@@ -17,8 +17,8 @@ from authlib.oauth2.rfc8414 import AuthorizationServerMetadata
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
+from registry_db.database.redis_client import get_redis_client
 
-from packages.database.redis_client import get_redis_client
 from registry.core.config import settings
 
 # Internal imports

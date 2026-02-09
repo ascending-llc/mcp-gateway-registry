@@ -18,9 +18,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from beanie import PydanticObjectId
+from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
-from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.core.mcp_client import get_tools_from_server_with_server_info
 from registry.core.telemetry_decorators import track_tool_discovery
 from registry.schemas.errors import (
@@ -1459,7 +1459,7 @@ class ServerServiceV1:
         Returns:
             Dictionary containing all statistics
         """
-        from packages.models._generated.token import Token
+        from registry_db.models._generated.token import Token
 
         stats = {}
 

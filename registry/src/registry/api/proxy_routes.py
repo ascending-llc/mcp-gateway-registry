@@ -9,8 +9,8 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
+from registry_db.models.extended_mcp_server import MCPServerDocument
 
-from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.core.mcp_client import clear_session, get_session, initialize_mcp_session
 from registry.core.telemetry_decorators import (

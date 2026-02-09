@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from registry_db.models.extended_mcp_server import ExtendedMCPServer as Server
 
-from packages.models.extended_mcp_server import ExtendedMCPServer as Server
 from registry.main import app
 
 

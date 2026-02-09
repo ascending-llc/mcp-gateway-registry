@@ -3,9 +3,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from beanie import PydanticObjectId
+from registry_db.models import IUser
+from registry_db.models._generated.token import Token
 
-from packages.models import IUser
-from packages.models._generated.token import Token
 from registry.models.emus import TokenType
 from registry.models.oauth_models import OAuthTokens
 from registry.services.user_service import user_service
