@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 
 from redis import Redis
@@ -6,7 +7,8 @@ from redis import Redis
 from registry.constants import REGISTRY_CONSTANTS
 from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthFlow, OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class RedisFlowStorage:

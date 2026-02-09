@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
@@ -7,7 +8,8 @@ from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.services.oauth.token_service import token_service
 from registry.utils.crypto_utils import decrypt_auth_fields
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class MCPOAuthService:

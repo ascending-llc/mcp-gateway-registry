@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,7 +12,8 @@ from registry.services.oauth.connection_status_service import (
 )
 from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.services.server_service import server_service_v1
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/mcp", tags=["connection"])
 
