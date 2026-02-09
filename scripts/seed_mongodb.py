@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 MongoDB Seed Script for MCP Gateway Registry
 
@@ -33,6 +32,7 @@ from packages.models._generated.token import Token
 from packages.models._generated.user import IUser
 from packages.models.extended_acl_entry import IAclEntry
 from packages.models.extended_mcp_server import MCPServerDocument
+
 from registry.utils.crypto_utils import encrypt_auth_fields
 
 

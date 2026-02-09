@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 MongoDB to Weaviate Sync Script for MCP Gateway Registry
 
@@ -33,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from packages.database.mongodb import MongoDB
 from packages.models.extended_mcp_server import ExtendedMCPServer
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+
 from registry.services.server_service import server_service_v1
 
 mcp_server_repo = get_mcp_server_repo()

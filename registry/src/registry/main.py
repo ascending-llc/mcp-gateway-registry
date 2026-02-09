@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 MCP Gateway Registry - Modern FastAPI Application
 

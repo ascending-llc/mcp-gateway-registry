@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Sync version across all pyproject.toml files in the workspace.
 

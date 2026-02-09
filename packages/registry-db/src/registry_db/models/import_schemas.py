@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 JSON Schema to Beanie ODM Model Generator
 
