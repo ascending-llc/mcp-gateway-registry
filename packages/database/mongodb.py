@@ -11,12 +11,20 @@ from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from packages.core.config import settings
-from packages.models._generated import IAccessRole, IAction, IGroup, IUser, Key, Token
-from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
-from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
+from packages.models._generated import (
+    IAccessRole,
+    IAction,
+    IGroup,
+    IUser,
+    Key,
+    Token,
+)
 from packages.models.a2a_agent import A2AAgent
-from packages.core.config import settings
+from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
+from packages.models.extended_mcp_server import (
+    ExtendedMCPServer as MCPServerDocument,
+)
+
 
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
@@ -104,7 +112,7 @@ class MongoDB:
                     IAction,
                     Key,
                     A2AAgent,
-                ]
+                ],
             )
         except Exception:
             raise
