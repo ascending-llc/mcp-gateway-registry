@@ -15,13 +15,12 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Add parent directory to path to import registry_client
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.registry_client import RegistryClient
-
 
 # Configure logging
 logging.basicConfig(
@@ -42,7 +41,7 @@ def _load_token_from_file(
     Returns:
         Access token string
     """
-    with open(token_file, 'r') as f:
+    with open(token_file) as f:
         token_data = json.load(f)
         access_token = token_data.get("access_token")
         if not access_token:
@@ -52,7 +51,7 @@ def _load_token_from_file(
 
 def _get_registry_client(
     base_url: str,
-    token_file: Optional[str] = None,
+    token_file: str | None = None,
 ) -> RegistryClient:
     """Create and return a configured RegistryClient.
 
@@ -92,7 +91,7 @@ def _handle_service_add(
     client = _get_registry_client(args.base_url, args.token_file)
 
     # Load config from file
-    with open(args.config_path, 'r') as f:
+    with open(args.config_path) as f:
         config = json.load(f)
 
     result = client.register_server(config)
@@ -133,10 +132,7 @@ def _handle_group_create(
     """Handle group create command."""
     client = _get_registry_client(args.base_url, args.token_file)
 
-    result = client.group_create(
-        name=args.name,
-        description=args.description
-    )
+    result = client.group_create(name=args.name, description=args.description)
     _print_json_response(result.model_dump())
 
 
@@ -166,13 +162,9 @@ def _handle_user_create_m2m(
     """Handle M2M user creation command."""
     client = _get_registry_client(args.base_url, args.token_file)
 
-    groups = args.groups.split(',') if args.groups else []
+    groups = args.groups.split(",") if args.groups else []
 
-    result = client.user_create_m2m(
-        name=args.name,
-        groups=groups,
-        description=args.description
-    )
+    result = client.user_create_m2m(name=args.name, groups=groups, description=args.description)
     _print_json_response(result.model_dump())
 
 
@@ -182,7 +174,7 @@ def _handle_user_create_human(
     """Handle human user creation command."""
     client = _get_registry_client(args.base_url, args.token_file)
 
-    groups = args.groups.split(',') if args.groups else []
+    groups = args.groups.split(",") if args.groups else []
 
     result = client.user_create_human(
         username=args.username,
@@ -190,7 +182,7 @@ def _handle_user_create_human(
         first_name=args.first_name,
         last_name=args.last_name,
         groups=groups,
-        password=args.password
+        password=args.password,
     )
     _print_json_response(result.model_dump())
 
@@ -221,7 +213,7 @@ def _handle_anthropic_list(
     """Handle Anthropic API list command."""
     client = _get_registry_client(args.base_url, args.token_file)
 
-    result = client.anthropic_list_servers(limit=args.limit if hasattr(args, 'limit') else 100)
+    result = client.anthropic_list_servers(limit=args.limit if hasattr(args, "limit") else 100)
     _print_json_response(result.model_dump())
 
 
@@ -241,8 +233,8 @@ def _handle_agent_list(
     """Handle agent list command."""
     client = _get_registry_client(args.base_url, args.token_file)
 
-    query = args.query if hasattr(args, 'query') else None
-    enabled_only = args.enabled_only if hasattr(args, 'enabled_only') else False
+    query = args.query if hasattr(args, "query") else None
+    enabled_only = args.enabled_only if hasattr(args, "enabled_only") else False
 
     result = client.list_agents(query=query, enabled_only=enabled_only)
     _print_json_response(result.model_dump())
@@ -271,20 +263,16 @@ def _handle_agent_search(
 def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Registry Management CLI Wrapper",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        description="Registry Management CLI Wrapper", formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
     parser.add_argument(
         "--base-url",
         default=os.getenv("GATEWAY_BASE_URL", "http://localhost"),
-        help="Registry base URL (default: http://localhost)"
+        help="Registry base URL (default: http://localhost)",
     )
 
-    parser.add_argument(
-        "--token-file",
-        help="Path to token file containing access_token"
-    )
+    parser.add_argument("--token-file", help="Path to token file containing access_token")
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 

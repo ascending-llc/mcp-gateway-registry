@@ -1,14 +1,16 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class ToolDiscoveryMode(str, Enum):
+class ToolDiscoveryMode(StrEnum):
     """Tool discovery mode enumeration"""
+
     EXTERNAL = "external"
     EMBEDDED = "embedded"
 
 
-class ServerEntityType(str, Enum):
+class ServerEntityType(StrEnum):
     """Entity type enumeration for vector documents"""
+
     SERVER = "server"
     TOOL = "tool"
     RESOURCE = "resource"

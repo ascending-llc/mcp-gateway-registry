@@ -44,16 +44,16 @@ This guide provides a comprehensive, step-by-step walkthrough for setting up the
 Choose between Docker and Podman based on your needs:
 
 ### Docker (Default)
-✅ Best for: Standard deployment, familiar workflow  
-✅ Uses privileged ports (80, 443)  
-✅ Access at `http://localhost`  
-⚠️ Requires Docker daemon running  
+✅ Best for: Standard deployment, familiar workflow
+✅ Uses privileged ports (80, 443)
+✅ Access at `http://localhost`
+⚠️ Requires Docker daemon running
 
 ### Podman (Rootless Alternative)
-✅ Best for: Rootless deployment, no Docker daemon  
-✅ Uses non-privileged ports (8080, 8443)  
-✅ Access at `http://localhost:8080`  
-✅ More secure, no root access needed  
+✅ Best for: Rootless deployment, no Docker daemon
+✅ Uses non-privileged ports (8080, 8443)
+✅ Access at `http://localhost:8080`
+✅ More secure, no root access needed
 
 **This guide uses Docker by default**. For Podman-specific instructions, see [Section 10: Podman Deployment](#10-podman-deployment).
 
@@ -163,13 +163,13 @@ uv run import-schemas --tag asc0.4.2 \
 ls -la models/_generated/
 ```
 
-**Important Notes**: 
+**Important Notes**:
 - Always run from the **package** directory to ensure correct paths
 - When building Docker images, `SCHEMA_VERSION` and `GITHUB_TOKEN` are **required** build arguments
 - The schemas will be automatically imported during Docker builds in CI/CD
 - When `--files` is omitted, **all .json files** from the release will be imported
 
-### Create Docker Compose Override File 
+### Create Docker Compose Override File
 
 ```bash
 cp docker-compose.override.yml.example docker-compose.override.yml
@@ -178,7 +178,7 @@ cp docker-compose.override.yml.example docker-compose.override.yml
 nano docker-compose.override.yml
 ```
 
-### Configure Docker Compose 
+### Configure Docker Compose
 
 ```yaml
   # Example: Disable Keycloak if using Entra ID
@@ -188,11 +188,11 @@ nano docker-compose.override.yml
     keycloak-db:
       profiles:
       - disabled
-  
+
   # Example: Disable Frontend container if running Vite Server
   # registry-frontend:
   #  profiles:
-  #   - disabled 
+  #   - disabled
 ```
 
 ## 4. Starting All Services

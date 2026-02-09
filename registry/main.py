@@ -3,46 +3,48 @@
 MCP Gateway Registry - Modern FastAPI Application
 
 A clean, domain-driven FastAPI app for managing MCP (Model Context Protocol) servers.
-This main.py file serves as the application coordinator, importing and registering 
+This main.py file serves as the application coordinator, importing and registering
 domain routers while handling core app configuration.
 """
+
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-
-from packages.database import init_mongodb, close_mongodb
-from packages.database.redis_client import init_redis, close_redis
-from registry.auth.middleware import UnifiedAuthMiddleware
-from registry.core.config import settings
-from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-# Import domain routers
-from registry.api.v1.meta_routes import router as meta_router
-from registry.api.v1.token_routes import router as token_router
-from registry.api.v1.server.server_routes import router as servers_router_v1
-from registry.api.v1.search_routes import router as search_router
-from registry.api.wellknown_routes import router as wellknown_router
+
+from packages.database import close_mongodb, init_mongodb
+from packages.database.redis_client import close_redis, init_redis
+from packages.telemetry import setup_metrics
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
-from registry.health.routes import router as health_router
-from registry.api.v1.mcp.oauth_router import router as oauth_router
+from registry.api.proxy_routes import router as proxy_router
+from registry.api.proxy_routes import shutdown_proxy_client
 from registry.api.redirect_routes import router as auth_provider_router
-from registry.api.v1.mcp.connection_router import router as connection_router
 from registry.api.v1.acl_routes import router as acl_router
-from registry.version import __version__
-from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
-from packages.telemetry import setup_metrics
+from registry.api.v1.mcp.connection_router import router as connection_router
+from registry.api.v1.mcp.oauth_router import router as oauth_router
+
+# Import domain routers
+from registry.api.v1.meta_routes import router as meta_router
+from registry.api.v1.search_routes import router as search_router
+from registry.api.v1.server.server_routes import router as servers_router_v1
+from registry.api.v1.token_routes import router as token_router
+from registry.api.wellknown_routes import router as wellknown_router
 from registry.auth.dependencies import CurrentUser
+from registry.auth.middleware import UnifiedAuthMiddleware
+from registry.core.config import settings
+from registry.health.routes import router as health_router
+from registry.health.service import health_service
 
 # Import services for initialization
 from registry.services.agent_service import agent_service
-from registry.health.service import health_service
 from registry.services.federation_service import get_federation_service
 from registry.services.search.service import vector_service
-
 from registry.utils.log import logger
+from registry.version import __version__
 
 
 @asynccontextmanager
@@ -50,7 +52,7 @@ async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle management."""
     # Configure logging first before any other operations
     settings.configure_logging()
-    
+
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
@@ -64,24 +66,24 @@ async def lifespan(app: FastAPI):
         logger.info("🗄️  Initializing MongoDB connection...")
         await init_mongodb()
         logger.info("✅ MongoDB connection established")
-        
+
         # Initialize Redis connection
         logger.info("🔴 Initializing Redis connection...")
         await init_redis()
         logger.info("✅ Redis connection established")
-        
+
         logger.info("🔍 Initializing vector search service...")
         await vector_service.initialize()
 
         # Only update index if service initialized successfully
-        if hasattr(vector_service, '_initialized') and vector_service._initialized:
+        if hasattr(vector_service, "_initialized") and vector_service._initialized:
             logger.info("📊 Updating vector search index with all registered services...")
             logger.info("📋 Loading agent cards and state...")
             agent_service.load_agents_and_state()
             logger.info("📊 Updating vector index with all registered agents...")
             all_agents = agent_service.list_agents()
             for agent_card in all_agents:
-                is_enabled = agent_service.is_agent_enabled(agent_card.path)
+                agent_service.is_agent_enabled(agent_card.path)
                 try:
                     await vector_service.add_or_update_agent(agent_card.path, agent_card)
                     logger.debug(f"Updated vector index for agent: {agent_card.path}")
@@ -103,10 +105,8 @@ async def lifespan(app: FastAPI):
 
             # Sync on startup if configured
             sync_on_startup = (
-                    (
-                            federation_service.config.anthropic.enabled and federation_service.config.anthropic.sync_on_startup) or
-                    (federation_service.config.asor.enabled and federation_service.config.asor.sync_on_startup)
-            )
+                federation_service.config.anthropic.enabled and federation_service.config.anthropic.sync_on_startup
+            ) or (federation_service.config.asor.enabled and federation_service.config.asor.sync_on_startup)
 
             if sync_on_startup:
                 logger.info("🔄 Syncing servers from federated registries on startup...")
@@ -131,7 +131,7 @@ async def lifespan(app: FastAPI):
     logger.info("🔄 Shutting down MCP Gateway Registry...")
     try:
         # Shutdown services gracefully
-        
+
         # Close Redis connection
         logger.info("🔴 Closing Redis connection...")
         await close_redis()
@@ -157,35 +157,29 @@ app = FastAPI(
         "persistAuthorization": True,
     },
     openapi_tags=[
-        {
-            "name": "Authentication",
-            "description": "OAuth2 and session-based authentication endpoints"
-        },
+        {"name": "Authentication", "description": "OAuth2 and session-based authentication endpoints"},
         {
             "name": "Server Management",
-            "description": "MCP server registration and management. Requires JWT Bearer token authentication."
+            "description": "MCP server registration and management. Requires JWT Bearer token authentication.",
         },
         {
             "name": "Agent Management",
-            "description": "A2A agent registration and management. Requires JWT Bearer token authentication."
+            "description": "A2A agent registration and management. Requires JWT Bearer token authentication.",
         },
         {
             "name": "Management API",
-            "description": "IAM and user management operations. Requires JWT Bearer token with admin permissions."
+            "description": "IAM and user management operations. Requires JWT Bearer token with admin permissions.",
         },
         {
             "name": "Semantic Search",
-            "description": "Vector-based semantic search for agents. Requires JWT Bearer token authentication."
+            "description": "Vector-based semantic search for agents. Requires JWT Bearer token authentication.",
         },
-        {
-            "name": "Health Monitoring",
-            "description": "Service health check endpoints"
-        },
+        {"name": "Health Monitoring", "description": "Service health check endpoints"},
         {
             "name": "Anthropic Registry API",
-            "description": "Anthropic-compatible registry API (v0.1) for MCP server discovery"
-        }
-    ]
+            "description": "Anthropic-compatible registry API (v0.1) for MCP server discovery",
+        },
+    ],
 )
 
 # Add CORS middleware for React development and Docker deployment
@@ -197,11 +191,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(
-    UnifiedAuthMiddleware
-)
+app.add_middleware(UnifiedAuthMiddleware)
 
-if hasattr(settings, 'static_dir') and Path(settings.static_dir).exists():
+if hasattr(settings, "static_dir") and Path(settings.static_dir).exists():
     app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
     logger.info(f"Static files mounted from {settings.static_dir}")
 else:
@@ -245,7 +237,7 @@ def custom_openapi():
             "scheme": "bearer",
             "bearerFormat": "JWT",
             "description": "JWT Bearer token obtained from Keycloak OAuth2 authentication. "
-                           "Include in Authorization header as: `Authorization: Bearer <token>`"
+            "Include in Authorization header as: `Authorization: Bearer <token>`",
         }
     }
 
@@ -257,9 +249,8 @@ def custom_openapi():
 
         # Apply Bearer security to all methods in this path
         for method in path_item:
-            if method in ["get", "post", "put", "delete", "patch"]:
-                if "security" not in path_item[method]:
-                    path_item[method]["security"] = [{"Bearer": []}]
+            if method in ["get", "post", "put", "delete", "patch"] and "security" not in path_item[method]:
+                path_item[method]["security"] = [{"Bearer": []}]
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -302,7 +293,7 @@ app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     # Configure logging before starting server
     settings.configure_logging()
 
@@ -312,5 +303,5 @@ if __name__ == "__main__":
         port=7860,
         reload=True,
         log_level=settings.log_level.lower(),
-        log_config=None  # Disable uvicorn's default logging config to use ours
+        log_config=None,  # Disable uvicorn's default logging config to use ours
     )

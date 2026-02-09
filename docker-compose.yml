@@ -101,7 +101,7 @@ services:
       - .env
     profiles:
       - full
-  
+
   # MongoDB Database
   registry-mongodb:
     container_name: registry-mongodb

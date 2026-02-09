@@ -2,8 +2,8 @@
 Batch result utilities for bulk operations.
 """
 
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -17,10 +17,11 @@ class BatchResult:
         failed: Number of failed items
         errors: List of error details with UUIDs and messages
     """
+
     total: int
     successful: int
     failed: int
-    errors: List[Dict[str, Any]]
+    errors: list[dict[str, Any]]
 
     @property
     def success_rate(self) -> float:

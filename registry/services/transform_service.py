@@ -5,10 +5,9 @@ This bridges our internal data model with the external Anthropic API format.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..constants import REGISTRY_CONSTANTS
-from ..core.config import settings
 from ..schemas.anthropic_schema import (
     Package,
     PaginationMetadata,
@@ -22,7 +21,7 @@ from ..schemas.anthropic_schema import (
 logger = logging.getLogger(__name__)
 
 
-def _create_transport_config(server_info: Dict[str, Any]) -> Dict[str, Any]:
+def _create_transport_config(server_info: dict[str, Any]) -> dict[str, Any]:
     """
     Create transport configuration from internal server info.
 
@@ -37,7 +36,7 @@ def _create_transport_config(server_info: Dict[str, Any]) -> Dict[str, Any]:
     return {"type": "streamable-http", "url": proxy_pass_url}
 
 
-def _extract_repository_from_description(description: str) -> Optional[Repository]:
+def _extract_repository_from_description(description: str) -> Repository | None:
     """
     Extract repository info from description or tags if available.
 
@@ -54,7 +53,7 @@ def _extract_repository_from_description(description: str) -> Optional[Repositor
     return None
 
 
-def _determine_version(server_info: Dict[str, Any]) -> str:
+def _determine_version(server_info: dict[str, Any]) -> str:
     """
     Determine server version.
 
@@ -74,7 +73,7 @@ def _determine_version(server_info: Dict[str, Any]) -> str:
     return "1.0.0"
 
 
-def _create_server_name(server_info: Dict[str, Any]) -> str:
+def _create_server_name(server_info: dict[str, Any]) -> str:
     """
     Create reverse-DNS style server name.
 
@@ -97,7 +96,7 @@ def _create_server_name(server_info: Dict[str, Any]) -> str:
     return f"{namespace}/{clean_path}"
 
 
-def transform_to_server_detail(server_info: Dict[str, Any]) -> ServerDetail:
+def transform_to_server_detail(server_info: dict[str, Any]) -> ServerDetail:
     """
     Transform internal server info to Anthropic ServerDetail format.
 
@@ -129,9 +128,7 @@ def transform_to_server_detail(server_info: Dict[str, Any]) -> ServerDetail:
     )
 
     # Try to extract repository info
-    repository = _extract_repository_from_description(
-        server_info.get("description", "")
-    )
+    repository = _extract_repository_from_description(server_info.get("description", ""))
 
     # Build metadata
     namespace = REGISTRY_CONSTANTS.ANTHROPIC_SERVER_NAMESPACE
@@ -159,7 +156,7 @@ def transform_to_server_detail(server_info: Dict[str, Any]) -> ServerDetail:
 
 
 def transform_to_server_response(
-    server_info: Dict[str, Any],
+    server_info: dict[str, Any],
     include_registry_meta: bool = True,
 ) -> ServerResponse:
     """
@@ -188,9 +185,9 @@ def transform_to_server_response(
 
 
 def transform_to_server_list(
-    servers_data: List[Dict[str, Any]],
-    cursor: Optional[str] = None,
-    limit: Optional[int] = None,
+    servers_data: list[dict[str, Any]],
+    cursor: str | None = None,
+    limit: int | None = None,
 ) -> ServerList:
     """
     Transform list of internal servers to Anthropic ServerList format.
@@ -229,10 +226,7 @@ def transform_to_server_list(
     page_servers = sorted_servers[start_index:end_index]
 
     # Transform to ServerResponse objects
-    server_responses = [
-        transform_to_server_response(server, include_registry_meta=True)
-        for server in page_servers
-    ]
+    server_responses = [transform_to_server_response(server, include_registry_meta=True) for server in page_servers]
 
     # Determine next cursor
     next_cursor = None

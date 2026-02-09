@@ -73,8 +73,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               {/* Logo */}
               <div className='flex items-center ml-2 md:ml-0'>
                 <Link to='/' className='flex items-center hover:opacity-80 transition-opacity'>
-                  <img src={logo} alt='Registry Gateway Logo' className='h-8 w-8' />
-                  <span className='ml-2 text-xl font-bold text-gray-900 dark:text-white'>Registry Gateway</span>
+                  <img src={logo} alt='Jarvis Registry Logo' className='h-8 w-8' />
+                  <span className='ml-2 text-xl font-bold text-gray-900 dark:text-white'>Jarvis Registry</span>
                 </Link>
               </div>
             </div>

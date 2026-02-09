@@ -1,13 +1,9 @@
 import logging
-import os
 import secrets
 from pathlib import Path
-from typing import Optional
 
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
-
-from registry.constants import REGISTRY_CONSTANTS
 
 
 class Settings(BaseSettings):
@@ -16,7 +12,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=False,
-        extra="ignore"  # Ignore extra environment variables
+        extra="ignore",  # Ignore extra environment variables
     )
 
     # Auth settings
@@ -26,7 +22,7 @@ class Settings(BaseSettings):
     session_cookie_name: str = "jarvis_registry_session"
     session_max_age_seconds: int = 60 * 60 * 8  # 8 hours
     session_cookie_secure: bool = False  # Set to True in production with HTTPS
-    session_cookie_domain: Optional[str] = None  # e.g., ".example.com" for cross-subdomain sharing
+    session_cookie_domain: str | None = None  # e.g., ".example.com" for cross-subdomain sharing
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
     auth_server_api_prefix: str = ""  # API prefix for auth server routes (e.g., "/auth")
@@ -75,7 +71,7 @@ class Settings(BaseSettings):
     agent_security_scan_timeout: int = 60  # 1 minute
     agent_security_add_pending_tag: bool = True
     a2a_scanner_llm_api_key: str = ""  # Optional Azure OpenAI API key for LLM-based analysis
-    
+
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")
     container_registry_dir: Path = Path("/app/registry")
@@ -86,12 +82,14 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "jarvis-services"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
-    log_level: str = "INFO"  # Default to INFO, can be overridden by LOG_LEVEL env var (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    log_level: str = (
+        "INFO"  # Default to INFO, can be overridden by LOG_LEVEL env var (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    )
     log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
 
     # Encryption key for sensitive data (client secrets, API keys, etc.)
     # Hex-encoded AES key for encrypting OAuth client secrets and API keys
-    CREDS_KEY: Optional[str] = None
+    CREDS_KEY: str | None = None
 
     # Local development mode detection
     @property
@@ -108,7 +106,7 @@ class Settings(BaseSettings):
 
         # Automatically append API prefix to auth server URLs if configured
         if self.auth_server_api_prefix:
-            prefix = self.auth_server_api_prefix.rstrip('/')
+            prefix = self.auth_server_api_prefix.rstrip("/")
             if not self.auth_server_url.endswith(prefix):
                 self.auth_server_url = f"{self.auth_server_url.rstrip('/')}{prefix}"
             if not self.auth_server_external_url.endswith(prefix):
@@ -117,7 +115,8 @@ class Settings(BaseSettings):
         # Validate tool_discovery_mode
         if self.tool_discovery_mode not in ["embedded", "external"]:
             raise ValueError(
-                f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'")
+                f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'"
+            )
 
     @property
     def use_external_discovery(self) -> bool:
@@ -171,18 +170,18 @@ class Settings(BaseSettings):
 
     def configure_logging(self) -> None:
         """Configure application-wide logging with consistent format and level.
-        
+
         This should be called once at application startup to initialize logging
         for all modules. Individual modules can then use logging.getLogger(__name__)
         without needing to call basicConfig again.
         """
         # Convert string log level to numeric level
         numeric_level = getattr(logging, self.log_level.upper(), logging.INFO)
-        
+
         logging.basicConfig(
             level=numeric_level,
             format=self.log_format,
-            force=True  # Override any existing configuration
+            force=True,  # Override any existing configuration
         )
 
 

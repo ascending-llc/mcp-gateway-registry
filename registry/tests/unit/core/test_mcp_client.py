@@ -1,13 +1,12 @@
 """
 Unit tests for mcp_client functions.
 """
+
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
-from registry.core.mcp_client import (
-    get_tools_and_capabilities_from_server,
-    _get_from_streamable_http,
-    _get_from_sse
-)
+
+from registry.core.mcp_client import _get_from_sse, _get_from_streamable_http, get_tools_and_capabilities_from_server
 
 
 @pytest.mark.unit
@@ -22,7 +21,7 @@ class TestMCPClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": "Bearer test-token-123",
-            "User-Agent": "MCP-Gateway-Registry/1.0"
+            "User-Agent": "MCP-Gateway-Registry/1.0",
         }
 
     @pytest.fixture
@@ -31,13 +30,8 @@ class TestMCPClient:
         tool = Mock()
         tool.name = "test_tool"
         tool.description = "Test tool description"
-        tool.inputSchema = {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"}
-            }
-        }
-        
+        tool.inputSchema = {"type": "object", "properties": {"query": {"type": "string"}}}
+
         response = Mock()
         response.tools = [tool]
         return response
@@ -45,29 +39,26 @@ class TestMCPClient:
     @pytest.fixture
     def mock_capabilities(self):
         """Create mock capabilities."""
-        return {
-            "tools": {"listChanged": True},
-            "resources": {"subscribe": False},
-            "prompts": {"listChanged": False}
-        }
+        return {"tools": {"listChanged": True}, "resources": {"subscribe": False}, "prompts": {"listChanged": False}}
 
     @pytest.mark.asyncio
     async def test_get_from_streamable_http_with_headers(self, mock_headers, mock_tools_response, mock_capabilities):
         """Test _get_from_streamable_http accepts pre-built headers."""
         base_url = "http://localhost:8000/mcp/"
-        
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy:
-            
+
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+        ):
             # Mock strategy
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
             mock_strategy.return_value = strategy
-            
+
             # Mock MCP session
             mock_init_result = Mock()
             mock_init_result.capabilities = mock_capabilities
-            
+
             mock_session = AsyncMock()
             mock_session.initialize = AsyncMock(return_value=mock_init_result)
             mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
@@ -75,22 +66,19 @@ class TestMCPClient:
             mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=None)
-            
+
             # Mock streamable_http_client context manager
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(return_value=(Mock(), Mock(), Mock()))
             mock_client.return_value = mock_context
-            
+
             with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
                 mock_session_cls.return_value = mock_session
-                
+
                 result = await _get_from_streamable_http(
-                    base_url=base_url,
-                    headers=mock_headers,
-                    transport_type="streamable-http",
-                    include_capabilities=True
+                    base_url=base_url, headers=mock_headers, transport_type="streamable-http", include_capabilities=True
                 )
-            
+
             # Verify result is MCPServerData object
             assert result.tools is not None
             assert result.capabilities == mock_capabilities
@@ -99,33 +87,34 @@ class TestMCPClient:
     async def test_get_from_streamable_http_without_capabilities(self, mock_headers, mock_tools_response):
         """Test _get_from_streamable_http can skip capabilities."""
         base_url = "http://localhost:8000/mcp/"
-        
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy:
-            
+
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+        ):
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
             mock_strategy.return_value = strategy
-            
+
             mock_session = AsyncMock()
             mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
             mock_session.list_resources = AsyncMock(return_value=Mock(resources=[]))
             mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
-            
+
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(return_value=(Mock(), Mock(), Mock()))
             mock_client.return_value = mock_context
-            
+
             with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
                 mock_session_cls.return_value = mock_session
-                
+
                 result = await _get_from_streamable_http(
                     base_url=base_url,
                     headers=mock_headers,
                     transport_type="streamable-http",
-                    include_capabilities=False
+                    include_capabilities=False,
                 )
-            
+
             assert result.tools is not None
             assert result.capabilities is None
 
@@ -133,18 +122,19 @@ class TestMCPClient:
     async def test_get_from_sse_with_headers(self, mock_headers, mock_tools_response, mock_capabilities):
         """Test _get_from_sse accepts pre-built headers."""
         base_url = "http://localhost:8000/sse"
-        
-        with patch("registry.core.mcp_client.sse_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy, \
-             patch("httpx.AsyncClient"):
-            
+
+        with (
+            patch("registry.core.mcp_client.sse_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+            patch("httpx.AsyncClient"),
+        ):
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
             mock_strategy.return_value = strategy
-            
+
             mock_init_result = Mock()
             mock_init_result.capabilities = mock_capabilities
-            
+
             mock_session = AsyncMock()
             mock_session.initialize = AsyncMock(return_value=mock_init_result)
             mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
@@ -152,22 +142,19 @@ class TestMCPClient:
             mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=None)
-            
+
             # Mock sse_client context
             mock_sse_context = AsyncMock()
             mock_sse_context.__aenter__ = AsyncMock(return_value=(Mock(), Mock()))
             mock_client.return_value = mock_sse_context
-            
+
             with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
                 mock_session_cls.return_value = mock_session
-                
+
                 result = await _get_from_sse(
-                    base_url=base_url,
-                    headers=mock_headers,
-                    transport_type="sse",
-                    include_capabilities=True
+                    base_url=base_url, headers=mock_headers, transport_type="sse", include_capabilities=True
                 )
-            
+
             assert result.tools is not None
             assert result.capabilities == mock_capabilities
 
@@ -175,22 +162,16 @@ class TestMCPClient:
     async def test_get_tools_and_capabilities_from_server_streamable_http(self, mock_headers):
         """Test main entry point with streamable-http transport."""
         base_url = "http://localhost:8000"
-        
+
         with patch("registry.core.mcp_client._get_from_streamable_http") as mock_get:
             from registry.core.mcp_client import MCPServerData
-            mock_get.return_value = MCPServerData(
-                tools=["tool1"],
-                resources=[],
-                prompts=[],
-                capabilities={"tools": {}}
-            )
-            
+
+            mock_get.return_value = MCPServerData(tools=["tool1"], resources=[], prompts=[], capabilities={"tools": {}})
+
             result = await get_tools_and_capabilities_from_server(
-                base_url=base_url,
-                headers=mock_headers,
-                transport_type="streamable-http"
+                base_url=base_url, headers=mock_headers, transport_type="streamable-http"
             )
-            
+
             assert result.tools == ["tool1"]
             assert result.capabilities == {"tools": {}}
             # Check that the call includes all expected parameters
@@ -199,30 +180,26 @@ class TestMCPClient:
             assert call_args[0][0] == base_url
             assert call_args[0][1] == mock_headers
             assert call_args[0][2] == "streamable-http"
-            assert call_args[1]["include_capabilities"] == True
-            assert call_args[1]["include_resources"] == True
-            assert call_args[1]["include_prompts"] == True
+            assert call_args[1]["include_capabilities"]
+            assert call_args[1]["include_resources"]
+            assert call_args[1]["include_prompts"]
 
     @pytest.mark.asyncio
     async def test_get_tools_and_capabilities_from_server_sse(self, mock_headers):
         """Test main entry point with SSE transport."""
         base_url = "http://localhost:8000"
-        
+
         with patch("registry.core.mcp_client._get_from_sse") as mock_get:
             from registry.core.mcp_client import MCPServerData
+
             mock_get.return_value = MCPServerData(
-                tools=["tool2"],
-                resources=[],
-                prompts=[],
-                capabilities={"resources": {}}
+                tools=["tool2"], resources=[], prompts=[], capabilities={"resources": {}}
             )
-            
+
             result = await get_tools_and_capabilities_from_server(
-                base_url=base_url,
-                headers=mock_headers,
-                transport_type="sse"
+                base_url=base_url, headers=mock_headers, transport_type="sse"
             )
-            
+
             assert result.tools == ["tool2"]
             assert result.capabilities == {"resources": {}}
             # Check that the call includes all expected parameters
@@ -231,34 +208,30 @@ class TestMCPClient:
             assert call_args[0][0] == base_url
             assert call_args[0][1] == mock_headers
             assert call_args[0][2] == "sse"
-            assert call_args[1]["include_capabilities"] == True
-            assert call_args[1]["include_resources"] == True
-            assert call_args[1]["include_prompts"] == True
+            assert call_args[1]["include_capabilities"]
+            assert call_args[1]["include_resources"]
+            assert call_args[1]["include_prompts"]
 
     @pytest.mark.asyncio
     async def test_get_tools_and_capabilities_auto_detect_transport(self, mock_headers):
         """Test transport auto-detection."""
         base_url = "http://localhost:8000"
-        
+
         from registry.core.mcp_client import MCPServerData
-        
-        with patch("registry.core.mcp_client.detect_server_transport") as mock_detect, \
-             patch("registry.core.mcp_client._get_from_streamable_http") as mock_get:
-            
+
+        with (
+            patch("registry.core.mcp_client.detect_server_transport") as mock_detect,
+            patch("registry.core.mcp_client._get_from_streamable_http") as mock_get,
+        ):
             mock_detect.return_value = "streamable-http"
-            mock_get.return_value = MCPServerData(
-                tools=["tool"],
-                resources=[],
-                prompts=[],
-                capabilities={}
-            )
-            
+            mock_get.return_value = MCPServerData(tools=["tool"], resources=[], prompts=[], capabilities={})
+
             result = await get_tools_and_capabilities_from_server(
                 base_url=base_url,
                 headers=mock_headers,
-                transport_type=None  # Auto-detect
+                transport_type=None,  # Auto-detect
             )
-            
+
             mock_detect.assert_called_once_with(base_url)
             assert result.tools == ["tool"]
 
@@ -266,62 +239,58 @@ class TestMCPClient:
     async def test_headers_default_to_mcp_headers_if_none(self):
         """Test that None headers default to MCP base headers."""
         base_url = "http://localhost:8000/mcp/"
-        
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy, \
-             patch("registry.core.mcp_client.mcp_config") as mock_config:
-            
+
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+            patch("registry.core.mcp_client.mcp_config") as mock_config,
+        ):
             # Mock default headers
-            mock_config.DEFAULT_HEADERS = {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-            
+            mock_config.DEFAULT_HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
+
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
             mock_strategy.return_value = strategy
-            
+
             mock_session = AsyncMock()
             mock_session.list_tools = AsyncMock(return_value=Mock(tools=[]))
             mock_session.list_resources = AsyncMock(return_value=Mock(resources=[]))
             mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
-            
+
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(return_value=(Mock(), Mock(), Mock()))
             mock_client.return_value = mock_context
-            
+
             with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
                 mock_session_cls.return_value = mock_session
-                
+
                 await _get_from_streamable_http(
                     base_url=base_url,
                     headers=None,  # Should use defaults
                     transport_type="streamable-http",
-                    include_capabilities=False
+                    include_capabilities=False,
                 )
-            
+
             # Would verify default headers were used in actual httpx call
 
     @pytest.mark.asyncio
     async def test_connection_timeout_returns_none(self, mock_headers):
         """Test timeout returns MCPServerData with None fields."""
         base_url = "http://localhost:8000/mcp/"
-        
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy"):
-            
+
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy"),
+        ):
             # Simulate timeout
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(side_effect=TimeoutError("Connection timeout"))
             mock_client.return_value = mock_context
-            
+
             result = await _get_from_streamable_http(
-                base_url=base_url,
-                headers=mock_headers,
-                transport_type="streamable-http",
-                include_capabilities=True
+                base_url=base_url, headers=mock_headers, transport_type="streamable-http", include_capabilities=True
             )
-            
+
             assert result.tools is None
             assert result.capabilities is None
 
@@ -329,22 +298,398 @@ class TestMCPClient:
     async def test_connection_error_returns_none(self, mock_headers):
         """Test connection error returns MCPServerData with None fields."""
         base_url = "http://localhost:8000/mcp/"
-        
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy"):
-            
+
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy"),
+        ):
             # Simulate connection error
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(side_effect=Exception("Connection refused"))
             mock_client.return_value = mock_context
-            
+
             result = await _get_from_streamable_http(
-                base_url=base_url,
-                headers=mock_headers,
-                transport_type="streamable-http",
-                include_capabilities=True
+                base_url=base_url, headers=mock_headers, transport_type="streamable-http", include_capabilities=True
             )
-            
+
             assert result.tools is None
             assert result.capabilities is None
             assert result.error_message is not None
+
+
+@pytest.mark.unit
+@pytest.mark.core
+class TestPerformHealthCheck:
+    """Test suite for perform_health_check function."""
+
+    @pytest.fixture
+    def mock_init_result(self):
+        """Create mock MCP initialize result."""
+        mock_result = Mock()
+        mock_result.protocolVersion = "2024-11-05"
+        mock_result.serverInfo = Mock()
+        mock_result.serverInfo.name = "test-server"
+        # Simulate Pydantic model that will be converted to dict
+        mock_capabilities = Mock()
+        mock_capabilities.model_dump = Mock(return_value={"tools": {}})
+        mock_result.capabilities = mock_capabilities
+        return mock_result
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_success(self, mock_init_result):
+        """Test successful health check."""
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+        transport = "streamable-http"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, transport)
+
+            assert is_healthy is True
+            assert "initialize handshake successful" in status.lower()
+            assert response_time is not None
+            assert init_result == mock_init_result
+            # Verify capabilities were converted to dict by perform_health_check
+            assert isinstance(init_result.capabilities, dict)
+            assert init_result.capabilities == {"tools": {}}
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_no_url(self):
+        """Test health check with no URL."""
+        from registry.core.mcp_client import perform_health_check
+
+        is_healthy, status, response_time, init_result = await perform_health_check("", "streamable-http")
+
+        assert is_healthy is False
+        assert status == "No URL provided"
+        assert response_time is None
+        assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_stdio_skipped(self):
+        """Test health check is skipped for stdio transport."""
+        from registry.core.mcp_client import perform_health_check
+
+        is_healthy, status, response_time, init_result = await perform_health_check("/path/to/binary", "stdio")
+
+        assert is_healthy is True
+        assert "stdio transport skipped" in status.lower()
+        assert response_time is None
+        assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_initialization_failed(self):
+        """Test health check when initialization returns None."""
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=None)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is False
+            assert "initialization failed" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_invalid_response(self):
+        """Test health check with invalid MCP response (missing fields)."""
+        from registry.core.mcp_client import perform_health_check
+
+        # Mock result missing required fields (protocolVersion and serverInfo)
+        invalid_result = Mock(spec=["some_other_field"])
+
+        url = "https://example.com/api"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=invalid_result)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is False
+            assert "invalid initialize response" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_sse_transport(self, mock_init_result):
+        """Test health check with SSE transport."""
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/sse"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "sse")
+
+            assert is_healthy is True
+            assert "initialize handshake successful" in status.lower()
+            assert init_result == mock_init_result
+            # Verify capabilities were converted to dict
+            assert isinstance(init_result.capabilities, dict)
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_401_response(self):
+        """Test health check when server returns 401 (Unauthorized) - should still be considered healthy."""
+        import httpx
+
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        # Create a mock 401 response
+        mock_response = Mock()
+        mock_response.status_code = 401
+
+        # Create HTTPStatusError with 401
+        error_401 = httpx.HTTPStatusError("401 Unauthorized", request=Mock(), response=mock_response)
+
+        # Mock initialize_mcp to raise HTTPStatusError directly (already unwrapped)
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(side_effect=error_401)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is True
+            assert "initialize requires authentication" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_401_direct_exception(self):
+        """Test health check with direct HTTPStatusError (without ExceptionGroup wrapper)."""
+        import httpx
+
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        # Create a mock 401 response
+        mock_response = Mock()
+        mock_response.status_code = 401
+
+        # Create HTTPStatusError with 401 (direct, not wrapped)
+        error_401 = httpx.HTTPStatusError("401 Unauthorized", request=Mock(), response=mock_response)
+
+        # Mock initialize_mcp to raise direct HTTPStatusError
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(side_effect=error_401)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is True
+            assert "initialize requires authentication" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_403_response(self):
+        """Test health check when server returns 403 (Forbidden) - should still be considered healthy."""
+        import httpx
+
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        # Create a mock 403 response
+        mock_response = Mock()
+        mock_response.status_code = 403
+
+        # Create HTTPStatusError with 403
+        error_403 = httpx.HTTPStatusError("403 Forbidden", request=Mock(), response=mock_response)
+
+        # Mock initialize_mcp to raise HTTPStatusError
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(side_effect=error_403)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is True
+            assert "initialize requires authentication" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_get_oauth_metadata_from_server_rfc8414_success(self):
+        """Test successful OAuth metadata discovery from RFC 8414 endpoint."""
+        from registry.core.mcp_client import get_oauth_metadata_from_server
+
+        base_url = "https://mcp.example.com/api"
+        expected_metadata = {
+            "issuer": "https://mcp.example.com",
+            "authorization_endpoint": "https://mcp.example.com/oauth/authorize",
+            "token_endpoint": "https://mcp.example.com/oauth/token",
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code"],
+        }
+
+        # Mock httpx response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json = Mock(return_value=expected_metadata)
+
+        # Mock httpx client
+        mock_http_client = AsyncMock()
+        mock_http_client.get = AsyncMock(return_value=mock_response)
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
+            with patch("registry.core.mcp_client.AuthorizationServerMetadata") as mock_metadata_cls:
+                # Mock validation
+                mock_metadata = Mock()
+                mock_metadata.validate = Mock()
+                mock_metadata_cls.return_value = mock_metadata
+
+                result = await get_oauth_metadata_from_server(base_url)
+
+        assert result == expected_metadata
+        # Verify RFC 8414 endpoint was tried first
+        mock_http_client.get.assert_called()
+        call_args = mock_http_client.get.call_args[0][0]
+        assert "/.well-known/oauth-authorization-server" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_oauth_metadata_from_server_oidc_fallback(self):
+        """Test OAuth metadata discovery falls back to OIDC endpoint."""
+        from registry.core.mcp_client import get_oauth_metadata_from_server
+
+        base_url = "https://mcp.example.com"
+        expected_metadata = {
+            "issuer": "https://mcp.example.com",
+            "authorization_endpoint": "https://mcp.example.com/oauth/authorize",
+            "token_endpoint": "https://mcp.example.com/oauth/token",
+        }
+
+        # Mock httpx responses - RFC 8414 fails, OIDC succeeds
+        mock_response_404 = Mock()
+        mock_response_404.status_code = 404
+
+        mock_response_200 = Mock()
+        mock_response_200.status_code = 200
+        mock_response_200.json = Mock(return_value=expected_metadata)
+
+        # Mock httpx client
+        mock_http_client = AsyncMock()
+        # First call (RFC 8414) returns 404, second call (OIDC) returns 200
+        mock_http_client.get = AsyncMock(side_effect=[mock_response_404, mock_response_200])
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
+            with patch("registry.core.mcp_client.AuthorizationServerMetadata") as mock_metadata_cls:
+                mock_metadata = Mock()
+                mock_metadata.validate = Mock()
+                mock_metadata_cls.return_value = mock_metadata
+
+                result = await get_oauth_metadata_from_server(base_url)
+
+        assert result == expected_metadata
+        # Verify both endpoints were tried
+        assert mock_http_client.get.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_get_oauth_metadata_from_server_no_metadata(self):
+        """Test OAuth metadata discovery when no endpoints are available."""
+        from registry.core.mcp_client import get_oauth_metadata_from_server
+
+        base_url = "https://mcp.example.com"
+
+        # Mock httpx responses - all fail with 404
+        mock_response_404 = Mock()
+        mock_response_404.status_code = 404
+
+        mock_http_client = AsyncMock()
+        mock_http_client.get = AsyncMock(return_value=mock_response_404)
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
+            result = await get_oauth_metadata_from_server(base_url)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_oauth_metadata_from_server_validation_failure(self):
+        """Test OAuth metadata discovery with validation failure (still returns metadata)."""
+        from registry.core.mcp_client import get_oauth_metadata_from_server
+
+        base_url = "https://mcp.example.com"
+        metadata_dict = {
+            "issuer": "https://mcp.example.com",
+            "authorization_endpoint": "https://mcp.example.com/oauth/authorize",
+        }
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json = Mock(return_value=metadata_dict)
+
+        mock_http_client = AsyncMock()
+        mock_http_client.get = AsyncMock(return_value=mock_response)
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
+            with patch("registry.core.mcp_client.AuthorizationServerMetadata") as mock_metadata_cls:
+                # Mock validation to raise exception
+                mock_metadata = Mock()
+                mock_metadata.validate = Mock(side_effect=ValueError("Invalid metadata"))
+                mock_metadata_cls.return_value = mock_metadata
+
+                result = await get_oauth_metadata_from_server(base_url)
+
+        # Should still return metadata even if validation fails
+        assert result == metadata_dict
+
+    @pytest.mark.asyncio
+    async def test_get_oauth_metadata_from_server_empty_url(self):
+        """Test OAuth metadata discovery with empty URL."""
+        from registry.core.mcp_client import get_oauth_metadata_from_server
+
+        result = await get_oauth_metadata_from_server("")
+        assert result is None
+
+        result = await get_oauth_metadata_from_server(None)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_oauth_metadata_from_server_network_error(self):
+        """Test OAuth metadata discovery with network error."""
+        from registry.core.mcp_client import get_oauth_metadata_from_server
+
+        base_url = "https://mcp.example.com"
+
+        # Mock httpx client to raise network error
+        mock_http_client = AsyncMock()
+        mock_http_client.get = AsyncMock(side_effect=Exception("Network error"))
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
+            result = await get_oauth_metadata_from_server(base_url)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_oauth_metadata_from_server_url_parsing(self):
+        """Test OAuth metadata discovery correctly extracts base domain from URLs."""
+        from registry.core.mcp_client import get_oauth_metadata_from_server
+
+        # Test with path segments - should strip to base domain
+        base_url = "https://mcp.atlassian.com/api/v1/servers"
+        expected_metadata = {"issuer": "https://mcp.atlassian.com"}
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json = Mock(return_value=expected_metadata)
+
+        mock_http_client = AsyncMock()
+        mock_http_client.get = AsyncMock(return_value=mock_response)
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
+            with patch("registry.core.mcp_client.AuthorizationServerMetadata") as mock_metadata_cls:
+                mock_metadata = Mock()
+                mock_metadata.validate = Mock()
+                mock_metadata_cls.return_value = mock_metadata
+
+                result = await get_oauth_metadata_from_server(base_url)
+
+        assert result == expected_metadata
+        # Verify the well-known URL uses base domain, not the full path
+        call_args = mock_http_client.get.call_args[0][0]
+        assert call_args == "https://mcp.atlassian.com/.well-known/oauth-authorization-server"

@@ -24,7 +24,6 @@ Usage:
 """
 
 import logging
-from typing import Optional
 
 from packages.telemetry.metrics_client import create_metrics_client, load_metrics_config
 
@@ -45,7 +44,7 @@ def record_registry_operation(
     operation: str,
     resource_type: str,
     success: bool,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
 ) -> None:
     """
     Record a registry operation with latency tracking.
@@ -69,16 +68,14 @@ def record_registry_operation(
     metrics.record_counter("registry_operations_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram(
-            "registry_operation_duration_seconds", duration_seconds, attributes
-        )
+        metrics.record_histogram("registry_operation_duration_seconds", duration_seconds, attributes)
 
 
 def record_tool_execution(
     tool_name: str,
     server_name: str,
     success: bool,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
     method: str = "UNKNOWN",
 ) -> None:
     """
@@ -105,16 +102,14 @@ def record_tool_execution(
     metrics.record_counter("mcp_tool_execution_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram(
-            "mcp_tool_execution_duration_seconds", duration_seconds, attributes
-        )
+        metrics.record_histogram("mcp_tool_execution_duration_seconds", duration_seconds, attributes)
 
 
 def record_resource_access(
     resource_uri: str,
     server_name: str,
     success: bool,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
 ) -> None:
     """
     Record resource access operation.
@@ -138,16 +133,14 @@ def record_resource_access(
     metrics.record_counter("mcp_resource_access_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram(
-            "mcp_resource_access_duration_seconds", duration_seconds, attributes
-        )
+        metrics.record_histogram("mcp_resource_access_duration_seconds", duration_seconds, attributes)
 
 
 def record_prompt_execution(
     prompt_name: str,
     server_name: str,
     success: bool,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
 ) -> None:
     """
     Record prompt execution operation.
@@ -171,9 +164,7 @@ def record_prompt_execution(
     metrics.record_counter("mcp_prompt_execution_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram(
-            "mcp_prompt_execution_duration_seconds", duration_seconds, attributes
-        )
+        metrics.record_histogram("mcp_prompt_execution_duration_seconds", duration_seconds, attributes)
 
 
 def record_server_request(server_name: str) -> None:
@@ -193,7 +184,7 @@ def record_server_request(server_name: str) -> None:
 def record_auth_request(
     mechanism: str,
     success: bool,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
 ) -> None:
     """
     Record an authentication attempt with optional duration for latency percentiles.
@@ -218,15 +209,13 @@ def record_auth_request(
     metrics.record_counter("auth_requests_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram(
-            "auth_request_duration_seconds", duration_seconds, attributes
-        )
+        metrics.record_histogram("auth_request_duration_seconds", duration_seconds, attributes)
 
 
 def record_tool_discovery(
     server_name: str,
     success: bool,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
     transport_type: str = "unknown",
     tools_count: int = 0,
 ) -> None:
@@ -259,6 +248,4 @@ def record_tool_discovery(
     metrics.record_counter("mcp_tool_discovery_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram(
-            "mcp_tool_discovery_duration_seconds", duration_seconds, attributes
-        )
+        metrics.record_histogram("mcp_tool_discovery_duration_seconds", duration_seconds, attributes)

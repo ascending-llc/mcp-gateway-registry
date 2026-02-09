@@ -36,12 +36,11 @@ import argparse
 import base64
 import json
 import logging
-import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 import requests
 
@@ -51,7 +50,6 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from registry.constants import REGISTRY_CONSTANTS
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,9 +61,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE_URL: str = "http://localhost"
 
 
-def _check_token_expiration(
-    access_token: str
-) -> None:
+def _check_token_expiration(access_token: str) -> None:
     """
     Check if JWT token is expired and exit with informative message if so.
 
@@ -77,7 +73,7 @@ def _check_token_expiration(
     """
     try:
         # Decode JWT payload (without verification, just to check expiry)
-        parts = access_token.split('.')
+        parts = access_token.split(".")
         if len(parts) != 3:
             logger.warning("Invalid JWT format, cannot check expiration")
             return
@@ -87,19 +83,19 @@ def _check_token_expiration(
         # Add padding if needed
         padding = len(payload) % 4
         if padding:
-            payload += '=' * (4 - padding)
+            payload += "=" * (4 - padding)
 
         decoded = base64.urlsafe_b64decode(payload)
         token_data = json.loads(decoded)
 
         # Check expiration
-        exp = token_data.get('exp')
+        exp = token_data.get("exp")
         if not exp:
             logger.warning("Token does not have expiration field")
             return
 
-        exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
-        now = datetime.now(timezone.utc)
+        exp_dt = datetime.fromtimestamp(exp, tz=UTC)
+        now = datetime.now(UTC)
         time_until_expiry = exp_dt - now
 
         if time_until_expiry.total_seconds() < 0:
@@ -117,17 +113,19 @@ def _check_token_expiration(
             sys.exit(1)
         elif time_until_expiry.total_seconds() < 60:
             # Token expires soon
-            logger.warning(f"Token will expire in {int(time_until_expiry.total_seconds())} seconds at {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            logger.warning(
+                f"Token will expire in {int(time_until_expiry.total_seconds())} seconds at {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+            )
         else:
-            logger.info(f"Token is valid until {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} ({int(time_until_expiry.total_seconds())} seconds remaining)")
+            logger.info(
+                f"Token is valid until {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} ({int(time_until_expiry.total_seconds())} seconds remaining)"
+            )
 
     except Exception as e:
         logger.warning(f"Could not check token expiration: {e}")
 
 
-def _load_token_file(
-    token_file_path: Path
-) -> Dict[str, Any]:
+def _load_token_file(token_file_path: Path) -> dict[str, Any]:
     """
     Load token data from JSON file.
 
@@ -138,19 +136,16 @@ def _load_token_file(
         Token data dictionary
     """
     try:
-        with open(token_file_path, 'r') as f:
+        with open(token_file_path) as f:
             token_data = json.load(f)
         logger.info(f"Loaded token file: {token_file_path}")
         return token_data
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.error(f"Failed to load token file: {e}")
         sys.exit(1)
 
 
-def _save_token_file(
-    token_file_path: Path,
-    token_data: Dict[str, Any]
-) -> None:
+def _save_token_file(token_file_path: Path, token_data: dict[str, Any]) -> None:
     """
     Save updated token data to JSON file.
 
@@ -159,21 +154,16 @@ def _save_token_file(
         token_data: Token data dictionary
     """
     try:
-        with open(token_file_path, 'w') as f:
+        with open(token_file_path, "w") as f:
             json.dump(token_data, f, indent=2)
         logger.info(f"Saved updated tokens to: {token_file_path}")
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to save token file: {e}")
 
 
-
 def _make_api_request(
-    endpoint: str,
-    access_token: str,
-    base_url: str,
-    method: str = "GET",
-    params: Optional[Dict[str, Any]] = None
-) -> Optional[Dict[str, Any]]:
+    endpoint: str, access_token: str, base_url: str, method: str = "GET", params: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """
     Make an API request to the Anthropic MCP Registry API.
 
@@ -189,20 +179,11 @@ def _make_api_request(
     """
     url = f"{base_url}{endpoint}"
 
-    headers = {
-        "X-Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
+    headers = {"X-Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
 
     try:
         logger.info(f"Making {method} request to: {url}")
-        response = requests.request(
-            method=method,
-            url=url,
-            headers=headers,
-            params=params,
-            timeout=10
-        )
+        response = requests.request(method=method, url=url, headers=headers, params=params, timeout=10)
 
         if response.status_code == 401:
             logger.warning("Received 401 Unauthorized - token may be expired")
@@ -213,17 +194,13 @@ def _make_api_request(
 
     except requests.exceptions.RequestException as e:
         logger.error(f"API request failed: {e}")
-        if hasattr(e, 'response') and e.response is not None:
+        if hasattr(e, "response") and e.response is not None:
             logger.error(f"Response status: {e.response.status_code}")
             logger.error(f"Response body: {e.response.text}")
         return None
 
 
-def _test_list_servers(
-    access_token: str,
-    base_url: str,
-    limit: int = 5
-) -> None:
+def _test_list_servers(access_token: str, base_url: str, limit: int = 5) -> None:
     """
     Test listing servers endpoint.
 
@@ -238,7 +215,7 @@ def _test_list_servers(
         endpoint=f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers",
         access_token=access_token,
         base_url=base_url,
-        params={"limit": limit}
+        params={"limit": limit},
     )
 
     if result:
@@ -254,11 +231,7 @@ def _test_list_servers(
         logger.error("Failed to list servers")
 
 
-def _test_get_server_versions(
-    access_token: str,
-    base_url: str,
-    server_name: str
-) -> None:
+def _test_get_server_versions(access_token: str, base_url: str, server_name: str) -> None:
     """
     Test getting server versions endpoint.
 
@@ -272,11 +245,7 @@ def _test_get_server_versions(
     encoded_name = server_name.replace("/", "%2F")
     endpoint = f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/{encoded_name}/versions"
 
-    result = _make_api_request(
-        endpoint=endpoint,
-        access_token=access_token,
-        base_url=base_url
-    )
+    result = _make_api_request(endpoint=endpoint, access_token=access_token, base_url=base_url)
 
     if result:
         print("\n" + "=" * 80)
@@ -289,10 +258,7 @@ def _test_get_server_versions(
 
 
 def _test_get_server_version_details(
-    access_token: str,
-    base_url: str,
-    server_name: str,
-    version: str = "latest"
+    access_token: str, base_url: str, server_name: str, version: str = "latest"
 ) -> None:
     """
     Test getting server version details endpoint.
@@ -308,11 +274,7 @@ def _test_get_server_version_details(
     encoded_name = server_name.replace("/", "%2F")
     endpoint = f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/{encoded_name}/versions/{version}"
 
-    result = _make_api_request(
-        endpoint=endpoint,
-        access_token=access_token,
-        base_url=base_url
-    )
+    result = _make_api_request(endpoint=endpoint, access_token=access_token, base_url=base_url)
 
     if result:
         print("\n" + "=" * 80)
@@ -324,10 +286,7 @@ def _test_get_server_version_details(
         logger.error(f"Failed to get version details for {server_name}")
 
 
-def _run_all_tests(
-    access_token: str,
-    base_url: str
-) -> None:
+def _run_all_tests(access_token: str, base_url: str) -> None:
     """
     Run all API tests.
 
@@ -341,20 +300,11 @@ def _run_all_tests(
 
     time.sleep(1)
 
-    _test_get_server_versions(
-        access_token,
-        base_url,
-        "io.mcpgateway/atlassian"
-    )
+    _test_get_server_versions(access_token, base_url, "io.mcpgateway/atlassian")
 
     time.sleep(1)
 
-    _test_get_server_version_details(
-        access_token,
-        base_url,
-        "io.mcpgateway/atlassian",
-        "latest"
-    )
+    _test_get_server_version_details(access_token, base_url, "io.mcpgateway/atlassian", "latest")
 
     logger.info("All tests completed")
 
@@ -380,21 +330,18 @@ Examples:
 
 Note: If your token expires, generate a new one from the UI. Administrators can increase
 token lifetime in Keycloak: Realm Settings → Tokens → Access Token Lifespan
-"""
+""",
     )
 
     parser.add_argument(
         "--token-file",
         type=str,
         required=True,
-        help="Path to token JSON file (e.g., .oauth-tokens/mcp-registry-api-tokens-2025-10-12.json)"
+        help="Path to token JSON file (e.g., .oauth-tokens/mcp-registry-api-tokens-2025-10-12.json)",
     )
 
     parser.add_argument(
-        "--base-url",
-        type=str,
-        default=DEFAULT_BASE_URL,
-        help=f"Base URL for API (default: {DEFAULT_BASE_URL})"
+        "--base-url", type=str, default=DEFAULT_BASE_URL, help=f"Base URL for API (default: {DEFAULT_BASE_URL})"
     )
 
     parser.add_argument(
@@ -402,28 +349,18 @@ token lifetime in Keycloak: Realm Settings → Tokens → Access Token Lifespan
         type=str,
         choices=["all", "list-servers", "get-versions", "get-server"],
         default="all",
-        help="Which test to run (default: all)"
+        help="Which test to run (default: all)",
     )
 
     parser.add_argument(
         "--server-name",
         type=str,
-        help="Server name for get-versions or get-server tests (e.g., io.mcpgateway/atlassian)"
+        help="Server name for get-versions or get-server tests (e.g., io.mcpgateway/atlassian)",
     )
 
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=5,
-        help="Number of servers to list (default: 5)"
-    )
+    parser.add_argument("--limit", type=int, default=5, help="Number of servers to list (default: 5)")
 
-
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logging"
-    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
 
@@ -471,12 +408,7 @@ token lifetime in Keycloak: Realm Settings → Tokens → Access Token Lifespan
         if not args.server_name:
             logger.error("--server-name required for get-server test")
             sys.exit(1)
-        _test_get_server_version_details(
-            access_token,
-            args.base_url,
-            args.server_name,
-            "latest"
-        )
+        _test_get_server_version_details(access_token, args.base_url, args.server_name, "latest")
 
     # Note: Tokens have a short lifetime for security. If your token expires,
     # generate a new one from the UI or ask your administrator to increase

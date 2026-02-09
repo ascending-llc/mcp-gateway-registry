@@ -20,6 +20,15 @@ reported the issue. Please try to include as much information as you can. Detail
 * Anything unusual about your environment or deployment
 
 
+## Development Setup
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed instructions on:
+- Installing dependencies
+- Setting up pre-commit hooks
+- Running linters and formatters
+- Running tests
+- IDE configuration
+
 ## Contributing via Pull Requests
 Contributions via pull requests are much appreciated. Before sending us a pull request, please ensure that:
 

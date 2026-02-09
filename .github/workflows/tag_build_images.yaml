@@ -22,7 +22,7 @@ on:
         required: true
         default: us-east-1
 permissions:
-  id-token: write 
+  id-token: write
   contents: write
 jobs:
   bump-version-and-tag:
@@ -51,7 +51,7 @@ jobs:
 
     - name: version-tag
       id: tag
-      uses: anothrNick/github-tag-action@master 
+      uses: anothrNick/github-tag-action@master
       env:
         VERBOSE: true
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,4 +70,3 @@ jobs:
     secrets:
       AWS_DEPLOY_ROLE_ARN: ${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}
       JARVIS_RELEASE_ACCESS_TOKEN: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
-        

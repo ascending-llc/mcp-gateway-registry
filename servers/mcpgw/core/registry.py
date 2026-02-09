@@ -5,40 +5,41 @@ This module provides a centralized client for making HTTP requests to the
 registry API with proper authentication and error handling.
 """
 
-import logging
-import httpx
-import re
 import json
+import logging
+import re
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import httpx
 import jwt
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
 from fastmcp import Context
 from fastmcp.server.dependencies import get_http_request
 
 logger = logging.getLogger(__name__)
 
 
-def _generate_service_jwt(user_context: Dict[str, Any]) -> str:
+def _generate_service_jwt(user_context: dict[str, Any]) -> str:
     """
     Generate a JWT token for authenticating with registry using user context.
-    
+
     Args:
         user_context: User context from middleware with username, scopes, groups
-    
+
     Returns:
         JWT token string with Bearer prefix
-    """    
+    """
     from config import settings
-    
-    now = datetime.now(timezone.utc)
-    
+
+    now = datetime.now(UTC)
+
     # Start with user context (similar to session_data = {**userinfo, ...})
     payload = {
         **user_context,  # Spread all user context fields (preserves sub, user_id, groups, scope, etc.)
         # Override only the time-sensitive and issuer fields for the new token
         "iss": settings.JWT_ISSUER,  # mcpgw is now the issuer
         "aud": settings.JWT_AUDIENCE,  # Still targeting mcp-registry
-        "iat": now, 
+        "iat": now,
         "exp": now + timedelta(minutes=5),  # New expiration (short-lived for proxying)
         "jti": f"mcpgw-{now.timestamp()}",  # New unique JWT ID
         # Override token metadata to identify this as mcpgw-generated
@@ -46,48 +47,40 @@ def _generate_service_jwt(user_context: Dict[str, Any]) -> str:
         "token_type": "mcp_generated",  # Type: machine-to-machine generated
         "description": "Generated via m2m",  # Description: machine-to-machine
     }
-        
-    logger.debug(f"Generated JWT for user: {payload.get('sub')} (user_id: {payload.get('user_id')}) "
-                f"with scopes: {payload.get('scopes', payload.get('scope', []))}")
-    
-    # Critical: Verify user_id is present before generating token
-    if not payload.get('user_id'):
-        logger.error(f"WARNING: Generating JWT without user_id! User context keys: {list(user_context.keys())}")
-    
-    # Sign with the same secret key used by registry
-    token = jwt.encode(
-        payload,
-        settings.SECRET_KEY,
-        algorithm="HS256",
-        headers={"kid": settings.JWT_SELF_SIGNED_KID}
+
+    logger.debug(
+        f"Generated JWT for user: {payload.get('sub')} (user_id: {payload.get('user_id')}) "
+        f"with scopes: {payload.get('scopes', payload.get('scope', []))}"
     )
-    
+
+    # Critical: Verify user_id is present before generating token
+    if not payload.get("user_id"):
+        logger.error(f"WARNING: Generating JWT without user_id! User context keys: {list(user_context.keys())}")
+
+    # Sign with the same secret key used by registry
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256", headers={"kid": settings.JWT_SELF_SIGNED_KID})
+
     return f"Bearer {token}"
 
 
-async def call_registry_api(
-    method: str, 
-    endpoint: str, 
-    ctx: Context = None, 
-    **kwargs
-) -> Dict[str, Any]:
+async def call_registry_api(method: str, endpoint: str, ctx: Context = None, **kwargs) -> dict[str, Any]:
     """
     Helper function to make async requests to the registry API with auth passthrough.
-    
+
     Args:
         method: HTTP method (GET, POST, etc.)
         endpoint: API endpoint path
         ctx: FastMCP Context to extract auth headers from
         **kwargs: Additional arguments to pass to the HTTP request
-        
+
     Returns:
         Dict[str, Any]: JSON response from the API
-        
+
     Raises:
         Exception: If the API call fails
     """
-    from config import settings, Constants
-    
+    from config import Constants, settings
+
     url = f"{settings.REGISTRY_URL}{endpoint}"
 
     # Extract user context from FastMCP middleware and generate JWT
@@ -95,7 +88,7 @@ async def call_registry_api(
     if ctx:
         # Get user context from middleware
         user_context = ctx.user_auth if hasattr(ctx, "user_auth") else {}
-        
+
         if user_context:
             # Generate JWT token from user context
             service_token = _generate_service_jwt(user_context)
@@ -103,7 +96,7 @@ async def call_registry_api(
             logger.info(f"✓ Generated JWT for user '{user_context.get('sub')}' for registry authentication")
         else:
             logger.warning("No user context available in FastMCP middleware")
-        
+
         # Also extract additional context headers for tracing
         try:
             http_request = get_http_request()
@@ -111,8 +104,15 @@ async def call_registry_api(
                 for key, value in http_request.headers.items():
                     key_lower = key.lower()
                     # Pass through context headers (but Authorization is already set from JWT)
-                    if key_lower in ['x-user-pool-id', 'x-client-id', 'x-region', 
-                                    'x-scopes', 'x-user', 'x-username', 'x-auth-method']:
+                    if key_lower in [
+                        "x-user-pool-id",
+                        "x-client-id",
+                        "x-region",
+                        "x-scopes",
+                        "x-user",
+                        "x-username",
+                        "x-auth-method",
+                    ]:
                         auth_headers[key] = value
         except RuntimeError:
             # Not in HTTP context
@@ -123,10 +123,10 @@ async def call_registry_api(
         logger.warning("No FastMCP context provided for authentication")
 
     # Merge auth headers with any existing headers in kwargs
-    if 'headers' in kwargs:
-        kwargs['headers'].update(auth_headers)
+    if "headers" in kwargs:
+        kwargs["headers"].update(auth_headers)
     else:
-        kwargs['headers'] = auth_headers
+        kwargs["headers"] = auth_headers
 
     async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT) as client:
         try:
@@ -137,37 +137,37 @@ async def call_registry_api(
             # Handle cases where response might be empty (e.g., 204 No Content)
             if response.status_code == 204:
                 return {"status": "success", "message": "Operation successful, no content returned."}
-            
+
             # Check if response is SSE format or JSON
             content_type = response.headers.get("content-type", "")
             response_text = response.text
-            
+
             # Handle SSE response (Server-Sent Events)
             if "text/event-stream" in content_type or response_text.startswith(("event:", "data:")):
-                logger.info(f"✅ Received SSE response from registry")
+                logger.info("✅ Received SSE response from registry")
                 # Parse SSE format: extract JSON from "data: {...}" line
-                data_match = re.search(r'data:\s*(\{.*\})\s*$', response_text, re.MULTILINE | re.DOTALL)
+                data_match = re.search(r"data:\s*(\{.*\})\s*$", response_text, re.MULTILINE | re.DOTALL)
                 if data_match:
                     result = json.loads(data_match.group(1))
-                    logger.info(f"✅ Parsed SSE response successfully")
+                    logger.info("✅ Parsed SSE response successfully")
                     return result
                 else:
                     raise ValueError(f"Failed to parse SSE response: {response_text[:200]}")
-            
+
             # Handle regular JSON response
             result = response.json()
-            
+
             # If response is ToolExecutionResponse format, extract the actual result
             if isinstance(result, dict) and result.get("success") is not None:
                 if result.get("success"):
-                    logger.info(f"✅ Registry API call successful")
+                    logger.info("✅ Registry API call successful")
                     # Return the actual result field if it exists, otherwise return the whole response
                     return result.get("result", result)
                 else:
                     error = result.get("error", "Unknown error")
                     logger.error(f"❌ Registry API returned error: {error}")
                     raise Exception(f"Registry API Error: {error}")
-            
+
             # Regular JSON response
             return result
 
@@ -182,7 +182,8 @@ async def call_registry_api(
             raise Exception(f"Registry API Error ({e.response.status_code}): {error_detail} for {method} {url}") from e
         except httpx.RequestError as e:
             # Network or connection error during the API call
-            raise Exception(f"Registry API Request Error: Failed to connect or communicate with {url}. Details: {e}") from e
+            raise Exception(
+                f"Registry API Request Error: Failed to connect or communicate with {url}. Details: {e}"
+            ) from e
         except Exception as e:  # Catch other potential errors during API call
             raise Exception(f"An unexpected error occurred while calling the Registry API at {url}: {e}") from e
-

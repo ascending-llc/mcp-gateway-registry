@@ -1,17 +1,17 @@
 import importlib
 import logging
-from typing import Dict, Optional, Callable
+from collections.abc import Callable
 
 from ..config.config import BackendConfig
-from .adapter import VectorStoreAdapter
+from ..enum.enums import EmbeddingProvider, VectorStoreType
 from ..enum.exceptions import DependencyMissingError, UnsupportedBackendError
-from ..enum.enums import VectorStoreType, EmbeddingProvider
+from .adapter import VectorStoreAdapter
 
 logger = logging.getLogger(__name__)
 
 # Registry for vector store creators
-_VECTOR_STORE_CREATOR_REGISTRY: Dict[str, Callable] = {}
-_EMBEDDING_CREATOR_REGISTRY: Dict[str, Callable] = {}
+_VECTOR_STORE_CREATOR_REGISTRY: dict[str, Callable] = {}
+_EMBEDDING_CREATOR_REGISTRY: dict[str, Callable] = {}
 
 
 def register_vector_store_creator(name: str):
@@ -64,15 +64,15 @@ class VectorStoreFactory:
     """Factory class for creating vector store adapters using registry pattern."""
 
     @classmethod
-    def create_adapter(cls, config: Optional[BackendConfig] = None) -> VectorStoreAdapter:
+    def create_adapter(cls, config: BackendConfig | None = None) -> VectorStoreAdapter:
         """Create vector store adapter.
-        
+
         Args:
             config: BackendConfig instance (uses env vars if None)
-        
+
         Returns:
             VectorStoreAdapter instance
-        
+
         Raises:
             UnsupportedBackendError: Unsupported database or embedding type
             DependencyMissingError: Required LangChain packages not installed
@@ -94,21 +94,12 @@ class VectorStoreFactory:
     def _validate_config(cls, config: BackendConfig) -> None:
         """Validate configuration."""
         if config.vector_store_type not in get_registered_vector_stores():
-            raise UnsupportedBackendError(
-                config.vector_store_type,
-                get_registered_vector_stores()
-            )
+            raise UnsupportedBackendError(config.vector_store_type, get_registered_vector_stores())
 
         if config.embedding_provider not in get_registered_embeddings():
-            raise UnsupportedBackendError(
-                config.embedding_provider,
-                get_registered_embeddings()
-            )
+            raise UnsupportedBackendError(config.embedding_provider, get_registered_embeddings())
 
-        logger.info(
-            f"Creating adapter: vector_store={config.vector_store_type}, "
-            f"embedding={config.embedding_provider}"
-        )
+        logger.info(f"Creating adapter: vector_store={config.vector_store_type}, embedding={config.embedding_provider}")
 
     @classmethod
     def _create_embedding(cls, config: BackendConfig):
@@ -145,8 +136,7 @@ class VectorStoreFactory:
             packages_str = ", ".join(missing_packages)
             install_cmd = "pip install " + " ".join(missing_packages)
             raise DependencyMissingError(
-                packages_str,
-                f"Required packages not installed: {packages_str}. Install with: {install_cmd}"
+                packages_str, f"Required packages not installed: {packages_str}. Install with: {install_cmd}"
             )
         else:
             raise DependencyMissingError("unknown", str(error))
@@ -163,7 +153,7 @@ class VectorStoreFactory:
 
 
 # Convenience functions
-def create_adapter(config: Optional[BackendConfig] = None) -> VectorStoreAdapter:
+def create_adapter(config: BackendConfig | None = None) -> VectorStoreAdapter:
     """Convenience function to create vector store adapter."""
     return VectorStoreFactory.create_adapter(config)
 

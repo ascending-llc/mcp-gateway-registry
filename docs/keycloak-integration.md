@@ -43,7 +43,7 @@ sequenceDiagram
 #### Production Architecture (Recommended)
 ```
 AI Agent A → Service Account A (agent-{agent-id}-m2m) → Group: mcp-servers-restricted/unrestricted
-AI Agent B → Service Account B (agent-{agent-id}-m2m) → Group: mcp-servers-restricted/unrestricted  
+AI Agent B → Service Account B (agent-{agent-id}-m2m) → Group: mcp-servers-restricted/unrestricted
 AI Agent C → Service Account C (agent-{agent-id}-m2m) → Group: mcp-servers-restricted/unrestricted
                                       ↓
                               Individual JWT Tokens per Agent
@@ -470,7 +470,7 @@ uv run python credentials-provider/keycloak/generate_tokens.py --agent-id new-ag
 # Access Keycloak admin console
 open https://mcpgateway.ddns.net/admin
 
-# Navigate to: 
+# Navigate to:
 # Realm: mcp-gateway → Users → agent-<id>-m2m → Groups
 
 # Add/remove group memberships:
@@ -560,12 +560,12 @@ AGENTS=(
 
 for agent_config in "${AGENTS[@]}"; do
   IFS=':' read -r agent_id group <<< "$agent_config"
-  
+
   echo "Creating agent: $agent_id with group: $group"
   ./keycloak/setup/setup-agent-service-account.sh \
     --agent-id "$agent_id" \
     --group "$group"
-  
+
   echo "Generating token for: $agent_id"
   uv run python credentials-provider/keycloak/generate_tokens.py --agent-id "$agent_id"
 done
@@ -743,7 +743,7 @@ export KEYCLOAK_DB_PASSWORD="$(openssl rand -base64 32)"
 
 **Before running any setup scripts:**
 1. **REQUIRED**: Set `KEYCLOAK_ADMIN_PASSWORD` environment variable
-2. **REQUIRED**: Set `KEYCLOAK_DB_PASSWORD` environment variable  
+2. **REQUIRED**: Set `KEYCLOAK_DB_PASSWORD` environment variable
 3. Never commit these to version control
 4. Use a proper secrets management system
 
@@ -958,7 +958,7 @@ cat .oauth-tokens/agent-<id>.json | jq '.expires_at_human'
 ### Important Files
 ```
 keycloak/setup/                    # Setup scripts
-auth_server/scopes.yml             # Authorization configuration  
+auth_server/scopes.yml             # Authorization configuration
 .oauth-tokens/                     # Token storage
 docs/keycloak-integration.md       # This documentation
 docker-compose.yml                 # Service orchestration

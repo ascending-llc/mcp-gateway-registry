@@ -75,4 +75,4 @@ EXPOSE 7860
 COPY docker/registry-entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-ENTRYPOINT ["/app/entrypoint.sh", "backend"] 
+ENTRYPOINT ["/app/entrypoint.sh", "backend"]

@@ -6,14 +6,14 @@
 [![License](https://img.shields.io/github/license/ascending-llc/mcp-gateway-registry?style=flat)](https://github.com/ascending-llc/mcp-gateway-registry/blob/main/LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/ascending-llc/mcp-gateway-registry?style=flat&logo=github)](https://github.com/ascending-llc/mcp-gateway-registry/releases)
 
-[🚀 Quick Start](docs/macos-setup-guide.md) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) 
+[🚀 Quick Start](docs/macos-setup-guide.md) | [Documentation](docs/) | [Enterprise Features](#enterprise-features)
 
 
 </div>
 
 ---
 
-## Enterprise Fork for MCP and Agent Governance 
+## Enterprise Fork for MCP and Agent Governance
 This project is forked from [MCP Gateway & Registry](https://github.com/agentic-community/mcp-gateway-registry) with enhanced capabilities for:
 1. Multi-user governance and access control
 1. Enterprise system integration
@@ -156,33 +156,33 @@ flowchart TB
         subgraph NGINX["NGINX Reverse Proxy"]
             RP["Reverse Proxy Router"]
         end
-        
+
         subgraph AuthRegistry["Authentication & Registry Services"]
             AuthServer["Auth Server<br/>(Dual Auth)"]
             Registry["Registry<br/>Web UI"]
             RegistryMCP["Registry<br/>MCP Server"]
         end
-        
+
         subgraph LocalMCPServers["Local MCP Servers"]
             MCP_Local1["MCP Server 1"]
             MCP_Local2["MCP Server 2"]
         end
     end
-    
+
     %% Identity Provider
     IdP[Identity Provider<br/>Keycloak/Cognito]
-    
+
     subgraph EKS_Cluster["Amazon EKS/EC2 Cluster"]
         MCP_EKS1["MCP Server 3"]
         MCP_EKS2["MCP Server 4"]
     end
-    
+
     subgraph APIGW_Lambda["Amazon API Gateway + AWS Lambda"]
         API_GW["Amazon API Gateway"]
         Lambda1["AWS Lambda Function 1"]
         Lambda2["AWS Lambda Function 2"]
     end
-    
+
     subgraph External_Systems["External Data Sources & APIs"]
         DB1[(Database 1)]
         DB2[(Database 2)]
@@ -190,7 +190,7 @@ flowchart TB
         API2["External API 2"]
         API3["External API 3"]
     end
-    
+
     %% Connections from Human Users
     User1 -->|Web Browser<br>Authentication| IdP
     User2 -->|Web Browser<br>Authentication| IdP
@@ -198,31 +198,31 @@ flowchart TB
     User1 -->|Web Browser<br>HTTPS| Registry
     User2 -->|Web Browser<br>HTTPS| Registry
     UserN -->|Web Browser<br>HTTPS| Registry
-    
+
     %% Connections from Agents to Gateway
     Agent1 -->|MCP Protocol<br>SSE with Auth| RP
     Agent2 -->|MCP Protocol<br>SSE with Auth| RP
     Agent3 -->|MCP Protocol<br>Streamable HTTP with Auth| RP
     AgentN -->|MCP Protocol<br>Streamable HTTP with Auth| RP
-    
+
     %% Auth flow connections
     RP -->|Auth validation| AuthServer
     AuthServer -.->|Validate credentials| IdP
     Registry -.->|User authentication| IdP
     RP -->|Tool discovery| RegistryMCP
     RP -->|Web UI access| Registry
-    
+
     %% Connections from Gateway to MCP Servers
     RP -->|SSE| MCP_Local1
     RP -->|SSE| MCP_Local2
     RP -->|SSE| MCP_EKS1
     RP -->|SSE| MCP_EKS2
     RP -->|Streamable HTTP| API_GW
-    
+
     %% Connections within API GW + Lambda
     API_GW --> Lambda1
     API_GW --> Lambda2
-    
+
     %% Connections to External Systems
     MCP_Local1 -->|Tool Connection| DB1
     MCP_Local2 -->|Tool Connection| DB2
@@ -240,7 +240,7 @@ flowchart TB
     classDef apiGw fill:#fce4ec,stroke:#ec407a,stroke-width:2px
     classDef lambda fill:#ffebee,stroke:#ef5350,stroke-width:2px
     classDef dataSource fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
-    
+
     %% Apply styles
     class User1,User2,UserN user
     class Agent1,Agent2,Agent3,AgentN agent
@@ -267,7 +267,7 @@ flowchart TB
 
 ### **Enterprise-Grade Security**
 - OAuth 2.0/3.0 compliance with IdP integration
-- Fine-grained access control at tool and method level  
+- Fine-grained access control at tool and method level
 - Zero-trust network architecture
 - Complete audit trails and comprehensive analytics for compliance
 
@@ -331,7 +331,7 @@ Seamlessly integrate with Anthropic's official MCP Registry to import and access
 
 **Unified Multi-Registry Access:**
 - **Anthropic MCP Registry** - Import curated MCP servers with purple `ANTHROPIC` visual tags
-- **Workday ASOR** - Import AI agents from Agent System of Record with orange `ASOR` visual tags  
+- **Workday ASOR** - Import AI agents from Agent System of Record with orange `ASOR` visual tags
 - **Automatic Sync** - Scheduled synchronization with external registries
 - **Visual Identification** - Clear visual tags distinguish federation sources in the UI
 - **Centralized Management** - Single control plane for all federated servers and agents

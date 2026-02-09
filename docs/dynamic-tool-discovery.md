@@ -46,7 +46,7 @@ graph TB
         A[AI Agent] --> B[Natural Language Query]
         A --> H[invoke_mcp_tool]
     end
-    
+
     subgraph "Discovery Layer"
         B --> C[intelligent_tool_finder]
         C --> D[Sentence Transformer]
@@ -56,7 +56,7 @@ graph TB
         G --> K[Tool Discovery Results]
         K --> A
     end
-    
+
     subgraph "Execution Layer"
         H --> I[Target MCP Server]
         I --> J[Tool Result]
@@ -125,7 +125,7 @@ weather_tools = await intelligent_tool_finder(
 # 2. Use the discovered tool
 if weather_tools:
     tool_info = weather_tools[0]  # Get the best match
-    
+
     result = await invoke_mcp_tool(
         mcp_registry_url="https://your-registry.com/mcpgw/sse",
         server_name=tool_info["service_path"],  # e.g., "/weather"

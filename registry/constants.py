@@ -3,12 +3,12 @@ Constants and enums for the MCP Gateway Registry.
 """
 
 import os
-from enum import Enum
-from typing import List, Optional
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict
 
 
-class HealthStatus(str, Enum):
+class HealthStatus(StrEnum):
     """Health status constants for services."""
 
     HEALTHY = "healthy"
@@ -21,7 +21,7 @@ class HealthStatus(str, Enum):
     UNKNOWN = "unknown"
 
     @classmethod
-    def get_healthy_statuses(cls) -> List[str]:
+    def get_healthy_statuses(cls) -> list[str]:
         """Get list of statuses that should be considered healthy for nginx inclusion."""
         return [cls.HEALTHY, cls.HEALTHY_AUTH_EXPIRED]
 
@@ -31,7 +31,7 @@ class HealthStatus(str, Enum):
         return status in cls.get_healthy_statuses()
 
 
-class TransportType(str, Enum):
+class TransportType(StrEnum):
     """Supported transport types for MCP servers."""
 
     STREAMABLE_HTTP = "streamable-http"
@@ -60,7 +60,7 @@ class RegistryConstants(BaseModel):
 
     # Server settings
     DEFAULT_TRANSPORT: str = TransportType.STREAMABLE_HTTP
-    SUPPORTED_TRANSPORTS: List[str] = [TransportType.STREAMABLE_HTTP, TransportType.SSE]
+    SUPPORTED_TRANSPORTS: list[str] = [TransportType.STREAMABLE_HTTP, TransportType.SSE]
 
     # Anthropic Registry API constants
     ANTHROPIC_API_VERSION: str = "v0.1"
@@ -71,14 +71,11 @@ class RegistryConstants(BaseModel):
     # External Registry Tags
     # Comma-separated list of tags that identify external registry servers
     # Example: "anthropic-registry,workday-asor,custom-registry"
-    EXTERNAL_REGISTRY_TAGS: str = os.getenv(
-        "EXTERNAL_REGISTRY_TAGS",
-        "anthropic-registry,workday-asor"
-    )
+    EXTERNAL_REGISTRY_TAGS: str = os.getenv("EXTERNAL_REGISTRY_TAGS", "anthropic-registry,workday-asor")
     # Weaviate Configuration
     WEAVIATE_HOST: str = os.getenv("WEAVIATE_HOST", "weaviate")
     WEAVIATE_PORT: int = int(os.getenv("WEAVIATE_PORT", "8080"))
-    WEAVIATE_API_KEY: Optional[str] = os.getenv("WEAVIATE_API_KEY", "test-secret-key")
+    WEAVIATE_API_KEY: str | None = os.getenv("WEAVIATE_API_KEY", "test-secret-key")
     WEAVIATE_EMBEDDINGS_PROVIDER: str = os.getenv("WEAVIATE_EMBEDDINGS_PROVIDER", "bedrock")
 
     WEAVIATE_SESSION_POOL_CONNECTIONS: int = 20  # Maximum connections
@@ -94,7 +91,7 @@ class RegistryConstants(BaseModel):
 
     REDIS_URI: str = os.getenv("REDIS_URI", "redis://registry-redis:6379/1")
     REDIS_KEY_PREFIX: str = os.getenv("REDIS_KEY_PREFIX", "jarvis-registry")
-    
+
     REGISTRY_CLIENT_URL: str = os.getenv("REGISTRY_CLIENT_URL", "http://localhost:5173")
 
 
