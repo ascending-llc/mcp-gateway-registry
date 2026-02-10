@@ -168,6 +168,7 @@ class TestProxyToolExecutionRoutes:
     def test_execute_tool_missing_server_url(self, test_client: TestClient):
         """Tool execution fails with 500 when server URL not configured."""
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.config = {}  # Missing url
 

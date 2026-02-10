@@ -129,6 +129,8 @@ async def semantic_search(
     start_time = time.perf_counter()
     success = False
     total_results = 0
+    filtered_servers: list[ServerSearchResult] = []
+    filtered_tools: list[ToolSearchResult] = []
 
     logger.info(
         "Semantic search requested by %s (entities=%s, max=%s)",
@@ -153,7 +155,6 @@ async def semantic_search(
                 detail="Semantic search is temporarily unavailable. Please try again later.",
             ) from exc
 
-        filtered_servers: list[ServerSearchResult] = []
         for server in raw_results.get("servers", []):
             matching_tools = [
                 MatchingToolResult(
@@ -179,7 +180,6 @@ async def semantic_search(
                 )
             )
 
-        filtered_tools: list[ToolSearchResult] = []
         for tool in raw_results.get("tools", []):
             server_path = tool.get("server_path", "")
             server_name = tool.get("server_name", "")
@@ -238,16 +238,34 @@ async def semantic_search(
             total_agents=len(filtered_agents),
         )
     finally:
-        # Record tool discovery metrics for semantic search
+        # Record tool discovery metrics per discovered server
         duration = time.perf_counter() - start_time
         try:
-            record_tool_discovery(
-                server_name="registry",
-                success=success,
-                duration_seconds=duration,
-                transport_type="semantic",
-                tools_count=total_results,
-            )
+            discovered_names: set[str] = set()
+            for srv in filtered_servers:
+                if srv.server_name:
+                    discovered_names.add(srv.server_name)
+            for tl in filtered_tools:
+                if tl.server_name:
+                    discovered_names.add(tl.server_name)
+
+            if discovered_names:
+                for name in discovered_names:
+                    record_tool_discovery(
+                        server_name=name,
+                        success=success,
+                        duration_seconds=duration,
+                        transport_type="semantic",
+                        tools_count=total_results,
+                    )
+            else:
+                record_tool_discovery(
+                    server_name="registry",
+                    success=success,
+                    duration_seconds=duration,
+                    transport_type="semantic",
+                    tools_count=total_results,
+                )
         except Exception as e:
             logger.warning(f"Failed to record tool discovery metric: {e}")
 
@@ -305,6 +323,7 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
     start_time = time.perf_counter()
     success = False
     results_count = 0
+    search_results: list = []
 
     logger.info(
         f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
@@ -344,15 +363,33 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
         results_count = len(search_results)
         return {"query": query, "total": len(search_results), "servers": search_results}
     finally:
-        # Record tool discovery metrics for server search
+        # Record tool discovery metrics per discovered server
         duration = time.perf_counter() - start_time
         try:
-            record_tool_discovery(
-                server_name="registry",
-                success=success,
-                duration_seconds=duration,
-                transport_type=str(search.search_type.value),
-                tools_count=results_count,
-            )
+            discovered_names: set[str] = set()
+            for result in search_results:
+                name = getattr(result, "serverName", None) or (
+                    result.get("server_name") if isinstance(result, dict) else None
+                )
+                if name:
+                    discovered_names.add(name)
+
+            if discovered_names:
+                for name in discovered_names:
+                    record_tool_discovery(
+                        server_name=name,
+                        success=success,
+                        duration_seconds=duration,
+                        transport_type=str(search.search_type.value),
+                        tools_count=results_count,
+                    )
+            else:
+                record_tool_discovery(
+                    server_name="registry",
+                    success=success,
+                    duration_seconds=duration,
+                    transport_type=str(search.search_type.value),
+                    tools_count=results_count,
+                )
         except Exception as e:
             logger.warning(f"Failed to record tool discovery metric: {e}")

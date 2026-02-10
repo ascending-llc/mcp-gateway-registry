@@ -665,13 +665,10 @@ async def read_resource(body: ResourceReadRequest, user_context: CurrentUser) ->
     if not server:
         raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
-    server_name = getattr(server, "serverName", None) or server.path.strip("/")
+    server_name = server.serverName or server.path.strip("/").split("/")[0]
 
     # Track server request count
     record_server_request(server_name)
-
-    # Build target URL using shared helper (for future implementation)
-    _target_url = _build_target_url(server)
 
     # MOCK: Return hardcoded response for POC
     logger.info(f"(MOCK) Returning cached search results for: {resource_uri}")
@@ -758,13 +755,10 @@ async def execute_prompt(body: PromptExecutionRequest, user_context: CurrentUser
     if not server:
         raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
-    server_name = getattr(server, "serverName", None) or server.path.strip("/")
+    server_name = server.serverName or server.path.strip("/").split("/")[0]
 
     # Track server request count
     record_server_request(server_name)
-
-    # Build target URL using shared helper (for future implementation)
-    _target_url = _build_target_url(server)
 
     # MOCK: Return hardcoded prompt response for POC
     topic = arguments.get("topic", "general topic")
