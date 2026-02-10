@@ -39,11 +39,16 @@
       "protocol_version": "1.0",
       "tags": ["code", "review"],
       "num_skills": 5,
-      "is_enabled": true,
+      "enabled": true,
       "status": "active",
-      "acl_permission": 15,
-      "registered_by": "user123",
-      "registered_at": "2024-01-15T10:30:00Z",
+      "permissions": {
+        "VIEW": true,
+        "EDIT": true,
+        "DELETE": true,
+        "SHARE": true
+      },
+      "author": "507f1f77bcf86cd799439012",
+      "created_at": "2024-01-15T10:30:00Z",
       "updated_at": "2024-01-20T15:45:00Z"
     }
   ],
@@ -130,8 +135,13 @@
   },
   "tags": ["code", "review"],
   "status": "active",
-  "is_enabled": true,
-  "acl_permission": 15,
+  "enabled": true,
+  "permissions": {
+    "VIEW": true,
+    "EDIT": true,
+    "DELETE": true,
+    "SHARE": true
+  },
   "author": "507f1f77bcf86cd799439012",
   "well_known": {
     "enabled": true,
@@ -140,8 +150,6 @@
     "last_sync_status": "success",
     "last_sync_version": "1.0.0"
   },
-  "registered_by": "user123",
-  "registered_at": "2024-01-15T10:30:00Z",
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T15:45:00Z"
 }
@@ -187,7 +195,7 @@
     "url": "https://ailabs.com"
   },
   "tags": ["code", "review"],
-  "is_enabled": false
+  "enabled": false
 }
 ```
 
@@ -200,7 +208,7 @@
     "path": "/code-reviewer",
     "name": "Code Review Agent",
     "url": "https://example.com/agents/code-reviewer",
-    "registered_at": "2024-01-15T10:30:00Z"
+    "created_at": "2024-01-15T10:30:00Z"
   }
 }
 ```
@@ -223,7 +231,7 @@
   "version": "1.1.0",
   "skills": [...],
   "tags": ["new", "tags"],
-  "is_enabled": true
+  "enabled": true
 }
 ```
 
@@ -278,7 +286,7 @@
   "agent": {
     "id": "507f1f77bcf86cd799439011",
     "path": "/code-reviewer",
-    "is_enabled": true
+    "enabled": true
   }
 }
 ```
@@ -320,7 +328,7 @@
 
 ### 9. Sync Well-Known
 
-**Endpoint**: `POST /api/v1/agents/{agent_id}/sync-wellknown`
+**Endpoint**: `POST /api/v1/agents/{agent_id}/wellknown`
 
 **Response**: `200 OK`
 ```json
