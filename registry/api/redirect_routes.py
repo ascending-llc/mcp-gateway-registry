@@ -153,7 +153,7 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
         if not user_obj:
             logger.error(f"Failed to find or create user for claims: {user_claims}")
             return RedirectResponse(
-                url=f"{settings.registry_client_url}/login?error=User+Not+Found+in+Registry", status_code=302
+                url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry", status_code=302
             )
 
         # Merge OAuth claims with user object data

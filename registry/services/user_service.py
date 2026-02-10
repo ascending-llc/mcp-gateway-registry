@@ -89,15 +89,14 @@ class UserService:
             user_id as string if created, None on error
         """
         try:
-            existing_user = await IUser.find_one()
             new_user = IUser(
                 name=user_claims.get("name"),
                 username=user_claims.get("sub"),
                 email=user_claims.get("sub"),
-                emailVerified=False,
-                role="ADMIN" if not existing_user else "USER",
+                emailVerified=True,
+                role="USER",
                 provider="openid",
-                openidId=user_claims.get("idp_id"),
+                openidId="",
                 idOnTheSource=user_claims.get("idp_id"),
                 plugins=[],
                 termsAccepted=False,
