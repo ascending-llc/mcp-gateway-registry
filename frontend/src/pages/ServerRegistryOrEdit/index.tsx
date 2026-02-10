@@ -189,14 +189,13 @@ const ServerRegistryOrEdit: React.FC = () => {
     };
     switch (data.authConfig.type) {
       case 'auto':
-        delete baseData.apiKey;
-        delete baseData.oauth;
         return {
           ...baseData,
+          apiKey: null,
+          oauth: null,
           requiresOAuth: false,
         };
       case 'apiKey':
-        delete baseData.oauth;
         return {
           ...baseData,
           apiKey: {
@@ -211,10 +210,10 @@ const ServerRegistryOrEdit: React.FC = () => {
               ? { custom_header: data.authConfig.custom_header }
               : {}),
           },
+          oauth: null,
           requiresOAuth: false,
         };
       case 'oauth':
-        delete baseData.apiKey;
         return {
           ...baseData,
           oauth: {
@@ -226,6 +225,7 @@ const ServerRegistryOrEdit: React.FC = () => {
             token_url: data.authConfig.token_url,
             scope: data.authConfig.scope,
           },
+          apiKey: null,
           requiresOAuth: true,
         };
       default:
