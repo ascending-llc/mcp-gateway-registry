@@ -144,17 +144,14 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
                 url=f"{settings.registry_client_url}/login?error=oauth2_exchange_error", status_code=302
             )
 
-        # Validate that user_id was resolved by auth_server
         if not user_claims.get("user_id"):
-            logger.warning(f"User {user_claims.get('sub')} has no user_id - not found in MongoDB")
-            return RedirectResponse(
-                url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry", status_code=302
-            )
+            logger.warning(f"User {user_claims.get('sub')} has no user_id - not found in MongoDB. Creating new user.")
+            user_obj = await user_service.create_user(user_claims)
+        else:
+            user_obj = await user_service.get_user_by_user_id(user_claims.get("user_id"))
 
-        # Look up user object to merge with OAuth claims
-        user_obj = await user_service.get_user_by_user_id(user_claims.get("user_id"))
         if not user_obj:
-            logger.warning(f"User ID {user_claims.get('user_id')} not found in registry database")
+            logger.error(f"Failed to find or create user for claims: {user_claims}")
             return RedirectResponse(
                 url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry", status_code=302
             )

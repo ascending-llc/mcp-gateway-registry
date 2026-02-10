@@ -78,5 +78,43 @@ class UserService:
             logger.error(f"Error searching users with query '{search_query}': {e}")
             return []
 
+    async def create_user(self, user_claims: dict) -> IUser | None:
+        """
+        Create a new user in MongoDB.
+
+        Args:
+            user_claims: Dictionary containing user information (name, username, email, idp_id)
+
+        Returns:
+            user_id as string if created, None on error
+        """
+        try:
+            new_user = IUser(
+                name=user_claims.get("name"),
+                username=user_claims.get("sub"),
+                email=user_claims.get("sub"),
+                emailVerified=True,
+                role="USER",
+                provider="openid",
+                openidId="",
+                idOnTheSource=user_claims.get("idp_id"),
+                plugins=[],
+                termsAccepted=False,
+                backupCodes=[],
+                refreshToken=[],
+                favorites=[],
+                createdAt=datetime.now(UTC),
+                updatedAt=datetime.now(UTC),
+            )
+
+            created_user = await new_user.create()
+            logger.info(
+                f"Created new user record in MongoDB with id: {created_user.id} for username: {user_claims.get('username')}"
+            )
+            return created_user
+        except Exception as e:
+            logger.error(f"Error creating new user for username: {user_claims.get('username')}: {e}")
+            return None
+
 
 user_service = UserService()

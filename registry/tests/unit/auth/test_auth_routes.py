@@ -5,6 +5,7 @@ Unit tests for authentication routes.
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from bson import ObjectId
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
@@ -188,7 +189,7 @@ class TestAuthRoutes:
         assert response.headers["location"].rstrip("/") == "http://localhost:8000"
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_user_not_found(self, mock_request, mock_code):
+    async def test_oauth2_callback_user_not_found(self, mock_request, mock_code, mock_settings):
         """Test OAuth2 callback when user is not found in DB."""
         # Mock httpx AsyncClient to return a token without user_id
         mock_response = Mock()
@@ -197,15 +198,35 @@ class TestAuthRoutes:
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
         }
 
-        with patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+        # User claims without user_id to trigger create_user
+        user_claims = {
+            "sub": "testuser",
+            "email": "test@test.com",
+            "name": "Test User",
+            "groups": [],
+            "provider": "local",
+        }
+
+        mock_user = Mock()
+        mock_user.id = ObjectId("507f1f77bcf86cd799439013")
+
+        with (
+            patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client,
+            patch("registry.api.redirect_routes.user_service") as mock_user_service,
+            patch("jwt.decode", return_value=user_claims),
+        ):
             mock_client_instance = mock_client.return_value.__aenter__.return_value
             mock_client_instance.post = AsyncMock(return_value=mock_response)
 
+            # Mock create_user to return a new user
+            mock_user_service.create_user = AsyncMock(return_value=mock_user)
+            mock_user_service.get_user_by_user_id = AsyncMock(return_value=mock_user)
+
             response = await oauth2_callback(mock_request, code=mock_code)
 
-        assert isinstance(response, RedirectResponse)
-        assert response.status_code == 302
-        assert "/login?error=User+not+found+in+registry" in response.headers["location"]
+            assert isinstance(response, RedirectResponse)
+            assert response.status_code == 302
+            mock_user_service.create_user.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_oauth2_callback_with_error(self, mock_request):

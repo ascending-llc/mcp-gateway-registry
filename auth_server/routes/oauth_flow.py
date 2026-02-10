@@ -349,6 +349,8 @@ async def device_token(
         user_id = await user_service.resolve_user_id(user_info)
 
         token_payload = {
+            "name": user_info.get("name"),
+            "idp_id": user_info.get("idp_id"),
             "user_id": user_id,
             "iss": JWT_ISSUER,
             "aud": audience,
