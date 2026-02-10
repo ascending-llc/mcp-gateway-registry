@@ -145,7 +145,7 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
             )
 
         if not user_claims.get("user_id"):
-            logger.warning(f"User {user_claims.get('sub')} has no user_id - not found in MongoDB")
+            logger.warning(f"User {user_claims.get('sub')} has no user_id - not found in MongoDB. Creating new user.")
             user_obj = await user_service.create_user(user_claims)
         else:
             user_obj = await user_service.get_user_by_user_id(user_claims.get("user_id"))

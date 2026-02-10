@@ -44,8 +44,8 @@ class UserService:
                 if user:
                     logger.debug(f"✓ Resolved user_id from MongoDB by email: {user.id} for email: {email}")
                     return str(user.id)
+                logger.warning(f"User not found in MongoDB for username: {username}, email: {email}")
 
-            logger.warning(f"User not found in MongoDB for username: {username}, email: {email}")
             return None
         except Exception as e:
             logger.error(f"Error resolving user_id from MongoDB: {type(e).__name__}: {e}")

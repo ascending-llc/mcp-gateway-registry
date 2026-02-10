@@ -3,8 +3,9 @@ Unit tests for authentication routes.
 """
 
 from unittest.mock import AsyncMock, Mock, patch
-from bson import ObjectId
+
 import pytest
+from bson import ObjectId
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
@@ -203,7 +204,7 @@ class TestAuthRoutes:
             "email": "test@test.com",
             "name": "Test User",
             "groups": [],
-            "provider": "local"
+            "provider": "local",
         }
 
         mock_user = Mock()
