@@ -282,7 +282,7 @@ const ServerRegistryOrEdit: React.FC = () => {
 
   return (
     <div className='h-full overflow-y-auto custom-scrollbar -mr-4 sm:-mr-6 lg:-mr-8'>
-      <div className='mx-auto flex flex-col w-full sm:w-11/12 lg:w-3/4 min-h-full bg-white dark:bg-gray-800 rounded-lg'>
+      <div className='mx-auto flex flex-col w-3/4 min-h-full bg-white dark:bg-gray-800 rounded-lg'>
         {/* Header */}
         <div className='px-6 py-6 flex items-center gap-4 border-b border-gray-100 dark:border-gray-700'>
           <div className='flex items-center justify-center p-3 rounded-xl bg-[#F3E8FF] dark:bg-purple-900/30'>
@@ -297,7 +297,6 @@ const ServerRegistryOrEdit: React.FC = () => {
             </p>
           </div>
         </div>
-
         {/* Content */}
         <div className='px-6 py-4 flex-1 flex flex-col'>
           {loadingDetail ? (
@@ -314,7 +313,6 @@ const ServerRegistryOrEdit: React.FC = () => {
             />
           )}
         </div>
-
         {/* Footer */}
         <div className='px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-4'>
           <div>
