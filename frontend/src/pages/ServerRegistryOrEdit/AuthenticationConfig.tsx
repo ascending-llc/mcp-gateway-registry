@@ -140,7 +140,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                       className={`${getInputClass('key')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
                       style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
                       value={isEditMode && !isApiKeyDirty ? '' : config.key || ''}
-                      placeholder={isEditMode && !isApiKeyDirty ? config.key : '...'}
+                      placeholder={isEditMode && !isApiKeyDirty && config.key ? config.key : '...'}
                       onChange={e => {
                         setIsApiKeyDirty(true);
                         updateConfig({ key: e.target.value });
@@ -255,7 +255,11 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                     className={`${getInputClass('client_secret')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
                     style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
                     value={isEditMode && !isClientSecretDirty ? '' : config.client_secret || ''}
-                    placeholder={isEditMode && !isClientSecretDirty ? config.client_secret : 'your-client-secret-here'}
+                    placeholder={
+                      isEditMode && !isClientSecretDirty && config.client_secret
+                        ? config.client_secret
+                        : 'your-client-secret-here'
+                    }
                     onChange={e => {
                       setIsClientSecretDirty(true);
                       updateConfig({ client_secret: e.target.value });

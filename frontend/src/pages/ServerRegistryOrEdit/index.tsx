@@ -7,7 +7,7 @@ import { McpIcon } from '@/assets/McpIcon';
 import { useGlobal } from '@/contexts/GlobalContext';
 import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
-import type { GET_SERVERS_DETAIL_RESPONSE } from '@/services/server/type';
+import type { GET_SERVERS_DETAIL_RESPONSE, Server } from '@/services/server/type';
 import MainConfigForm from './MainConfigForm';
 import ServerCreationSuccessDialog from './ServerCreationSuccessDialog';
 import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './types';
@@ -179,7 +179,7 @@ const ServerRegistryOrEdit: React.FC = () => {
   };
 
   const processDataByAuthType = (data: ServerConfig) => {
-    const baseData = {
+    const baseData: Partial<Server> = {
       serverName: data.serverName,
       description: data.description,
       path: data.path,
@@ -189,8 +189,14 @@ const ServerRegistryOrEdit: React.FC = () => {
     };
     switch (data.authConfig.type) {
       case 'auto':
-        return baseData;
+        delete baseData.apiKey;
+        delete baseData.oauth;
+        return {
+          ...baseData,
+          requiresOAuth: false,
+        };
       case 'apiKey':
+        delete baseData.oauth;
         return {
           ...baseData,
           apiKey: {
@@ -205,8 +211,10 @@ const ServerRegistryOrEdit: React.FC = () => {
               ? { custom_header: data.authConfig.custom_header }
               : {}),
           },
+          requiresOAuth: false,
         };
       case 'oauth':
+        delete baseData.apiKey;
         return {
           ...baseData,
           oauth: {
@@ -218,6 +226,7 @@ const ServerRegistryOrEdit: React.FC = () => {
             token_url: data.authConfig.token_url,
             scope: data.authConfig.scope,
           },
+          requiresOAuth: true,
         };
       default:
         return {};
@@ -273,7 +282,7 @@ const ServerRegistryOrEdit: React.FC = () => {
 
   return (
     <div className='h-full overflow-y-auto custom-scrollbar -mr-4 sm:-mr-6 lg:-mr-8'>
-      <div className='mx-auto flex flex-col w-3/4 min-h-full bg-white dark:bg-gray-800 rounded-lg'>
+      <div className='mx-auto flex flex-col w-full sm:w-11/12 lg:w-3/4 min-h-full bg-white dark:bg-gray-800 rounded-lg'>
         {/* Header */}
         <div className='px-6 py-6 flex items-center gap-4 border-b border-gray-100 dark:border-gray-700'>
           <div className='flex items-center justify-center p-3 rounded-xl bg-[#F3E8FF] dark:bg-purple-900/30'>
@@ -307,7 +316,7 @@ const ServerRegistryOrEdit: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className='px-6 py-4 border-t border-gray-100  dark:border-gray-700 flex items-center justify-between'>
+        <div className='px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-4'>
           <div>
             {isEditMode && !isReadOnly && serverDetail?.permissions?.DELETE && (
               <button
@@ -319,11 +328,11 @@ const ServerRegistryOrEdit: React.FC = () => {
               </button>
             )}
           </div>
-          <div className='flex space-x-3'>
+          <div className='flex gap-3'>
             <button
               onClick={goBack}
               disabled={loading}
-              className='px-4 md:px-28 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+              className='min-w-[80px] sm:min-w-[120px] md:min-w-[160px] px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
             >
               Cancel
             </button>
@@ -331,7 +340,7 @@ const ServerRegistryOrEdit: React.FC = () => {
               <button
                 onClick={handleSave}
                 disabled={loading}
-                className='inline-flex items-center gap-2 px-4 md:px-28 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+                className='inline-flex items-center justify-center gap-2 min-w-[80px] sm:min-w-[120px] md:min-w-[160px] px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>}
                 {isEditMode ? 'Update' : 'Create'}
