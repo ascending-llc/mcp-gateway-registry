@@ -193,7 +193,6 @@ const ServerRegistryOrEdit: React.FC = () => {
           ...baseData,
           apiKey: null,
           oauth: null,
-          requiresOAuth: false,
         };
       case 'apiKey':
         return {
@@ -211,7 +210,6 @@ const ServerRegistryOrEdit: React.FC = () => {
               : {}),
           },
           oauth: null,
-          requiresOAuth: false,
         };
       case 'oauth':
         return {
@@ -226,7 +224,6 @@ const ServerRegistryOrEdit: React.FC = () => {
             scope: data.authConfig.scope,
           },
           apiKey: null,
-          requiresOAuth: true,
         };
       default:
         return {};
