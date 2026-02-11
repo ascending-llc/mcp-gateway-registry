@@ -2733,6 +2733,7 @@ version = "0.2.0"
 source = { editable = "registry" }
 dependencies = [
     { name = "aiohttp" },
+    { name = "auth-server" },
     { name = "awscli" },
     { name = "bandit" },
     { name = "boto3" },
@@ -2771,6 +2772,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.0" },
+    { name = "auth-server", editable = "auth-server" },
     { name = "awscli", specifier = ">=1.36.0" },
     { name = "bandit", specifier = ">=1.8.3" },
     { name = "boto3", specifier = ">=1.35.0" },

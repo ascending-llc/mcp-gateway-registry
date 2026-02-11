@@ -72,20 +72,6 @@ printf '   registry    → %s\n' $(grep -m1 '^version = ' registry/pyproject.tom
 printf '   auth-server → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
 printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2)""", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
-build-artifacts = { shell = """
-xargs -I % sh -c 'uv build --package % --wheel --no-build-logs --out-dir dist' <<EOF
-registry-db
-registry
-auth-server
-mcpgw
-EOF
-xargs -I % sh -c 'uv export --package % --no-hashes --no-annotate --no-emit-workspace --quiet -o dist/requirements-%.txt' <<EOF
-registry-db
-registry
-auth-server
-mcpgw
-EOF
-""", help = "Generate artifacts for Docker build and put them in the dist/ folder." }
 
 # Run all tests across all projects
 test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../packages/registry-db && uv run poe test" }
@@ -114,6 +100,19 @@ fix = { shell = "uv run ruff check --fix . && uv run ruff format .", help = "Fix
 # Pre-commit hooks
 hooks-install = { shell = "uv run pre-commit install", help = "Install pre-commit hooks" }
 hooks-run = { shell = "uv run pre-commit run --all-files", help = "Run pre-commit on all files" }
+
+# Prepare Python-related artifacts for docker build.
+build-artifacts = { shell = """
+xargs -I % sh -c 'uv build --package % --wheel --no-build-logs --out-dir dist' <<EOF
+registry-db
+registry
+auth-server
+mcpgw
+EOF
+uv export --package registry --package registry-db --package auth-server --no-hashes --no-annotate --no-emit-workspace --quiet -o dist/requirements-registry.txt
+uv export --package auth-server --package registry-db --no-hashes --no-annotate --no-emit-workspace --quiet -o dist/requirements-auth-server.txt
+uv export --package mcpgw --no-hashes --no-annotate --no-emit-workspace --quiet -o dist/requirements-mcpgw.txt
+""", help = "Generate artifacts for Docker build and put them in the dist/ folder." }
 
 [tool.ruff]
 target-version = "py312"
