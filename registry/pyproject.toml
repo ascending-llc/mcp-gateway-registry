@@ -49,7 +49,7 @@ dependencies = [
     # Security scanning
     "bandit>=1.8.3",
     "cisco-ai-mcp-scanner>=3.0.1",
-    "cisco-ai-a2a-scanner @ git+https://github.com/cisco-ai-defense/a2a-scanner.git@main",
+    "cisco-ai-a2a-scanner>=1.0.0",
 
     "langchain-text-splitters>=1.1.0",
 ]

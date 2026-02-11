@@ -376,7 +376,7 @@ wheels = [
 [[package]]
 name = "cisco-ai-a2a-scanner"
 version = "1.0.1"
-source = { git = "https://github.com/cisco-ai-defense/a2a-scanner.git?rev=main#f2421595670cb0663cc17f237e371b5ce2670dd0" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "click" },
@@ -390,6 +390,10 @@ dependencies = [
     { name = "rich" },
     { name = "uvicorn" },
     { name = "yara-python" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b2/5d/4c8ba6d48bdfcacf44c1c1c0a277e0dc39e309f46a8f330374f4f904e319/cisco_ai_a2a_scanner-1.0.1.tar.gz", hash = "sha256:a09016957bd9c805da5d6bad88b568915ee7ab40332dfad13b5822b14cf7d148", size = 128808, upload-time = "2025-12-11T20:29:10.389Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/73/ba/3abd6454ec43657086030f7c710001a08e20be228d49d94860e80a46cd18/cisco_ai_a2a_scanner-1.0.1-py3-none-any.whl", hash = "sha256:40020f82bfc88eab6fb7918837fa14eacc9bf560a7453f03fe0840ad4adbecc6", size = 134855, upload-time = "2025-12-11T20:29:09.172Z" },
 ]
 
 [[package]]
@@ -2771,7 +2775,7 @@ requires-dist = [
     { name = "bandit", specifier = ">=1.8.3" },
     { name = "boto3", specifier = ">=1.35.0" },
     { name = "cachetools", specifier = ">=6.2.4" },
-    { name = "cisco-ai-a2a-scanner", git = "https://github.com/cisco-ai-defense/a2a-scanner.git?rev=main" },
+    { name = "cisco-ai-a2a-scanner", specifier = ">=1.0.0" },
     { name = "cisco-ai-mcp-scanner", specifier = ">=3.0.1" },
     { name = "email-validator", specifier = ">=2.2.0" },
     { name = "fastapi", specifier = ">=0.115.12" },
