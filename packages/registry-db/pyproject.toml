@@ -37,16 +37,6 @@ dependencies = [
 
 ]
 
-[dependency-groups]
-# Vector search with embedded FAISS (optional, adds ~2-3GB)
-embedded-search = [
-    "faiss-cpu>=1.7.4",
-    "sentence-transformers>=3.0.0",
-    "scikit-learn>=1.3.0",
-    "torch>=1.6.0",
-    "huggingface-hub[cli]>=0.31.1",
-]
-
 [project.scripts]
 import-schemas = "registry_db.models.import_schemas:main"
 
