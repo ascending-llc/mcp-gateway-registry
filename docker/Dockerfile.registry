@@ -1,74 +1,42 @@
-# Registry Dockerfile - includes FAISS, models, and registry service
+# Registry Dockerfile - includes models, and registry service
 FROM python:3.12-slim
 
-# Build argument to control whether to install discovery dependencies
-ARG TOOL_DISCOVERY_MODE=embedded
+# TOOL_DISCOVERY_MODE used to be "external" or "embedded". Now we only use "external".
+ARG TOOL_DISCOVERY_MODE=external
 ARG BUILD_VERSION=
-ARG SCHEMA_VERSION=
-ARG GITHUB_TOKEN=
 
 ENV PYTHONUNBUFFERED=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive \
     TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE} \
-    BUILD_VERSION=$BUILD_VERSION
-# Install system dependencies
-# For embedded mode, we need build-essential for compiling dependencies
+    BUILD_VERSION=${BUILD_VERSION} \
+    EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
+    EMBEDDINGS_MODEL_DIMENSIONS=384
+
+# Install system dependencies - curl and procps are included in case `kubectl exec` uses them.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     procps \
-    git \
-    $([ "$TOOL_DISCOVERY_MODE" = "embedded" ] && echo "build-essential" || echo "") \
     ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy the application code
-COPY . /app/
-
-# Install Python dependencies based on TOOL_DISCOVERY_MODE
-# Step 1: Install uv package manager
-# Step 2: Install workspace members (packages + registry) from parent directory
-# Step 3: Import schemas from GitHub release (if SCHEMA_VERSION provided)
-RUN pip install --no-cache-dir uv && \
-    echo "Installing workspace dependencies to system Python..." && \
-    cd /app && \
-    if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
-        echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
-        uv pip install --system -e ./packages && \
-        uv pip install --system -e ./registry; \
-    else \
-        echo "Building FULL image (embedded mode) - installing with ML dependencies"; \
-        uv pip install --system -e ./packages && \
-        uv pip install --system -e "./registry[embedded-search]"; \
-    fi && \
-    echo "Checking for schema import..." && \
-    if [ -z "$SCHEMA_VERSION" ] || [ -z "$GITHUB_TOKEN" ]; then \
-        echo "ERROR: Schema import is required for registry build"; \
-        echo "Please provide the following build arguments:"; \
-        echo "  --build-arg SCHEMA_VERSION=<version> (e.g., asc0.4.0)"; \
-        echo "  --build-arg GITHUB_TOKEN=<token>"; \
-        exit 1; \
-    fi && \
-    echo "Importing all schemas from GitHub release $SCHEMA_VERSION..." && \
-    cd /app/packages && \
-    uv run import-schemas \
-        --mode remote \
-        --tag "$SCHEMA_VERSION" \
-        --output-dir ./models \
-        --repo ascending-llc/jarvis-api \
-        --token "$GITHUB_TOKEN" && \
-    echo "Schema import completed successfully"
-
 # Create logs directory
 RUN mkdir -p /app/logs
 
-# Set default environment variables
-ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
-    EMBEDDINGS_MODEL_DIMENSIONS=384
+# Copy over the Python related build artifacts - these files are prepared by GitHub Actions in CI
+COPY ./build-artifacts /opt/build/
 
-# Expose port for registry
+# Install all 3rd party dependencies with the exact versions locked by uv
+RUN pip install --only-binary :all: -r /opt/build/requirements-registry.txt
+
+# Install own packages from wheels - registry depends on registry-db and auth-server
+RUN pip install --no-deps --no-index --find-links /opt/build/ registry registry-db auth-server
+
+# Expose port for the registry service
 EXPOSE 7860
 
 # Copy and set up entrypoint script
