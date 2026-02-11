@@ -3,6 +3,7 @@ import type React from 'react';
 import { useState } from 'react';
 import FormFields from '@/components/FormFields';
 import { getBasePath } from '@/config';
+import SERVICES from '@/services';
 import type { AuthenticationConfig as AuthConfigType } from './types';
 
 interface AuthenticationConfigProps {
@@ -12,6 +13,7 @@ interface AuthenticationConfigProps {
   errors?: Record<string, string | undefined>;
   isReadOnly?: boolean;
   path?: string;
+  mcpUrl?: string;
 }
 
 const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
@@ -21,12 +23,39 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   errors = {},
   isReadOnly = false,
   path = '',
+  mcpUrl = '',
 }) => {
   const [isApiKeyDirty, setIsApiKeyDirty] = useState(false);
   const [isClientSecretDirty, setIsClientSecretDirty] = useState(false);
 
   const updateConfig = (updates: Partial<AuthConfigType>) => {
     onChange({ ...config, ...updates });
+  };
+
+  const handleGetDiscover = async (baseConfig?: AuthConfigType) => {
+    if (!mcpUrl) return;
+    try {
+      const res = await SERVICES.MCP.getDiscover(mcpUrl);
+      if (res?.metadata) {
+        const { authorization_endpoint, token_endpoint } = res.metadata;
+        const currentConfig = baseConfig || config;
+        onChange({
+          ...currentConfig,
+          client_id: authorization_endpoint || currentConfig.client_id,
+          client_secret: token_endpoint || currentConfig.client_secret,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to discover OAuth endpoints:', error);
+    }
+  };
+
+  const handleTypeChange = (type: AuthConfigType['type']) => {
+    const nextConfig = { ...config, type };
+    onChange(nextConfig);
+    if (type === 'oauth' && !isReadOnly && mcpUrl && !config.client_id && !config.client_secret) {
+      handleGetDiscover(nextConfig);
+    }
   };
 
   const cleanPath = path?.replace(/\/+$/, '') || '';
@@ -42,7 +71,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
             <FormFields.RadioGroupField
               label='Authentication Type'
               value={config.type}
-              onChange={val => updateConfig({ type: val })}
+              onChange={val => handleTypeChange(val)}
               options={[
                 { label: 'No Auth', value: 'auto' },
                 { label: 'API Key', value: 'apiKey' },

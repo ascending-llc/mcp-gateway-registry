@@ -164,6 +164,7 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
         errors={errors}
         isReadOnly={isReadOnly}
         path={formData.path}
+        mcpUrl={formData.url}
       />
 
       {/* Section Metadata */}
