@@ -197,27 +197,24 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 }
               />
 
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Redirect URI</label>
-                <div className='flex gap-2'>
-                  <input
-                    type='text'
-                    readOnly
-                    disabled={isReadOnly}
-                    className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm sm:text-sm bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed focus:ring-0 focus:border-gray-300 dark:focus:border-gray-600'
-                    value={redirectUri}
-                  />
+              <FormFields.InputField
+                label='Redirect URI'
+                readOnly
+                disabled={isReadOnly}
+                value={redirectUri}
+                inputClassName='cursor-not-allowed'
+                suffix={
                   <button
                     type='button'
                     onClick={() => {
                       navigator.clipboard.writeText(redirectUri);
                     }}
-                    className='inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500'
+                    className='btn-input-suffix'
                   >
                     <ClipboardDocumentIcon className='h-5 w-5' aria-hidden='true' />
                   </button>
-                </div>
-              </div>
+                }
+              />
             </div>
           )}
         </div>

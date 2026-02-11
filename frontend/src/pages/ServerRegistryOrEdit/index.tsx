@@ -52,6 +52,16 @@ const ServerRegistryOrEdit: React.FC = () => {
     navigate(-1);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showSuccessDialog) {
+        goBack();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSuccessDialog]);
+
   const getDetail = async () => {
     if (!id) return;
     setLoadingDetail(true);

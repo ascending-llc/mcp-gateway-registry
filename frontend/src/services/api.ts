@@ -22,6 +22,7 @@ const API = {
   // server
   getServers: `${SERVER_BASE_URL}`,
   getServerDetail: (id: string) => `${SERVER_BASE_URL}/${id}`,
+  testServerUrl: `${SERVER_BASE_URL}/connection`,
   createServer: `${SERVER_BASE_URL}`,
   updateServer: (id: string) => `${SERVER_BASE_URL}/${id}`,
   deleteServer: (id: string) => `${SERVER_BASE_URL}/${id}`,
