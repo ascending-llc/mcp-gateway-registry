@@ -7,11 +7,12 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Cookie, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import URLSafeTimedSerializer
 
 from auth_server.core.config import settings as auth_settings
 from registry.services.user_service import user_service
+from registry.utils.crypto_utils import generate_access_token, verify_refresh_token
 
 from ..core.config import settings
 from ..utils.crypto_utils import generate_token_pair
@@ -196,7 +197,7 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
 
         # Set refresh token cookie (7 days)
         response.set_cookie(
-            key="jarvis_registry_refresh",
+            key=settings.refresh_cookie_name,
             value=refresh_token,
             max_age=604800,  # 7 days in seconds
             httponly=True,
@@ -247,7 +248,7 @@ async def logout_handler(
         # Clear all authentication cookies
         response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
         response.delete_cookie(settings.session_cookie_name, path="/")
-        response.delete_cookie("jarvis_registry_refresh", path="/")
+        response.delete_cookie(settings.refresh_cookie_name, path="/")
 
         # If user was logged in via OAuth2, redirect to provider logout
         if provider:
@@ -258,7 +259,7 @@ async def logout_handler(
             logger.info(f"Redirecting to {provider} logout: {logout_url}")
             response = RedirectResponse(url=logout_url, status_code=status.HTTP_303_SEE_OTHER)
             response.delete_cookie(settings.session_cookie_name, path="/")
-            response.delete_cookie("jarvis_registry_refresh", path="/")
+            response.delete_cookie(settings.refresh_cookie_name, path="/")
 
         logger.info("User logged out, JWT cookies cleared")
         return response
@@ -268,7 +269,7 @@ async def logout_handler(
         # Fallback to simple logout
         response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
         response.delete_cookie(settings.session_cookie_name, path="/")
-        response.delete_cookie("jarvis_registry_refresh", path="/")
+        response.delete_cookie(settings.refresh_cookie_name, path="/")
         return response
 
 
@@ -278,3 +279,114 @@ async def logout_post(
 ):
     """Handle logout via POST request (for forms)"""
     return await logout_handler(request, session)
+
+
+@router.post("/redirect/refresh")
+async def refresh_token(
+    request: Request,
+    refresh: Annotated[str | None, Cookie(alias="jarvis_registry_refresh")] = None,
+):
+    """
+    Refresh access token using refresh token from cookie.
+
+    This endpoint is called by the frontend when it detects a 401 error.
+    It validates the refresh token and generates a new access token if valid.
+    """
+
+    try:
+        if not refresh:
+            logger.debug("No refresh token in cookie")
+            response = JSONResponse(status_code=401, content={"detail": "No refresh token available"})
+            # Clear cookies when no refresh token
+            response.delete_cookie(key=settings.session_cookie_name, path="/")
+            response.delete_cookie(key=settings.refresh_cookie_name, path="/")
+            return response
+
+        # Verify refresh token
+        refresh_claims = verify_refresh_token(refresh)
+        if not refresh_claims:
+            logger.debug("Refresh token invalid or expired")
+            response = JSONResponse(status_code=401, content={"detail": "Invalid or expired refresh token"})
+            # Clear cookies when refresh token is invalid or expired
+            response.delete_cookie(key=settings.session_cookie_name, path="/")
+            response.delete_cookie(key=settings.refresh_cookie_name, path="/")
+            return response
+
+        # Extract user info from refresh token claims
+        user_id = refresh_claims.get("user_id")
+        username = refresh_claims.get("sub")
+        auth_method = refresh_claims.get("auth_method")
+        provider = refresh_claims.get("provider")
+
+        # Extract groups and scopes from refresh token
+        groups = refresh_claims.get("groups", [])
+        scope_string = refresh_claims.get("scope", "")
+        scopes = scope_string.split() if scope_string else []
+
+        # If no scopes but has groups, map groups to scopes
+        if not scopes and groups:
+            from auth_server.utils.security_mask import map_groups_to_scopes
+
+            scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+            logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
+
+        role = refresh_claims.get("role", "user")
+        email = refresh_claims.get("email", f"{username}@local")
+
+        logger.info(f"Refresh token valid for user {username} ({auth_method}), generating new access token")
+        logger.debug(f"User groups from refresh token: {groups}, scopes: {scopes}")
+
+        # Validate that we have the required information
+        if not scopes:
+            logger.warning(f"Refresh token for user {username} has no scopes (groups: {groups}), cannot refresh")
+            response = JSONResponse(
+                status_code=401, content={"detail": "Refresh token missing required scopes information"}
+            )
+            # Clear cookies when refresh token is missing required information
+            response.delete_cookie(key=settings.session_cookie_name, path="/")
+            response.delete_cookie(key=settings.refresh_cookie_name, path="/")
+            return response
+
+        # Generate new access token using information from refresh token
+        try:
+            new_access_token = generate_access_token(
+                user_id=user_id,
+                username=username,
+                email=email,
+                groups=groups,
+                scopes=scopes,
+                role=role,
+                auth_method=auth_method,
+                provider=provider,
+            )
+
+            # Determine cookie security settings
+            cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
+            x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
+            is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
+            cookie_secure = cookie_secure_config and is_https
+
+            # Create response with new access token
+            response = JSONResponse(status_code=200, content={"detail": "Token refreshed successfully"})
+
+            # Update access token cookie (1 day)
+            response.set_cookie(
+                key=settings.session_cookie_name,  # jarvis_registry_session
+                value=new_access_token,
+                max_age=86400,  # 1 day in seconds
+                httponly=True,
+                samesite="lax",
+                secure=cookie_secure,
+                path="/",
+            )
+
+            logger.info(f"Successfully refreshed access token for user {username}")
+            return response
+
+        except Exception as e:
+            logger.error(f"Error generating new access token during refresh: {e}")
+            return JSONResponse(status_code=500, content={"detail": "Failed to generate new access token"})
+
+    except Exception as e:
+        logger.error(f"Error during token refresh: {e}")
+        return JSONResponse(status_code=500, content={"detail": "Token refresh failed"})
