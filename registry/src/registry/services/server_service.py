@@ -33,6 +33,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.services.user_service import user_service
 from registry.utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
+from registry_db.database.decorators import get_current_session
 from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
@@ -650,16 +651,17 @@ class ServerServiceV1:
         Raises:
             ValueError: If path+url combination already exists, server_name already exists, or tags contain duplicates (case-insensitive)
         """
+        session = get_current_session()
         # Check if path+url combination already exists
         # Only reject if BOTH path AND url are the same (to allow same path for different services)
-        existing_servers = await MCPServerDocument.find({"path": data.path}).to_list()
+        existing_servers = await MCPServerDocument.find({"path": data.path}, session=session).to_list()
         for existing in existing_servers:
             existing_url = existing.config.get("url") if existing.config else None
             if existing_url == data.url:
                 raise ValueError(f"Server with path '{data.path}' and URL '{data.url}' already exists")
 
         # Check if serverName already exists
-        existing_name = await MCPServerDocument.find_one({"serverName": data.serverName})
+        existing_name = await MCPServerDocument.find_one({"serverName": data.serverName}, session=session)
         if existing_name:
             raise ValueError(f"Server with name '{data.serverName}' already exists")
 
@@ -704,7 +706,7 @@ class ServerServiceV1:
             updatedAt=now,
         )
 
-        await server.insert()
+        await server.insert(session=session)
         logger.info(f"Created server: {server.serverName} (ID: {server.id}, Path: {data.path})")
 
         # Perform health check and tool retrieval after registration
@@ -735,7 +737,7 @@ class ServerServiceV1:
                 if not is_healthy:
                     # Health check failed - delete the server and reject registration
                     logger.error(f"Health check failed for {server.serverName}: {status_msg}")
-                    await server.delete()
+                    await server.delete(session=session)
                     raise ValueError(f"Server registration rejected: Health check failed - {status_msg}")
 
                 # Update server with health check results (root-level field)
@@ -815,7 +817,7 @@ class ServerServiceV1:
                 # Save updated server
                 server.config = config
                 server.updatedAt = _get_current_utc_time()
-                await server.save()
+                await server.save(session=session)
             except ValueError:
                 # Re-raise ValueError (our validation errors)
                 raise
@@ -830,7 +832,7 @@ class ServerServiceV1:
                     str(e),
                     exc_info=True,
                 )
-                await server.delete()
+                await server.delete(session=session)
         return server
 
     async def update_server(
@@ -853,6 +855,7 @@ class ServerServiceV1:
         Raises:
             ValueError: If server not found
         """
+        session = get_current_session()
         server = await self.get_server_by_id(server_id, user_id)
 
         if not server:
@@ -894,7 +897,7 @@ class ServerServiceV1:
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
 
-        await server.save()
+        await server.save(session=session)
 
         asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
@@ -922,14 +925,15 @@ class ServerServiceV1:
         except Exception:
             raise ValueError("Server not found")
 
-        server = await MCPServerDocument.get(obj_id)
+        session = get_current_session()
+        server = await MCPServerDocument.get(obj_id, session=session)
 
         if not server:
             raise ValueError("Server not found")
 
         # Remove from vector DB before deleting from MongoDB (background task)
         asyncio.create_task(self.mcp_server_repo.delete_by_server_id(server_id, server.serverName))
-        await server.delete()
+        await server.delete(session=session)
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
         return True
 

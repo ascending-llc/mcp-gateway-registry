@@ -10,6 +10,7 @@ from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
 from registry.services.group_service import group_service
 from registry.services.user_service import user_service
+from registry_db.database.decorators import get_current_session
 from registry_db.models._generated import (
     IAccessRole,
 )
@@ -62,9 +63,6 @@ class ACLService:
         if principal_type in ["user", "group"] and not principal_id:
             raise ValueError("principal_id must be set for user/group principal_type")
 
-        if not role_id and not perm_bits:
-            raise ValueError("Permission bits must be set via perm_bits or role_id")
-
         if role_id:
             access_role = await IAccessRole.find_one({"_id": role_id})
             if not access_role:
@@ -73,6 +71,7 @@ class ACLService:
 
         # Check if an ACL entry already exists for this principal/resource
         try:
+            session = get_current_session()
             acl_entry = await IAclEntry.find_one(
                 {
                     "principalType": principal_type,
@@ -87,7 +86,7 @@ class ACLService:
                 acl_entry.roleId = role_id
                 acl_entry.grantedAt = now
                 acl_entry.updatedAt = now
-                await acl_entry.save()
+                await acl_entry.save(session=session)
                 return acl_entry
             else:
                 new_entry = IAclEntry(
@@ -100,7 +99,7 @@ class ACLService:
                     createdAt=now,
                     updatedAt=now,
                 )
-                await new_entry.insert()
+                await new_entry.insert(session=session)
                 return new_entry
         except Exception as e:
             logger.error(f"Error upserting ACL entry: {e}")
@@ -112,27 +111,20 @@ class ACLService:
         """
         Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
 
-        Args:
-                resource_type (str): Type of resource (see ResourceType enum).
-                resource_id (PydanticObjectId): Resource document ID.
-                perm_bits_to_delete (Optional[int]): If specified, delete all entries with permBits less than or equal to this value.
-
-        Returns:
-                int: Number of ACL entries deleted.
-
         Raises:
-                None (returns 0 on error).
+            None (returns 0 on error).
         """
         try:
+            session = get_current_session()
             query = {"resourceType": resource_type, "resourceId": resource_id}
 
             if perm_bits_to_delete:
                 query["permBits"] = {"$lte": perm_bits_to_delete}
 
-            result = await IAclEntry.find(query).delete()
+            result = await IAclEntry.find(query).delete(session=session)
             return result.deleted_count
         except Exception as e:
-            logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
+            logger.error(f"Error deleting ACL entries for {resource_type}/{resource_id}: {e}")
             return 0
 
     async def delete_permission(
@@ -158,13 +150,14 @@ class ACLService:
                 None (returns 0 on error).
         """
         try:
+            session = get_current_session()
             query = {
                 "resourceType": resource_type,
                 "resourceId": resource_id,
                 "principalType": principal_type,
                 "principalId": principal_id,
             }
-            result = await IAclEntry.find(query).delete()
+            result = await IAclEntry.find(query).delete(session=session)
             return result.deleted_count
         except Exception as e:
             logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")
@@ -194,7 +187,7 @@ class ACLService:
             if not type_filters:
                 type_filters = None
 
-        results = []
+        results: list[PermissionPrincipalOut] = []
         if not type_filters or PrincipalType.USER.value in type_filters:
             for user in await user_service.search_users(query):
                 results.append(self._principal_result_obj(PrincipalType.USER.value, user))
@@ -232,31 +225,27 @@ class ACLService:
         Performs one targeted MongoDB query using $or to match both the
         user-specific ACL entry and any PUBLIC entry for the resource.
         User-specific entries take precedence (sorted by permBits descending).
-
-        Args:
-                user_id: The user's ID.
-                resource_type: The resource type (e.g., ResourceType.MCPSERVER.value).
-                resource_id: The resource document ID.
-
-        Returns:
-                ResourcePermissions with the resolved access flags.
-                Returns all-False permissions on no match or error.
         """
         try:
-            acl_entry = await IAclEntry.find_one(
-                {
-                    "resourceType": resource_type,
-                    "resourceId": resource_id,
-                    "$or": [
-                        {"principalType": PrincipalType.USER.value, "principalId": user_id},
-                        {"principalType": PrincipalType.PUBLIC.value, "principalId": None},
-                    ],
-                },
-                sort=[("permBits", -1)],
+            acl_entries = (
+                await IAclEntry.find(
+                    {
+                        "resourceType": resource_type,
+                        "resourceId": resource_id,
+                        "$or": [
+                            {"principalType": PrincipalType.USER.value, "principalId": user_id},
+                            {"principalType": PrincipalType.PUBLIC.value, "principalId": None},
+                        ],
+                    }
+                )
+                .sort([("permBits", -1)])
+                .to_list()
             )
-            if not acl_entry:
+
+            if not acl_entries:
                 return ResourcePermissions()
 
+            acl_entry = acl_entries[0]
             return ResourcePermissions(
                 VIEW=bool(int(acl_entry.permBits) & PermissionBits.VIEW),
                 EDIT=bool(int(acl_entry.permBits) & PermissionBits.EDIT),

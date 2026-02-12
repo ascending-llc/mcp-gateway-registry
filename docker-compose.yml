@@ -110,9 +110,15 @@ services:
     volumes:
       - mongodb-data:/data/db
       - mongodb-config:/data/configdb
-    command: mongod --noauth
+    command: mongod --noauth --replSet rs0
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      test: [
+        "CMD",
+        "mongosh",
+        "--quiet",
+        "--eval",
+        "try { if (rs.status().myState === 1) quit(0); else quit(1); } catch(e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'registry-mongodb:27017'}]}); quit(1); }"
+      ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -120,6 +126,7 @@ services:
     profiles:
       - full
       - dev
+
 
   registry-redis:
     container_name: registry-redis

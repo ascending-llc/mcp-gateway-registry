@@ -49,6 +49,7 @@ from registry.services.oauth.connection_status_service import (
 )
 from registry.services.oauth.mcp_service import get_mcp_service
 from registry.services.server_service import server_service_v1
+from registry_db.database.decorators import use_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +396,7 @@ async def get_server(
     description="Register a new MCP server",
 )
 @track_registry_operation("create", resource_type="server")
+@use_transaction
 async def create_server(
     data: ServerCreateRequest,
     user_context: dict = Depends(get_user_context),
@@ -412,18 +414,13 @@ async def create_server(
             logger.error("Server creation failed without exception")
             raise ValueError("Failed to create server")
 
-        acl_entry = await acl_service.grant_permission(
+        await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
             principal_id=PydanticObjectId(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
             perm_bits=RoleBits.OWNER,
         )
-
-        if not acl_entry:
-            await server.delete()
-            logger.error(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
-            raise ValueError(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
 
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
         return convert_to_create_response(server)
@@ -459,6 +456,7 @@ async def create_server(
     description="Update server configuration",
 )
 @track_registry_operation("update", resource_type="server")
+@use_transaction
 async def update_server(
     server_id: str,
     data: ServerUpdateRequest,
@@ -514,6 +512,7 @@ async def update_server(
     description="Delete a server",
 )
 @track_registry_operation("delete", resource_type="server")
+@use_transaction
 async def delete_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),

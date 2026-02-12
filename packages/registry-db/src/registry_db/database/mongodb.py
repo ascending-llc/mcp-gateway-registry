@@ -5,11 +5,10 @@ This module provides MongoDB connection management with connection pooling
 and Beanie ODM initialization for the MCP Gateway Registry.
 """
 
-import logging
 from urllib.parse import quote_plus
 
 from beanie import init_beanie
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from ..core.config import settings
 from ..models._generated import (
@@ -26,13 +25,11 @@ from ..models.extended_mcp_server import (
     ExtendedMCPServer as MCPServerDocument,
 )
 
-logger = logging.getLogger(__name__)
-
 
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
 
-    client: AsyncIOMotorClient | None = None
+    client: AsyncMongoClient | None = None
 
     @classmethod
     async def connect_db(cls, db_name: str | None = None):
@@ -84,11 +81,10 @@ class MongoDB:
 
         cls.database_name = db_name
         try:
-            # Create Motor client with connection pool settings
-            params_info = f" with params: {query_params}" if query_params else ""
-            logger.debug(f"Connecting to MongoDB database: {db_name}{params_info}")
-            cls.client = AsyncIOMotorClient(
+            # Create PyMongo async client with connection pool settings
+            cls.client = AsyncMongoClient(
                 mongodb_url,
+                directConnection=True,
                 maxPoolSize=50,  # Maximum number of connections in the pool
                 minPoolSize=10,  # Minimum number of connections in the pool
                 maxIdleTimeMS=30000,  # Close connections after 30 seconds of inactivity
@@ -146,19 +142,18 @@ class MongoDB:
             return
 
         try:
-            cls.client.close()
+            await cls.client.close()
             cls.client = None
         except Exception:
             raise
 
     @classmethod
-    def get_client(cls) -> AsyncIOMotorClient:
+    def get_client(cls) -> AsyncMongoClient:
         """
         Get the MongoDB client instance.
 
         Returns:
-            AsyncIOMotorClient: The Motor client instance.
-
+            AsyncMongoClient: The Mongo client instance.
         Raises:
             RuntimeError: If the database connection is not initialized.
         """
@@ -172,8 +167,7 @@ class MongoDB:
         Get the MongoDB database instance.
 
         Returns:
-            Database: The Motor database instance.
-
+            Database: The PyMongo async database instance.
         Raises:
             RuntimeError: If the database connection is not initialized.
         """

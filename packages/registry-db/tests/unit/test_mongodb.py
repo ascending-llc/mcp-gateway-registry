@@ -28,7 +28,7 @@ class TestMongoDBConnection:
 
         # Mock the entire connect flow
         with (
-            patch("registry_db.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("registry_db.database.mongodb.AsyncMongoClient") as MockClient,
             patch("registry_db.database.mongodb.init_beanie", new_callable=AsyncMock),
         ):
             mock_instance = MagicMock()
@@ -48,7 +48,7 @@ class TestMongoDBConnection:
         """Test connect_db reads configuration from settings."""
         with (
             patch("registry_db.database.mongodb.settings") as mock_settings,
-            patch("registry_db.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("registry_db.database.mongodb.AsyncMongoClient") as MockClient,
             patch("registry_db.database.mongodb.init_beanie", new_callable=AsyncMock),
         ):
             # Configure mock settings
@@ -74,7 +74,7 @@ class TestMongoDBConnection:
         """Test connect_db extracts database name from MONGO_URI."""
         with (
             patch("registry_db.database.mongodb.settings") as mock_settings,
-            patch("registry_db.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("registry_db.database.mongodb.AsyncMongoClient") as MockClient,
             patch("registry_db.database.mongodb.init_beanie", new_callable=AsyncMock),
         ):
             # Configure mock settings
@@ -87,7 +87,6 @@ class TestMongoDBConnection:
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
             mock_instance.__getitem__ = MagicMock(return_value=MagicMock())
             MockClient.return_value = mock_instance
-
             await MongoDB.connect_db()
 
             assert MongoDB.database_name == "extracted_db"
@@ -96,7 +95,7 @@ class TestMongoDBConnection:
     async def test_connect_db_initializes_beanie(self):
         """Test connect_db initializes Beanie with all document models."""
         with (
-            patch("registry_db.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("registry_db.database.mongodb.AsyncMongoClient") as MockClient,
             patch("registry_db.database.mongodb.init_beanie", new_callable=AsyncMock) as mock_init_beanie,
         ):
             mock_instance = MagicMock()
@@ -132,7 +131,7 @@ class TestMongoDBConnection:
     async def test_connect_db_only_once(self):
         """Test connect_db doesn't reconnect if client already exists."""
         with (
-            patch("registry_db.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("registry_db.database.mongodb.AsyncMongoClient") as MockClient,
             patch("registry_db.database.mongodb.init_beanie", new_callable=AsyncMock),
         ):
             mock_instance = MagicMock()
@@ -155,7 +154,7 @@ class TestMongoDBConnection:
         """Test close_db closes the client connection."""
         # Create a mock client
         mock_client = MagicMock()
-        mock_client.close = MagicMock()
+        mock_client.close = AsyncMock()
 
         MongoDB.client = mock_client
 
