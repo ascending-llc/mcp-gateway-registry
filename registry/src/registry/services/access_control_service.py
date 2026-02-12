@@ -6,15 +6,11 @@ from beanie import PydanticObjectId
 from fastapi import HTTPException
 from fastapi import status as http_status
 
-from packages.database.decorators import get_current_session
-from packages.models._generated import (
-    IAccessRole,
-)
-from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
 from registry.services.group_service import group_service
 from registry.services.user_service import user_service
+from registry_db.database.decorators import get_current_session
 from registry_db.models._generated import (
     IAccessRole,
 )

@@ -62,7 +62,7 @@ async def test_create_server_route_creates_acl_entry(
         patch(
             "registry.api.v1.server.server_routes.acl_service.grant_permission", new=AsyncMock(return_value=MagicMock())
         ) as mock_grant_permission,
-        patch("packages.database.decorators.MongoDB.get_client") as mock_get_client,
+        patch("registry_db.database.decorators.MongoDB.get_client") as mock_get_client,
         patch(
             "registry.api.v1.server.server_routes.convert_to_create_response",
             return_value={"id": str(mock_created_server.id)},

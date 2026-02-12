@@ -11,7 +11,6 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
 
-from packages.database.decorators import use_transaction
 from registry.auth.dependencies import CurrentUser
 from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import (
@@ -21,6 +20,7 @@ from registry.schemas.acl_schema import (
 )
 from registry.services.access_control_service import acl_service
 from registry.utils.utils import validate_resource_type
+from registry_db.database.decorators import use_transaction
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
