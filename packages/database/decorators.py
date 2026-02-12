@@ -4,8 +4,9 @@ Decorators for managing database transactions.
 
 import functools
 import logging
+from collections.abc import Callable
 from contextvars import ContextVar
-from typing import Any, Callable, Optional
+from typing import Any
 
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.client_session import AsyncClientSession
@@ -17,18 +18,14 @@ logger = logging.getLogger(__name__)
 
 MONGODB_TRANSACTION_NOT_SUPPORTED_ERROR_CODE = 263
 
-_tx_session: ContextVar[Optional[AsyncClientSession]] = ContextVar(
-    "_tx_session", default=None
-)
+_tx_session: ContextVar[AsyncClientSession | None] = ContextVar("_tx_session", default=None)
 
 
 def use_transaction(func: Callable) -> Callable:
     """Decorator to wrap a function in a MongoDB transaction.
-    
     This decorator creates a new transaction scope and manages the session lifecycle.
     The session is stored in a ContextVar and can be accessed by nested functions
     using get_current_session().
-    
     Usage:
         @router.post("/server/create")
         @use_transaction
@@ -37,12 +34,12 @@ def use_transaction(func: Callable) -> Callable:
             server = await server_service.create_server(server_data)
             author_acl = await acl_service.grant_permission(user_data)
             return server, author_acl
-    
     Raises:
         RuntimeError: If a nested transaction is detected
         OperationFailure: If MongoDB transaction is not supported
         ConnectionFailure: If MongoDB connection fails
     """
+
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         active_session = _tx_session.get()
@@ -52,7 +49,7 @@ def use_transaction(func: Callable) -> Callable:
                 f"Remove @use_transaction decorator from this function or its callers. "
                 f"Only apply @use_transaction to route handlers, not service methods."
             )
-        
+
         client: AsyncMongoClient = MongoDB.get_client()
         logger.info("Starting transaction for %s", func.__name__)
         try:
@@ -63,7 +60,7 @@ def use_transaction(func: Callable) -> Callable:
                         result = await func(*args, **kwargs)
                         logger.info("Transaction committed successfully for %s", func.__name__)
                         return result
-                    finally: 
+                    finally:
                         _tx_session.reset(context_token)
         except OperationFailure as exc:
             if exc.code == MONGODB_TRANSACTION_NOT_SUPPORTED_ERROR_CODE:
@@ -82,7 +79,7 @@ def use_transaction(func: Callable) -> Callable:
                     exc,
                 )
             raise
-        except ConnectionFailure as exc: 
+        except ConnectionFailure as exc:
             logger.error(
                 "Transaction failed for %s due to connection error: %s",
                 func.__name__,
@@ -96,34 +93,27 @@ def use_transaction(func: Callable) -> Callable:
                 exc_info=True,
             )
             raise
-            
+
     return wrapper
 
 
 def get_current_session() -> AsyncClientSession:
     """Get the current MongoDB session from the active transaction context.
-    
     This function retrieves the session created by the @use_transaction decorator.
     It should be called from service methods that need to participate in the
     transaction by passing the session to database operations.
-    
     Usage:
         async def create_user(user_data: dict):
             session = get_current_session()
             user = User(**user_data)
             await user.insert(session=session)
             return user
-    
     Returns:
         AsyncClientSession: The active MongoDB session
-    
     Raises:
         RuntimeError: If called outside a @use_transaction decorated function
     """
     session = _tx_session.get()
     if session is None:
         raise RuntimeError("No active transaction. Use @use_transaction decorator.")
-    return session   
-
-
-
+    return session

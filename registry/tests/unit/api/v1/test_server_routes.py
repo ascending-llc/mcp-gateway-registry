@@ -1,12 +1,12 @@
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 from beanie import PydanticObjectId
 
 from registry.api.v1.server.server_routes import create_server
-from registry.schemas.server_api_schemas import ServerCreateRequest
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
+from registry.schemas.server_api_schemas import ServerCreateRequest
+
 
 @pytest.fixture
 def sample_user_context():
@@ -53,28 +53,27 @@ async def test_create_server_route_creates_acl_entry(
 ):
     # Mock the transaction session
     mock_session = AsyncMock()
-    
-    with patch(
-        "registry.api.v1.server.server_routes.server_service_v1.create_server",
-        new=AsyncMock(return_value=mock_created_server)
-    ) as mock_create_server, \
-    patch(
-        "registry.api.v1.server.server_routes.acl_service.grant_permission",
-        new=AsyncMock(return_value=MagicMock())
-    ) as mock_grant_permission, \
-    patch(
-        "packages.database.decorators.MongoDB.get_client"
-    ) as mock_get_client, \
-    patch(
-        "registry.api.v1.server.server_routes.convert_to_create_response",
-        return_value={"id": str(mock_created_server.id)}
+
+    with (
+        patch(
+            "registry.api.v1.server.server_routes.server_service_v1.create_server",
+            new=AsyncMock(return_value=mock_created_server),
+        ) as mock_create_server,
+        patch(
+            "registry.api.v1.server.server_routes.acl_service.grant_permission", new=AsyncMock(return_value=MagicMock())
+        ) as mock_grant_permission,
+        patch("packages.database.decorators.MongoDB.get_client") as mock_get_client,
+        patch(
+            "registry.api.v1.server.server_routes.convert_to_create_response",
+            return_value={"id": str(mock_created_server.id)},
+        ),
     ):
         # Mock the MongoDB client and session for @use_transaction
         mock_client = MagicMock()
         mock_client.start_session.return_value.__aenter__.return_value = mock_session
         mock_session.start_transaction.return_value.__aenter__.return_value = None
         mock_get_client.return_value = mock_client
-        
+
         await create_server(
             sample_server_request,
             sample_user_context,
@@ -85,10 +84,10 @@ async def test_create_server_route_creates_acl_entry(
             data=sample_server_request,
             user_id=sample_user_context["user_id"],
         )
-        
+
         # Verify ACL permission was granted
         mock_grant_permission.assert_awaited_once()
-        
+
         # Verify ACL call has correct parameters
         call_args = mock_grant_permission.call_args
         assert call_args.kwargs["principal_type"] == PrincipalType.USER

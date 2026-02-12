@@ -5,12 +5,10 @@ This module provides MongoDB connection management with connection pooling
 and Beanie ODM initialization for the MCP Gateway Registry.
 """
 
-from typing import Optional
-from pymongo import AsyncMongoClient
-from beanie import init_beanie
 from urllib.parse import quote_plus
 
 from beanie import init_beanie
+from pymongo import AsyncMongoClient
 
 from packages.core.config import settings
 from packages.models._generated import (
@@ -27,9 +25,11 @@ from packages.models.extended_mcp_server import (
     ExtendedMCPServer as MCPServerDocument,
 )
 
+
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
-    client: Optional[AsyncMongoClient] = None
+
+    client: AsyncMongoClient | None = None
 
     @classmethod
     async def connect_db(cls, db_name: str | None = None):
@@ -154,7 +154,6 @@ class MongoDB:
 
         Returns:
             AsyncMongoClient: The Mongo client instance.
-            
         Raises:
             RuntimeError: If the database connection is not initialized.
         """
@@ -169,7 +168,6 @@ class MongoDB:
 
         Returns:
             Database: The PyMongo async database instance.
-            
         Raises:
             RuntimeError: If the database connection is not initialized.
         """

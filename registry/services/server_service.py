@@ -19,6 +19,7 @@ from typing import Any
 
 from beanie import PydanticObjectId
 
+from packages.database.decorators import get_current_session
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.core.mcp_client import get_tools_from_server_with_server_info
@@ -34,14 +35,6 @@ from registry.schemas.server_api_schemas import (
     ServerUpdateRequest,
 )
 from registry.services.user_service import user_service
-from registry.schemas.errors import (
-    OAuthReAuthRequiredError,
-    OAuthTokenError,
-    MissingUserIdError,
-    AuthenticationError,
-)
-from registry.core.telemetry_decorators import track_tool_discovery
-from packages.database.decorators import get_current_session
 from registry.utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
 
 logger = logging.getLogger(__name__)
@@ -641,9 +634,9 @@ class ServerServiceV1:
         return await MCPServerDocument.find_one({"path": path})
 
     async def create_server(
-            self,
-            data: ServerCreateRequest,
-            user_id: str,
+        self,
+        data: ServerCreateRequest,
+        user_id: str,
     ) -> MCPServerDocument:
         """
         Create a new server.
@@ -843,10 +836,10 @@ class ServerServiceV1:
         return server
 
     async def update_server(
-            self,
-            server_id: str,
-            data: ServerUpdateRequest,
-             user_id: str | None = None,
+        self,
+        server_id: str,
+        data: ServerUpdateRequest,
+        user_id: str | None = None,
     ) -> MCPServerDocument:
         """
         Update a server.
@@ -939,9 +932,7 @@ class ServerServiceV1:
             raise ValueError("Server not found")
 
         # Remove from vector DB before deleting from MongoDB (background task)
-        asyncio.create_task(
-            self.mcp_server_repo.delete_by_server_id(server_id, server.serverName)
-        )
+        asyncio.create_task(self.mcp_server_repo.delete_by_server_id(server_id, server.serverName))
         await server.delete(session=session)
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
         return True

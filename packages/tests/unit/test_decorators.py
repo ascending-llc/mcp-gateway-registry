@@ -1,11 +1,12 @@
 """Tests for database transaction decorators."""
 
-import pytest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
-from pymongo.errors import OperationFailure, ConnectionFailure
 
-from packages.database.decorators import use_transaction, get_current_session, _tx_session
+import pytest
+from pymongo.errors import ConnectionFailure, OperationFailure
+
+from packages.database.decorators import _tx_session, get_current_session, use_transaction
 
 
 @pytest.fixture(autouse=True)
@@ -43,12 +44,13 @@ class TestUseTransactionDecorator:
         """Test that decorator starts transaction and commits on success."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         # Mock the context manager for start_session
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 # Verify session is available inside function
@@ -65,11 +67,12 @@ class TestUseTransactionDecorator:
         """Test that decorator raises RuntimeError when nested transactions are detected."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def outer_func():
                 return await inner_func()
@@ -80,7 +83,7 @@ class TestUseTransactionDecorator:
 
             with pytest.raises(RuntimeError) as exc_info:
                 await outer_func()
-            
+
             assert "Nested transaction detected" in str(exc_info.value)
             assert "inner_func" in str(exc_info.value)
 
@@ -89,18 +92,19 @@ class TestUseTransactionDecorator:
         """Test that decorator properly handles OperationFailure with code 263 (no replica set)."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 raise OperationFailure("Transaction numbers are only allowed on a replica set member", code=263)
 
             with pytest.raises(OperationFailure) as exc_info:
                 await test_func()
-            
+
             assert exc_info.value.code == 263
 
     @pytest.mark.asyncio
@@ -108,11 +112,12 @@ class TestUseTransactionDecorator:
         """Test that decorator handles OperationFailure containing 'transaction' in message."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 raise OperationFailure("transaction failed", code=999)
@@ -125,18 +130,19 @@ class TestUseTransactionDecorator:
         """Test that decorator properly handles ConnectionFailure."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 raise ConnectionFailure("connection lost")
 
             with pytest.raises(ConnectionFailure) as exc_info:
                 await test_func()
-            
+
             assert "connection lost" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -144,18 +150,19 @@ class TestUseTransactionDecorator:
         """Test that decorator properly handles generic exceptions."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 raise ValueError("generic error")
 
             with pytest.raises(ValueError) as exc_info:
                 await test_func()
-            
+
             assert "generic error" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -163,17 +170,18 @@ class TestUseTransactionDecorator:
         """Test that decorator resets ContextVar after successful execution."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 return "success"
 
             await test_func()
-            
+
             # After execution, ContextVar should be None
             assert _tx_session.get() is None
 
@@ -182,24 +190,26 @@ class TestUseTransactionDecorator:
         """Test that decorator resets ContextVar after exception."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 raise ValueError("test error")
 
             with pytest.raises(ValueError):
                 await test_func()
-            
+
             # After exception, ContextVar should be None
             assert _tx_session.get() is None
 
     @pytest.mark.asyncio
     async def test_decorator_preserves_function_metadata(self):
         """Test that decorator preserves original function's metadata."""
+
         @use_transaction
         async def test_func():
             """Test function docstring."""
@@ -216,7 +226,7 @@ class TestGetCurrentSession:
         """Test that get_current_session raises RuntimeError when no transaction is active."""
         with pytest.raises(RuntimeError) as exc_info:
             get_current_session()
-        
+
         assert "No active transaction" in str(exc_info.value)
         assert "@use_transaction" in str(exc_info.value)
 
@@ -225,11 +235,12 @@ class TestGetCurrentSession:
         """Test that get_current_session returns the session when inside a transaction."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        
+
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
+
             @use_transaction
             async def test_func():
                 session = get_current_session()
@@ -246,15 +257,15 @@ class TestContextVarIsolation:
     async def test_contextvar_isolated_between_concurrent_calls(self):
         """Test that ContextVar is properly isolated between concurrent function calls."""
         import asyncio
-        
+
         mock_client = MagicMock()
-        
+
         # Create two different mock sessions
         mock_session_1 = _make_mock_session()
         mock_session_2 = _make_mock_session()
-        
+
         call_count = [0]
-        
+
         def mock_start_session_factory():
             call_count[0] += 1
             session = mock_session_1 if call_count[0] == 1 else mock_session_2
@@ -262,12 +273,12 @@ class TestContextVarIsolation:
             mock_context.__aenter__ = AsyncMock(return_value=session)
             mock_context.__aexit__ = AsyncMock(return_value=None)
             return mock_context
-        
+
         mock_client.start_session = mock_start_session_factory
 
-        with patch('packages.database.decorators.MongoDB.get_client', return_value=mock_client):
+        with patch("packages.database.decorators.MongoDB.get_client", return_value=mock_client):
             sessions_seen = []
-            
+
             @use_transaction
             async def test_func(delay: float):
                 await asyncio.sleep(delay)
@@ -276,11 +287,11 @@ class TestContextVarIsolation:
                 return session
 
             # Run two transactions concurrently
-            results = await asyncio.gather(
+            await asyncio.gather(
                 test_func(0.01),
                 test_func(0.02),
             )
-            
+
             # Each call should get a different session
             assert len(sessions_seen) == 2
             # Since we're using ContextVar, each async context should have its own session

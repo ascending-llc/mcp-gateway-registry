@@ -13,14 +13,13 @@ from fastapi import status as http_status
 
 from packages.database.decorators import use_transaction
 from registry.auth.dependencies import CurrentUser
-from registry.services.access_control_service import acl_service
-from registry.core.acl_constants import PrincipalType, PermissionBits
+from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import (
-    UpdateResourcePermissionsResponse,
+    PermissionPrincipalOut,
     UpdateResourcePermissionsRequest,
     UpdateResourcePermissionsResponse,
-    PermissionPrincipalOut,
 )
+from registry.services.access_control_service import acl_service
 from registry.utils.utils import validate_resource_type
 
 logger = logging.getLogger(__name__)

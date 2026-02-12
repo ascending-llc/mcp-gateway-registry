@@ -7,21 +7,15 @@ This is a complete rewrite independent of the legacy server_routes.py.
 
 import logging
 import math
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, status as http_status, Depends
-from pydantic import ValidationError
+from typing import Any
+
 from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import status as http_status
+from pydantic import ValidationError
 
 from packages.database.decorators import use_transaction
 from registry.auth.dependencies import CurrentUser
-from registry.core.telemetry_decorators import track_registry_operation
-from registry.services.server_service import server_service_v1
-from registry.services.oauth.mcp_service import get_mcp_service
-from registry.services.oauth.connection_status_service import (
-    get_servers_connection_status,
-    get_single_server_connection_status
-)
-from registry.services.access_control_service import acl_service
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
 from registry.core.mcp_client import perform_health_check
 from registry.core.telemetry_decorators import track_registry_operation
