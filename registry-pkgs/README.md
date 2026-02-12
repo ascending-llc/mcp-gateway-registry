@@ -111,7 +111,7 @@ If running from project root, use the following.
 uv run --package registry-pkgs pytest registry-pkgs/tests/
 ```
 
-If running from the workspace member directory `package/registry-pkgs`, use the following.
+If running from the workspace member directory `registry-pkgs`, use the following.
 
 ```bash
 uv run poe test

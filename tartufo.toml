@@ -17,6 +17,6 @@ exclude-signatures = [
     {signature = '48262775df5e0ffc9e0050332701dfaf7d7637f248314030dadb86af47177272', reason = 'OpenAI model name is not credential'},
     {signature = 'f21bc298b18aa023df145ffa17620b99de81d12f2d2de22d39792eba522bc2ce', reason = 'OpenAI model name is not credential'},
     {signature = 'beadb94550926b86a537f2aca22e84164e8ac0ab9762fa369026476d305bde35', reason = 'OpenAI model name is not credential'},
-    {signature = 'cabf363f5c4b5dcbd4c84ca305c200eb1de8cb97222e16606d7f2d83c7f90fd5', reason = 'exampe user ID is not credential'},
+    {signature = 'cabf363f5c4b5dcbd4c84ca305c200eb1de8cb97222e16606d7f2d83c7f90fd5', reason = 'example user ID is not credential'},
     {signature = 'f0bf889fbb263b82e226ba1fec8e33514cb435244fd8a271ade0899160199dd3', reason = 'MongoDB URI template is not credential'},
 ]

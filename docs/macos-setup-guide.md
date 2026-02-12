@@ -151,8 +151,8 @@ uv run --package registry-pkgs import-schemas \
 --output-dir ./registry-pkgs/src/registry_pkgs/models \
 --token $(gh auth token)
 
-# Verify schemas were imported (should be in packages/models/_generated/)
-ls -la ./registry-pkgs/src/registry_pkgs/models
+# Verify schemas were imported
+ls -la ./registry-pkgs/src/registry_pkgs/models/_generated
 ```
 
 **Important Notes**:
