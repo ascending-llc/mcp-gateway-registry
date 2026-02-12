@@ -1,0 +1,17 @@
+[tool.tartufo]
+repo-path = '.'
+regex = true
+entropy = true
+
+exclude-path-patterns = [
+    {path-pattern = 'uv\.lock$', reason = 'uv lock file'},
+    {path-pattern = 'tartufo\.toml$', reason = 'Tartufo config file'},
+]
+
+exclude-entropy-patterns = [
+    # {path-pattern = '', pattern = '', reason = ''},
+]
+
+exclude-signatures = [
+    # {signature = '', reason = ''},
+]
