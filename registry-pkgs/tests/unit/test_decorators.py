@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pymongo.errors import ConnectionFailure, OperationFailure
 
-from registry_db.database.decorators import _tx_session, get_current_session, use_transaction
+from registry_pkgs.database.decorators import _tx_session, get_current_session, use_transaction
 
 
 @pytest.fixture(autouse=True)

@@ -8,7 +8,7 @@ members = [
     "mcp-registry-workspace",
     "mcpgw",
     "registry",
-    "registry-db",
+    "registry-pkgs",
 ]
 
 [[package]]
@@ -153,7 +153,7 @@ dependencies = [
     { name = "python-jose" },
     { name = "python-multipart" },
     { name = "pyyaml" },
-    { name = "registry-db" },
+    { name = "registry-pkgs" },
     { name = "requests" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -173,7 +173,7 @@ requires-dist = [
     { name = "python-jose", specifier = ">=3.3.0" },
     { name = "python-multipart", specifier = ">=0.0.6" },
     { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "registry-db", editable = "packages/registry-db" },
+    { name = "registry-pkgs", editable = "registry-pkgs" },
     { name = "requests", specifier = ">=2.28.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
@@ -1717,7 +1717,7 @@ dependencies = [
     { name = "mcpgw" },
     { name = "python-dotenv" },
     { name = "registry" },
-    { name = "registry-db" },
+    { name = "registry-pkgs" },
 ]
 
 [package.dev-dependencies]
@@ -1745,7 +1745,7 @@ requires-dist = [
     { name = "mcpgw", editable = "servers/mcpgw" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "registry", editable = "registry" },
-    { name = "registry-db", editable = "packages/registry-db" },
+    { name = "registry-pkgs", editable = "registry-pkgs" },
 ]
 
 [package.metadata.requires-dev]
@@ -2803,7 +2803,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "pytz" },
     { name = "pyyaml" },
-    { name = "registry-db" },
+    { name = "registry-pkgs" },
     { name = "requests" },
     { name = "rich" },
     { name = "strands-agents" },
@@ -2843,7 +2843,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "registry-db", editable = "packages/registry-db" },
+    { name = "registry-pkgs", editable = "registry-pkgs" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "strands-agents", specifier = ">=0.1.6" },
@@ -2854,9 +2854,9 @@ requires-dist = [
 ]
 
 [[package]]
-name = "registry-db"
+name = "registry-pkgs"
 version = "0.2.0"
-source = { editable = "packages/registry-db" }
+source = { editable = "registry-pkgs" }
 dependencies = [
     { name = "async-lru" },
     { name = "beanie" },

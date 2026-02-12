@@ -33,9 +33,9 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.services.user_service import user_service
 from registry.utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
-from registry_db.database.decorators import get_current_session
-from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.database.decorators import get_current_session
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 logger = logging.getLogger(__name__)
 
@@ -1463,7 +1463,7 @@ class ServerServiceV1:
         Returns:
             Dictionary containing all statistics
         """
-        from registry_db.models._generated.token import Token
+        from registry_pkgs.models._generated.token import Token
 
         stats = {}
 

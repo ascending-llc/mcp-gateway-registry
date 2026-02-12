@@ -1,6 +1,6 @@
 import logging
 
-from registry_db.models._generated import IGroup
+from registry_pkgs.models._generated import IGroup
 
 logger = logging.getLogger(__name__)
 

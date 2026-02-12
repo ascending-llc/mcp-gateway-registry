@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from registry_db.telemetry.metrics_client import OTelMetricsClient, create_metrics_client
+from registry_pkgs.telemetry.metrics_client import OTelMetricsClient, create_metrics_client
 
 
 def test_metrics_client_instantiation():
@@ -100,7 +100,10 @@ def test_record_histogram():
 
 def test_record_unregistered_metric_logs_warning():
     """Test that recording an unregistered metric logs a warning."""
-    with patch("opentelemetry.metrics.get_meter"), patch("registry_db.telemetry.metrics_client.logger") as mock_logger:
+    with (
+        patch("opentelemetry.metrics.get_meter"),
+        patch("registry_pkgs.telemetry.metrics_client.logger") as mock_logger,
+    ):
         client = OTelMetricsClient("test-service")
         client.record_counter("nonexistent_counter", 1)
 

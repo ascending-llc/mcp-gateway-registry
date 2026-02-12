@@ -11,9 +11,9 @@ from registry.core.telemetry_decorators import track_registry_operation
 from registry.services.search.service import faiss_service
 from registry.services.server_service import server_service_v1
 from registry.utils.otel_metrics import record_tool_discovery
-from registry_db.models.enums import ServerEntityType
-from registry_db.vector.enum.enums import SearchType
-from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.models.enums import ServerEntityType
+from registry_pkgs.vector.enum.enums import SearchType
+from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 from ...services.agent_service import agent_service
 

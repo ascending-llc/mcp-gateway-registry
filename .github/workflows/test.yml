@@ -44,9 +44,9 @@ jobs:
       id: import-schema
       run: |
         echo "Using SCHEMA_VERSION: ${{ steps.get-schema.outputs.schema-version }}"
-        uv run --package registry-db import-schemas \
+        uv run --package registry-pkgs import-schemas \
         --tag "${{ steps.get-schema.outputs.schema-version }}" \
-        --output-dir ./packages/registry-db/src/registry_db/models \
+        --output-dir ./registry-pkgs/src/registry_pkgs/models \
         --token "${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}"
 
     - name: Run all tests and generate coverage report (registry + auth-server + packages)
@@ -56,7 +56,7 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
-        file: ./registry/coverage.xml,./auth-server/coverage.xml,./packages/registry-db/coverage.xml
+        file: ./registry/coverage.xml,./auth-server/coverage.xml,./registry-pkgs/coverage.xml
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false

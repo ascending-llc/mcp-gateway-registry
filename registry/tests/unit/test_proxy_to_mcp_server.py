@@ -11,7 +11,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from registry.api.proxy_routes import MCPGW_PATH, proxy_to_mcp_server
 from registry.schemas.errors import AuthenticationError, MissingUserIdError, OAuthReAuthRequiredError, OAuthTokenError
-from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 
 @pytest.mark.unit

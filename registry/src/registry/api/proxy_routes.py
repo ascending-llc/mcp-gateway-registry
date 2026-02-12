@@ -28,7 +28,7 @@ from registry.schemas.proxy_tool_schema import (
 )
 from registry.services.server_service import _build_complete_headers_for_server, server_service_v1
 from registry.utils.otel_metrics import record_server_request
-from registry_db.models.extended_mcp_server import MCPServerDocument
+from registry_pkgs.models.extended_mcp_server import MCPServerDocument
 
 logger = logging.getLogger(__name__)
 

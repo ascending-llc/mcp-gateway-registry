@@ -15,7 +15,7 @@ from registry.models.oauth_models import (
     OAuthTokens,
 )
 from registry.schemas.enums import OAuthFlowStatus
-from registry_db.database.redis_client import get_redis_client
+from registry_pkgs.database.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 

@@ -7,8 +7,8 @@ from beanie import PydanticObjectId
 from registry.models.emus import TokenType
 from registry.models.oauth_models import OAuthTokens
 from registry.services.user_service import user_service
-from registry_db.models import IUser
-from registry_db.models._generated.token import Token
+from registry_pkgs.models import IUser
+from registry_pkgs.models._generated.token import Token
 
 logger = logging.getLogger(__name__)
 

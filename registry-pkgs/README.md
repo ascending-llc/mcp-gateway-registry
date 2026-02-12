@@ -1,4 +1,4 @@
-# MCP Gateway Registry - the registry-db package
+# MCP Gateway Registry - the registry-pkgs package
 
 Unified vector database interface with three-layer architecture and model generation tools.
 
@@ -36,7 +36,7 @@ gh auth login
 
 ### Setup
 
-Run `uv sync` from project root, NOT this workspace member folder (`packages/registry-db`).
+Run `uv sync` from project root, NOT this workspace member folder (`registry-pkgs`).
 
 ### Generate Models
 
@@ -44,9 +44,9 @@ Run the following command **from project root** to download schemas from a GitHu
 using GitHub CLI for authentication.
 
 ```bash
-uv run --package registry-db import-schemas \
+uv run --package registry-pkgs import-schemas \
 --tag asc0.4.2 \
---output-dir ./packages/registry-db/src/registry_db/models \
+--output-dir ./registry-pkgs/src/registry_pkgs/models \
 --token $(gh auth token)
 ```
 
@@ -60,7 +60,7 @@ uv run --package registry-db import-schemas \
 ## Structure
 
 ```
-packages/registry-db/src/registry_db
+registry-pkgs/src/registry_pkgs
 ├── models/                # Data models and schemas
 │   ├── __init__.py        # Exports all models
 │   ├── enums.py           # Enums (ToolDiscoveryMode, etc.)
@@ -108,10 +108,10 @@ OPENAI_MODEL=text-embedding-3-small
 If running from project root, use the following.
 
 ```bash
-uv run --package registry-db pytest packages/registry-db/tests/
+uv run --package registry-pkgs pytest registry-pkgs/tests/
 ```
 
-If running from the workspace member directory `package/registry-db`, use the following.
+If running from the workspace member directory `package/registry-pkgs`, use the following.
 
 ```bash
 uv run poe test

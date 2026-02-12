@@ -146,13 +146,13 @@ If you need to import database schemas from the jarvis-api repository for local 
 gh auth login
 
 # Run the following commands from project root.
-uv run --package registry-db import-schemas \
+uv run --package registry-pkgs import-schemas \
 --tag asc0.4.2 \
---output-dir ./packages/registry-db/src/registry_db/models \
+--output-dir ./registry-pkgs/src/registry_pkgs/models \
 --token $(gh auth token)
 
 # Verify schemas were imported (should be in packages/models/_generated/)
-ls -la ./packages/registry-db/src/registry_db/models
+ls -la ./registry-pkgs/src/registry_pkgs/models
 ```
 
 **Important Notes**:

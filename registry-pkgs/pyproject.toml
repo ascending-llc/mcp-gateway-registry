@@ -1,7 +1,7 @@
 [project]
-name = "registry-db"
+name = "registry-pkgs"
 version = "0.2.0"
-description = "Shared database ORM and models for MCP Gateway Registry"
+description = "Shared database ORM, models, telemetry, vector search library code for MCP Gateway Registry"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -31,11 +31,10 @@ dependencies = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-prometheus",
     "opentelemetry-exporter-otlp-proto-http",
-
 ]
 
 [project.scripts]
-import-schemas = "registry_db.models.import_schemas:main"
+import-schemas = "registry_pkgs.models.import_schemas:main"
 
 [build-system]
 requires = ["setuptools>=67", "wheel"]
@@ -49,10 +48,10 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-registry_db = ["py.typed"]
+registry_pkgs = ["py.typed"]
 
-# Tasks of this specific workspace member should be run from the member directory, i.e. `packages/registry-db`.
+# Tasks of this specific workspace member should be run from the member directory, i.e. `registry-pkgs`.
 [tool.poe.tasks]
 # Run tests
 test = { shell = "uv run pytest tests -v" }
-test-cov = { shell = "uv run pytest tests -v --cov=registry_db --cov-report=html --cov-report=term --cov-report=xml" }
+test-cov = { shell = "uv run pytest tests -v --cov=registry_pkgs --cov-report=html --cov-report=term --cov-report=xml" }

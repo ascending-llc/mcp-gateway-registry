@@ -23,12 +23,12 @@ from registry.core.acl_constants import PermissionBits, PrincipalType, ResourceT
 load_dotenv()
 
 from registry.utils.crypto_utils import encrypt_auth_fields
-from registry_db.database.mongodb import MongoDB
-from registry_db.models._generated.key import Key
-from registry_db.models._generated.token import Token
-from registry_db.models._generated.user import IUser
-from registry_db.models.extended_acl_entry import IAclEntry
-from registry_db.models.extended_mcp_server import MCPServerDocument
+from registry_pkgs.database.mongodb import MongoDB
+from registry_pkgs.models._generated.key import Key
+from registry_pkgs.models._generated.token import Token
+from registry_pkgs.models._generated.user import IUser
+from registry_pkgs.models.extended_acl_entry import IAclEntry
+from registry_pkgs.models.extended_mcp_server import MCPServerDocument
 
 
 async def seed_users():

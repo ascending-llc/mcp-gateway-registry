@@ -41,9 +41,9 @@ from registry.services.agent_service import agent_service
 from registry.services.federation_service import get_federation_service
 from registry.services.search.service import vector_service
 from registry.version import __version__
-from registry_db.database import close_mongodb, init_mongodb
-from registry_db.database.redis_client import close_redis, init_redis
-from registry_db.telemetry import setup_metrics
+from registry_pkgs.database import close_mongodb, init_mongodb
+from registry_pkgs.database.redis_client import close_redis, init_redis
+from registry_pkgs.telemetry import setup_metrics
 
 logger = logging.getLogger(__name__)
 

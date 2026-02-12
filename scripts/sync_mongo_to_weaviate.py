@@ -26,9 +26,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from registry.services.server_service import server_service_v1
-from registry_db.database.mongodb import MongoDB
-from registry_db.models.extended_mcp_server import ExtendedMCPServer
-from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.database.mongodb import MongoDB
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer
+from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 mcp_server_repo = get_mcp_server_repo()
 

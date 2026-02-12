@@ -7,7 +7,7 @@ from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.services.oauth.token_service import token_service
 from registry.utils.crypto_utils import decrypt_auth_fields
-from registry_db.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 logger = logging.getLogger(__name__)
 

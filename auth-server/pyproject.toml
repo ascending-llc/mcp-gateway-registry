@@ -28,11 +28,11 @@ dependencies = [
     "requests>=2.28.0",
 
     # workspace packages
-    "registry-db",
+    "registry-pkgs",
 ]
 
 [tool.uv.sources]
-registry-db = { workspace = true }
+registry-pkgs = { workspace = true }
 
 [build-system]
 requires = ["setuptools>=67", "wheel"]
