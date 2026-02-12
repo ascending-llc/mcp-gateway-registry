@@ -361,71 +361,30 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return None
 
     async def _try_session_auth(self, request: Request) -> dict[str, Any] | None:
-        """JWT-based session authentication from httpOnly cookie with auto-refresh"""
+        """JWT-based session authentication from httpOnly cookie"""
         try:
             session_cookie = request.cookies.get(settings.session_cookie_name)
             if not session_cookie:
                 return None
 
-            # Try to verify JWT access token
-            from registry.utils.crypto_utils import verify_access_token, verify_refresh_token
+            # Verify JWT access token
+            from registry.utils.crypto_utils import verify_access_token
 
             claims = verify_access_token(session_cookie)
 
-            if claims:
-                # Valid access token - extract user info and build context
-                username = claims.get("sub")
-                user_id = claims.get("user_id")
-                groups = claims.get("groups", [])
-                auth_method = claims.get("auth_method", "traditional")
-
-                # Extract scopes from JWT (space-separated string)
-                scope_string = claims.get("scope", "")
-                scopes = scope_string.split() if scope_string else []
-
-                # If no scopes but has groups, map groups to scopes
-                if not scopes and groups:
-                    from auth_server.core.config import settings as auth_settings
-                    from auth_server.utils.security_mask import map_groups_to_scopes
-
-                    scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
-                    logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
-
-                logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
-
-                return self._build_user_context(
-                    username=username,
-                    groups=groups,
-                    scopes=scopes,
-                    auth_method=auth_method,
-                    provider=claims.get("provider", "local"),
-                    auth_source="jwt_session_auth",
-                    user_id=user_id,
-                )
-
-            # Access token invalid/expired - try refresh token
-            logger.debug("Access token expired or invalid, attempting refresh")
-            refresh_token = request.cookies.get("jarvis_registry_refresh")
-
-            if not refresh_token:
-                logger.debug("No refresh token available")
+            if not claims:
+                # Access token invalid or expired - return None to trigger 401
+                logger.debug("Access token expired or invalid")
                 return None
 
-            # Verify refresh token
-            refresh_claims = verify_refresh_token(refresh_token)
-            if not refresh_claims:
-                logger.debug("Refresh token invalid or expired")
-                return None
+            # Valid access token - extract user info and build context
+            username = claims.get("sub")
+            user_id = claims.get("user_id")
+            groups = claims.get("groups", [])
+            auth_method = claims.get("auth_method", "traditional")
 
-            # Refresh token valid - extract user info from refresh token claims
-            user_id = refresh_claims.get("user_id")
-            username = refresh_claims.get("sub")
-            auth_method = refresh_claims.get("auth_method")
-            provider = refresh_claims.get("provider")
-
-            # Extract groups and scopes from refresh token
-            groups = refresh_claims.get("groups", [])
-            scope_string = refresh_claims.get("scope", "")
+            # Extract scopes from JWT (space-separated string)
+            scope_string = claims.get("scope", "")
             scopes = scope_string.split() if scope_string else []
 
             # If no scopes but has groups, map groups to scopes
@@ -434,51 +393,19 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 from auth_server.utils.security_mask import map_groups_to_scopes
 
                 scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
-                logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
+                logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
 
-            role = refresh_claims.get("role", "user")
-            email = refresh_claims.get("email", f"{username}@local")
+            logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
 
-            logger.info(f"Refresh token valid for user {username} ({auth_method}), generating new access token")
-            logger.debug(f"User groups from refresh token: {groups}, scopes: {scopes}")
-
-            # Validate that we have the required information
-            if not scopes:
-                logger.warning(f"Refresh token for user {username} has no scopes (groups: {groups}), cannot refresh")
-                return None
-
-            # Generate new access token using information from refresh token
-            from registry.utils.crypto_utils import generate_access_token
-
-            try:
-                new_access_token = generate_access_token(
-                    user_id=user_id,
-                    username=username,
-                    email=email,
-                    groups=groups,
-                    scopes=scopes,
-                    role=role,
-                    auth_method=auth_method,
-                    provider=provider,
-                )
-
-                # Store new access token in request state for response modification
-                request.state.new_access_token = new_access_token
-
-                logger.info(f"Successfully refreshed access token for user {username}")
-
-                return self._build_user_context(
-                    username=username,
-                    groups=groups,
-                    scopes=scopes,
-                    auth_method=auth_method,
-                    provider=provider,
-                    auth_source="jwt_session_auth_refreshed",
-                    user_id=user_id,
-                )
-            except Exception as e:
-                logger.error(f"Error generating new access token during refresh: {e}")
-                return None
+            return self._build_user_context(
+                username=username,
+                groups=groups,
+                scopes=scopes,
+                auth_method=auth_method,
+                provider=claims.get("provider", "local"),
+                auth_source="jwt_session_auth",
+                user_id=user_id,
+            )
 
         except Exception as e:
             logger.debug(f"JWT session auth failed: {e}")
