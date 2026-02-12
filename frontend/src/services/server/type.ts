@@ -72,6 +72,15 @@ export type GET_SERVERS_RESPONSE = {
 
 export type GET_SERVERS_DETAIL_RESPONSE = Server;
 
+export type TEST_SERVER_URL_REQUEST = {
+  url: string;
+  transport: ServerType;
+};
+export type TEST_SERVER_URL_RESPONSE = {
+  success: boolean;
+  message: string;
+};
+
 export type CREATE_SERVER_REQUEST = {
   serverName: string;
   description: string;

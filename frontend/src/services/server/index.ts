@@ -1,3 +1,5 @@
+import type { AxiosRequestConfig } from 'axios';
+
 import API from '@/services/api';
 import Request from '@/services/request';
 
@@ -10,6 +12,12 @@ const getServers: (data?: TYPE.GET_SERVERS_REQUEST) => Promise<TYPE.GET_SERVERS_
 
 const getServerDetail: (id: string) => Promise<TYPE.GET_SERVERS_DETAIL_RESPONSE> = async id =>
   await Request.get(API.getServerDetail(id));
+
+const testServerUrl: (
+  data: TYPE.TEST_SERVER_URL_REQUEST,
+  config?: AxiosRequestConfig,
+) => Promise<TYPE.TEST_SERVER_URL_RESPONSE> = async (data, config) =>
+  await Request.post(API.testServerUrl, data, config);
 
 const createServer: (data: TYPE.CREATE_SERVER_REQUEST) => Promise<TYPE.Server> = async data =>
   await Request.post(API.createServer, data);
@@ -31,6 +39,7 @@ export default {
   getVersion,
   getServers,
   getServerDetail,
+  testServerUrl,
   createServer,
   updateServer,
   deleteServer,

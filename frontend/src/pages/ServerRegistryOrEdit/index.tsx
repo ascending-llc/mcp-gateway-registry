@@ -3,7 +3,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { McpIcon } from '@/assets/McpIcon';
+import McpIcon from '@/assets/McpIcon';
 import { useGlobal } from '@/contexts/GlobalContext';
 import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
@@ -51,6 +51,16 @@ const ServerRegistryOrEdit: React.FC = () => {
   const goBack = () => {
     navigate(-1);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showSuccessDialog) {
+        goBack();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSuccessDialog]);
 
   const getDetail = async () => {
     if (!id) return;
@@ -193,7 +203,6 @@ const ServerRegistryOrEdit: React.FC = () => {
           ...baseData,
           apiKey: null,
           oauth: null,
-          requiresOAuth: false,
         };
       case 'apiKey':
         return {
@@ -211,7 +220,6 @@ const ServerRegistryOrEdit: React.FC = () => {
               : {}),
           },
           oauth: null,
-          requiresOAuth: false,
         };
       case 'oauth':
         return {
@@ -226,7 +234,6 @@ const ServerRegistryOrEdit: React.FC = () => {
             scope: data.authConfig.scope,
           },
           apiKey: null,
-          requiresOAuth: true,
         };
       default:
         return {};
