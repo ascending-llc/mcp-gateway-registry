@@ -21,14 +21,14 @@ jobs:
       with:
         python-version: "3.12"
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    - name: Install the latest version of uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
 
     - name: Install dependencies
       run: |
-        uv sync --all-groups
+        uv sync
 
     - name: Lint with ruff
       run: |

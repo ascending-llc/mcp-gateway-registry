@@ -1,0 +1,118 @@
+# MCP Gateway Registry - the registry-db package
+
+Unified vector database interface with three-layer architecture and model generation tools.
+
+## Architecture
+
+```
+Repository (Type-safe Model API)
+    ↓
+VectorStoreAdapter (Proxy + Extension)
+    ↓
+LangChain VectorStore (Native DB)
+```
+
+**Key principles:**
+- Maximize LangChain utilization
+- Native filter support (no conversion)
+- Direct method proxying
+- Minimal abstraction
+
+## Generating Models
+
+Generate Beanie ODM models from JSON schemas stored in GitHub releases.
+
+### Prerequisites
+
+Install GitHub CLI (optional but recommended for private repositories):
+
+```bash
+# macOS
+brew install gh
+
+# Authenticate with GitHub
+gh auth login
+```
+
+### Setup
+
+Run `uv sync` from project root, NOT this workspace member folder (`packages/registry-db`).
+
+### Generate Models
+
+Run the following command **from project root** to download schemas from a GitHub release and generate Python models,
+using GitHub CLI for authentication.
+
+```bash
+uv run --package registry-db import-schemas \
+--tag asc0.4.2 \
+--output-dir ./packages/registry-db/src/registry_db/models \
+--token $(gh auth token)
+```
+
+**Available options:**
+- `--tag`: GitHub release version/tag (required)
+- `--files`: Space-separated list of JSON schema files (required)
+- `--output-dir`: Output directory for generated models (default: `./models`)
+- `--repo`: GitHub repository (default: `ascending-llc/jarvis-api`)
+- `--token`: GitHub Personal Access Token for private repos
+
+## Structure
+
+```
+packages/registry-db/src/registry_db
+├── models/                # Data models and schemas
+│   ├── __init__.py        # Exports all models
+│   ├── enums.py           # Enums (ToolDiscoveryMode, etc.)
+│   ├── import_schemas.py  # Schema import tool
+│   └── _generated/        # Auto-generated models (gitignored)
+│       ├── README.md      # Generation instructions
+│       ├── .schema-version # Version tracking
+│       └── *.py           # Generated Beanie models
+├── vector/                # Vector database layer
+│   ├── client.py          # DatabaseClient (facade)
+│   ├── repository.py      # Generic Repository[T]
+│   ├── adapters/
+│   │   ├── adapter.py     # VectorStoreAdapter (base)
+│   │   ├── factory.py     # Factory + registry
+│   │   └── create/        # Creator functions
+│   ├── backends/
+│   │   ├── weaviate_store.py  # Weaviate implementation
+│   │   └── chroma_store.py    # Chroma implementation
+│   ├── config/            # Configuration classes
+│   └── enum/              # Enums and exceptions
+```
+
+## Configuration
+
+```bash
+# Required
+VECTOR_STORE_TYPE=weaviate  # or chroma
+EMBEDDING_PROVIDER=aws_bedrock  # or openai
+
+# Weaviate
+WEAVIATE_HOST=localhost
+WEAVIATE_PORT=8099
+
+# AWS Bedrock
+AWS_REGION=us-east-1
+EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=text-embedding-3-small
+```
+
+## Testing
+
+If running from project root, use the following.
+
+```bash
+uv run --package registry-db pytest packages/registry-db/tests/
+```
+
+If running from the workspace member directory `package/registry-db`, use the following.
+
+```bash
+uv run poe test
+```

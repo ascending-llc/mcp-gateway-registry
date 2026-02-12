@@ -1,0 +1,61 @@
+[project]
+name = "registry-db"
+version = "0.2.0"
+description = "Shared database ORM and models for MCP Gateway Registry"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Core dependencies
+    "pydantic>=2.11.3",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+
+    # Database
+    "beanie>=1.26.0",
+    "motor>=3.3.0",
+    "redis>=7.1.0",
+
+    # Vector search and AI
+    "langchain>=1.1.3",
+    "langchain-aws>=0.2.23",
+    "langchain-classic>=1.0.0",
+    "langchain-community>=0.4.1",
+    "langchain-weaviate>=0.0.6",
+    "weaviate-client>=4.18.1",
+    "flashrank>=0.2.10",
+    "async-lru>=2.0.5",
+
+    # gRPC and protocols
+    "protobuf>=5.29.5",
+    "grpcio>=1.76.0",
+
+    # Open Telemetry Package
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-prometheus",
+    "opentelemetry-exporter-otlp-proto-http",
+
+]
+
+[project.scripts]
+import-schemas = "registry_db.models.import_schemas:main"
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+registry_db = ["py.typed"]
+
+# Tasks of this specific workspace member should be run from the member directory, i.e. `packages/registry-db`.
+[tool.poe.tasks]
+# Run tests
+test = { shell = "uv run pytest tests -v" }
+test-cov = { shell = "uv run pytest tests -v --cov=registry_db --cov-report=html --cov-report=term --cov-report=xml" }

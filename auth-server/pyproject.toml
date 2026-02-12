@@ -1,0 +1,64 @@
+[project]
+name = "auth-server"
+version = "0.2.0"
+description = "OAuth2/OIDC Authentication Server for MCP Gateway Registry"
+requires-python = ">=3.12"
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.25.0",
+    "python-multipart>=0.0.6",
+
+    # Core dependencies
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.0",
+
+    # Auth and security
+    "pyjwt>=2.6.0",
+    "python-jose>=3.3.0",
+    "cryptography>=40.0.0",
+    "itsdangerous>=2.1.0",
+    "authlib>=1.3.0",
+
+    # OAuth providers
+    "boto3>=1.28.0",  # For Cognito
+    "requests>=2.28.0",
+
+    # workspace packages
+    "registry-db",
+]
+
+[tool.uv.sources]
+registry-db = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+auth_server = ["py.typed", "*.yml", "*.yaml", "*.json"]
+
+# Tasks of this specific workspace member should be run from the member directory, i.e. `./auth-server`.
+[tool.poe.tasks]
+# Development server
+dev = { shell = "uv run uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888" }
+
+# Run all tests
+test = { shell = "uv run pytest tests/ -v" }
+test-cov = { shell = "uv run pytest tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml" }
+
+# Run unit tests only
+test-unit = { shell = "uv run pytest tests/ -v -m unit" }
+
+# Run integration tests only
+test-integration = { shell = "uv run pytest tests/ -v -m integration" }

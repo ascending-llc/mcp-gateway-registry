@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 MongoDB Seed Script for MCP Gateway Registry
 
@@ -15,7 +14,6 @@ import asyncio
 import os
 import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -24,16 +22,13 @@ from registry.core.acl_constants import PermissionBits, PrincipalType, ResourceT
 # Load environment variables from .env file
 load_dotenv()
 
-# Add packages to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from packages.database.mongodb import MongoDB
-from packages.models._generated.key import Key
-from packages.models._generated.token import Token
-from packages.models._generated.user import IUser
-from packages.models.extended_acl_entry import IAclEntry
-from packages.models.extended_mcp_server import MCPServerDocument
 from registry.utils.crypto_utils import encrypt_auth_fields
+from registry_db.database.mongodb import MongoDB
+from registry_db.models._generated.key import Key
+from registry_db.models._generated.token import Token
+from registry_db.models._generated.user import IUser
+from registry_db.models.extended_acl_entry import IAclEntry
+from registry_db.models.extended_mcp_server import MCPServerDocument
 
 
 async def seed_users():
