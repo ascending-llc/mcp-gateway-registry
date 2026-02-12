@@ -60,6 +60,7 @@ dev = [
     "factory-boy>=3.3.0",
     "faker>=24.0.0",
     "types-pyyaml>=6.0.12.20250915",
+    "mypy>=1.0.0",
 ]
 
 [tool.poe.tasks]
