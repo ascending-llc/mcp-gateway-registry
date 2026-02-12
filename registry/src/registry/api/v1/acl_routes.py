@@ -20,7 +20,7 @@ from registry.schemas.acl_schema import (
 )
 from registry.services.access_control_service import acl_service
 from registry.utils.utils import validate_resource_type
-from registry_db.database.decorators import use_transaction
+from registry_pkgs.database.decorators import use_transaction
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
