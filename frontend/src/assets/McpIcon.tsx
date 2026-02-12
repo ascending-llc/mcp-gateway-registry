@@ -1,6 +1,6 @@
 import type React from 'react';
 
-export const McpIcon: React.FC<React.SVGProps<SVGSVGElement>> = props => {
+const McpIcon: React.FC<React.SVGProps<SVGSVGElement>> = props => {
   return (
     <svg viewBox='0 2 195 195' fill='none' xmlns='http://www.w3.org/2000/svg' {...props}>
       <path
@@ -24,3 +24,5 @@ export const McpIcon: React.FC<React.SVGProps<SVGSVGElement>> = props => {
     </svg>
   );
 };
+
+export default McpIcon;
