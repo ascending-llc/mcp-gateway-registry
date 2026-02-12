@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from registry.main import app
-from registry.tests.fixtures.factories import ServerInfoFactory
+from tests.fixtures.factories import ServerInfoFactory
 
 
 @pytest.mark.skip(reason="Requires rewrite for ServerServiceV1 MongoDB API and new server_routes architecture (PR-113)")

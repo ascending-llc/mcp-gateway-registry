@@ -21,10 +21,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.registry
       args:
-        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
+        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-external}
         BUILD_VERSION: ${BUILD_VERSION:-}
-        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
-        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     networks:
       default:
         aliases:
@@ -65,9 +63,6 @@ services:
     volumes:
       - ./registry/logs:/app/logs
       - ./security_scans:/app/security_scans
-      - ./auth_server/scopes.yml:/app/auth_server/scopes.yml
-      - ./auth_server/oauth2_providers.yml:/app/oauth2_providers.yml
-      - ${APP_HOME}/mcp-gateway/federation.json:/app/config/federation.json
     depends_on:
       auth-server:
         condition: service_started
@@ -155,9 +150,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.auth
-      args:
-        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
-        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       # Keycloak configuration
@@ -188,9 +180,7 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - ./auth_server/logs:/app/logs
-      - ./auth_server/scopes.yml:/app/scopes.yml
-      - ./auth_server/oauth2_providers.yml:/app/oauth2_providers.yml
+      - ./auth-server/logs:/app/logs
     restart: unless-stopped
     env_file:
       - .env
@@ -210,7 +200,7 @@ services:
       - "8000:8000"
     restart: unless-stopped
     profiles:
-      - full
+      - disabled
 
   # MCP Gateway Server
   mcpgw-server:
@@ -224,8 +214,6 @@ services:
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET_KEY=${SECRET_KEY}
       - WEAVIATE_HOST=weaviate
-    volumes:
-      - ./auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"
     #    depends_on:

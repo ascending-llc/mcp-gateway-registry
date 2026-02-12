@@ -18,10 +18,12 @@ const API = {
   getOauthReinit: (id: string) => `${MCP_BASE_URL}/${id}/reinitialize`,
   cancelAuth: (id: string) => `${MCP_BASE_URL}/oauth/cancel/${id}`,
   revokeAuth: (id: string) => `${MCP_BASE_URL}/oauth/token/${id}`,
+  getDiscover: `${MCP_BASE_URL}/oauth/discover`,
 
   // server
   getServers: `${SERVER_BASE_URL}`,
   getServerDetail: (id: string) => `${SERVER_BASE_URL}/${id}`,
+  testServerUrl: `${SERVER_BASE_URL}/connection`,
   createServer: `${SERVER_BASE_URL}`,
   updateServer: (id: string) => `${SERVER_BASE_URL}/${id}`,
   deleteServer: (id: string) => `${SERVER_BASE_URL}/${id}`,

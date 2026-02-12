@@ -1,54 +1,33 @@
 # Auth Server Dockerfile - OAuth2/OIDC Authentication Service
 FROM python:3.12-slim
 
-ARG SCHEMA_VERSION=
-ARG GITHUB_TOKEN=
-
+# PYTHONUNBUFFERED optimizes logging in a container
+# PIP_ROOT_USER_ACTION and PIP_NO_CACHE_DIR optimizes pip install
+# DEBIAN_FRONTEND is for apt-get
 ENV PYTHONUNBUFFERED=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Copy workspace root pyproject.toml to enable workspace resolution
-COPY pyproject.toml /app/
-
-COPY pyproject.toml /app/pyproject.toml
-COPY packages/ /app/packages/
-COPY auth_server/ /app/auth_server/
-COPY packages/ /app/packages/
-
-# Install Python dependencies
-# Step 1: Install uv package manager
-# Step 2: Install packages workspace dependency first
-# Step 3: Install auth_server dependencies
-# Step 4: Import required schemas from GitHub release (user, accessRole, action, group, token, key, mcpServer, aclEntry)
-RUN pip install --no-cache-dir uv && \
-    echo "Installing workspace dependencies..." && \
-    cd /app && \
-    uv pip install --system -e ./packages && \
-    echo "Installing auth_server dependencies..." && \
-    cd /app && \
-    uv pip install --system -e ./auth_server && \
-    echo "Dependencies installed successfully" && \
-    echo "Checking for schema import..." && \
-    if [ -z "$SCHEMA_VERSION" ] || [ -z "$GITHUB_TOKEN" ]; then \
-        echo "ERROR: Schema import is required for auth_server build"; \
-        echo "Please provide the following build arguments:"; \
-        echo "  --build-arg SCHEMA_VERSION=<version> (e.g., asc0.4.0)"; \
-        echo "  --build-arg GITHUB_TOKEN=<token>"; \
-        exit 1; \
-    fi && \
-    echo "Importing required schemas from GitHub release $SCHEMA_VERSION..." && \
-    cd /app/packages && \
-    uv run import-schemas \
-        --mode remote \
-        --tag "$SCHEMA_VERSION" \
-        --files user.json accessRole.json action.json group.json token.json key.json mcpServer.json aclEntry.json \
-        --output-dir ./models \
-        --repo ascending-llc/jarvis-api \
-        --token "$GITHUB_TOKEN" && \
-    echo "Schema import completed successfully"
+# Install system dependencies - curl and procps are included in case `kubectl exec` uses them.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    procps \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create logs directory
 RUN mkdir -p /app/logs
+
+# Copy over the Python related build artifacts - these files are prepared by GitHub Actions in CI
+COPY ./build-artifacts /opt/build/
+
+# Install all 3rd party dependencies with the exact versions locked by uv
+RUN pip install --only-binary :all: -r /opt/build/requirements-auth-server.txt
+
+# Install own packages from wheels - auth-server depends on registry-db
+RUN pip install --no-deps --no-index --find-links /opt/build/ auth-server registry-db
 
 # Expose port
 EXPOSE 8888

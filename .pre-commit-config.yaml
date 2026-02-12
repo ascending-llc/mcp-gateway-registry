@@ -47,6 +47,25 @@ repos:
         pass_filenames: false
         always_run: true
 
+  # If uv.lock changes after a git pull, run `uv sync`.
+  - repo: https://github.com/kxue43/shell-cmd-on-change
+    rev: "2.0.0"
+    hooks:
+      - id: shell-cmd-on-change
+        name: uv-sync
+        args:
+          - "-Puv.lock"
+          - "uv sync"
+        stages: [post-merge]
+        always_run: true
+        verbose: true
+
+  # Prevent credentials from getting into the code base.
+  - repo: https://github.com/godaddy/tartufo
+    rev: "v6.0.0"
+    hooks:
+      - id: tartufo
+
 # CI configuration
 ci:
   autofix_commit_msg: "style: auto-fix by pre-commit hooks"

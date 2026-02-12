@@ -2,8 +2,10 @@ import { ArrowPathIcon, MagnifyingGlassIcon, PlusIcon, XMarkIcon } from '@heroic
 import axios from 'axios';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { HiCommandLine, HiServerStack } from 'react-icons/hi2';
 import { useNavigate } from 'react-router-dom';
 
+import McpIcon from '@/assets/McpIcon';
 import AgentCard from '@/components/AgentCard';
 import SemanticSearchResults from '@/components/SemanticSearchResults';
 import ServerCard from '@/components/ServerCard';
@@ -540,6 +542,7 @@ const Dashboard: React.FC = () => {
                   : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
+              <McpIcon className='h-6 w-6 inline mr-2' />
               MCP Servers
             </button>
             <button
@@ -550,6 +553,7 @@ const Dashboard: React.FC = () => {
                   : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
+              <HiCommandLine className='h-6 w-6 inline mr-2' />
               A2A Agents
             </button>
             <button
@@ -560,6 +564,7 @@ const Dashboard: React.FC = () => {
                   : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
+              <HiServerStack className='h-6 w-6 inline mr-2' />
               External Registries
             </button>
           </div>

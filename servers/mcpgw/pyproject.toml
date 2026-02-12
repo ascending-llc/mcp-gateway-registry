@@ -1,5 +1,5 @@
 [project]
-name = "mcpgw-mcp-server"
+name = "mcpgw"
 version = "0.2.0"
 description = "MCP server to interact with the MCP Gateway Registry API"
 readme = "README.md"
@@ -22,13 +22,16 @@ dependencies = [
     "pyjwt>=2.10.0",
 ]
 
-[project.optional-dependencies]
-
-
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=67", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["auth", "core", "tools"]
-py-modules = ["server", "config"]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mcpgw = ["py.typed"]
