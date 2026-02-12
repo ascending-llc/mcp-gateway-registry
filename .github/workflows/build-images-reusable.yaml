@@ -134,6 +134,12 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           provenance: false
 
+      - name: Guard the Docker image against import exceptions
+        run: >
+          docker run --rm --entrypoint=''
+          "${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:${{ github.sha }}"
+          python -c "from mcpgw.server import main; print(type(main))"
+
   build-and-push-registry:
     needs: prepare-artifacts
     runs-on: ubuntu-latest
@@ -201,6 +207,13 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           provenance: false
+
+      - name: Guard the Docker image against import exceptions
+        run: >
+          docker run --rm --entrypoint='' -e BUILD_VERSION=dummy
+          -e SECRET_KEY=dummy -e ADMIN_PASSWORD=dummy -e ADMIN_USER=dummy
+          "${{ steps.login-ecr.outputs.registry }}/jarvis/registry:${{ github.sha }}"
+          python -c "from registry.main import app; print(type(app))"
 
   build-and-push-registry-frontend:
     runs-on: ubuntu-latest
@@ -303,3 +316,9 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           provenance: false
+
+      - name: Guard the Docker image against import exceptions
+        run: >
+          docker run --rm --entrypoint=''
+          "${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ github.sha }}"
+          python -c "from auth_server.server import app; print(type(app))"
