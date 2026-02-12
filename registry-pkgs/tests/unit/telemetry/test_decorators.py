@@ -1,5 +1,5 @@
 """
-Tests for packages/telemetry/decorators.py
+Tests for registry_pkgs/telemetry/decorators.py
 
 Tests for generic telemetry decorators that provide automatic timing
 and metrics collection.

@@ -35,8 +35,8 @@ LangChain VectorStore (Weaviate)              ← Native DB operations
 This is how services should interact with vector DB - through specialized repositories:
 
 ```python
-from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
-from packages.models import ExtendedMCPServer
+from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.models import ExtendedMCPServer
 
 # Service layer code
 class ServerService:
@@ -98,8 +98,8 @@ class ServerService:
 For standalone scripts, CLI tools, or data migration:
 
 ```python
-from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
-from packages.models import ExtendedMCPServer
+from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.models import ExtendedMCPServer
 
 # Get singleton repository
 repo = get_mcp_server_repo()
@@ -486,7 +486,7 @@ class MyCustomModel:
         )
 
 # Use with generic repository
-from packages.vector import initialize_database
+from registry_pkgs.vector import initialize_database
 
 db = initialize_database()
 repo = db.for_model(MyCustomModel)
@@ -500,31 +500,31 @@ results = await repo.search("query", k=10)
 ## Directory Structure
 
 ```
-packages/
+registry-pkgs/src/registry_pkgs/
 ├── models/
-│   ├── extended_mcp_server.py      # Main domain model
-│   ├── extended_acl_entry.py       # ACL model
-│   └── enums.py                    # Domain enums
+│   ├── extended_mcp_server.py        # Main domain model
+│   ├── extended_acl_entry.py         # ACL model
+│   └── enums.py                      # Domain enums
 └── vector/
-    ├── __init__.py                 # Public API exports
-    ├── client.py                   # DatabaseClient (initialization)
-    ├── repository.py               # Generic Repository[T]
-    ├── repositories/               # Specialized repositories
+    ├── __init__.py                   # Public API exports
+    ├── client.py                     # DatabaseClient (initialization)
+    ├── repository.py                 # Generic Repository[T]
+    ├── repositories/                 # Specialized repositories
     │   └── mcp_server_repository.py  # MCPServerRepository
     ├── adapters/
-    │   ├── adapter.py              # VectorStoreAdapter base
-    │   ├── factory.py              # Adapter factory
-    │   └── create/                 # Creator functions
-    │       ├── embedding.py        # Embedding creators
-    │       └── vector_store.py     # Vector store creators
+    │   ├── adapter.py                # VectorStoreAdapter base
+    │   ├── factory.py                # Adapter factory
+    │   └── create/                   # Creator functions
+    │       ├── embedding.py          # Embedding creators
+    │       └── vector_store.py       # Vector store creators
     ├── backends/
-    │   └── weaviate_store.py       # Weaviate implementation
+    │   └── weaviate_store.py         # Weaviate implementation
     ├── retrievers/
-    │   └── reranker.py             # Reranker factory (FlashRank)
+    │   └── reranker.py               # Reranker factory (FlashRank)
     ├── config/
-    │   └── config.py               # Configuration classes
+    │   └── config.py                 # Configuration classes
     └── enum/
-        └── enums.py                # Vector DB enums
+        └── enums.py                  # Vector DB enums
 ```
 
 ## Extending the System
@@ -533,7 +533,7 @@ packages/
 
 **1. Add enum:**
 ```python
-# packages/vector/enum/enums.py
+# reigstry_pkgs/vector/enum/enums.py
 class VectorStoreType(str, Enum):
     WEAVIATE = "weaviate"
     PINECONE = "pinecone"  # Add new
@@ -541,7 +541,7 @@ class VectorStoreType(str, Enum):
 
 **2. Create adapter:**
 ```python
-# packages/vector/backends/pinecone_store.py
+# registry_pkgs/vector/backends/pinecone_store.py
 from ..adapters.adapter import VectorStoreAdapter
 
 class PineconeStore(VectorStoreAdapter):
@@ -560,7 +560,7 @@ class PineconeStore(VectorStoreAdapter):
 
 **3. Register creator:**
 ```python
-# packages/vector/adapters/create/vector_store.py
+# registry_pkgs/vector/adapters/create/vector_store.py
 @register_vector_store_creator(VectorStoreType.PINECONE.value)
 def create_pinecone_adapter(config, embedding):
     return PineconeStore(embedding=embedding, config=...)

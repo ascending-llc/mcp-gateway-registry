@@ -67,10 +67,10 @@ dev = [
 # Version management
 version = { shell = """
 printf "\n📦 Workspace versions:\n" && \
-printf '   Root        → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
+printf '   Root          → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
 printf '   registry-pkgs → %s\n' $(grep -m1 '^version = ' registry-pkgs/pyproject.toml | cut -d'\"' -f2) && \
-printf '   registry    → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
-printf '   auth-server → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
+printf '   registry      → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
+printf '   auth-server   → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
 printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2)""", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
@@ -78,17 +78,17 @@ version-sync = { script = "scripts.sync_version:main", help = "Sync version acro
 test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../registry-pkgs && uv run poe test" }
 test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../registry-pkgs && uv run poe test-cov" }
 
-# Registry tests
+# registry tests
 test-registry = { shell = "cd registry && uv run poe test" }
 test-registry-cov = { shell = "cd registry && uv run poe test-cov" }
 
-# Auth server tests
+# auth-server tests
 test-auth-server = { shell = "cd auth-server && uv run poe test" }
 test-auth-server-cov = { shell = "cd auth-server && uv run poe test-cov" }
 
-# Packages tests
-test-packages = { shell = "cd registry-pkgs && uv run poe test" }
-test-packages-cov = { shell = "cd registry-pkgs && uv run poe test-cov" }
+# registry-pkgs tests
+test-registry-pkgs = { shell = "cd registry-pkgs && uv run poe test" }
+test-registry-pkgs-cov = { shell = "cd registry-pkgs && uv run poe test-cov" }
 
 # Linting and formatting
 lint = { shell = "uv run ruff check .", help = "Run ruff linter" }

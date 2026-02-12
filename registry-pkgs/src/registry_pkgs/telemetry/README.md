@@ -60,7 +60,7 @@ Metrics client and domain functions for My Service.
 import logging
 from typing import Optional
 
-from packages.telemetry.metrics_client import create_metrics_client, load_metrics_config
+from registry_pkgs.telemetry.metrics_client import create_metrics_client, load_metrics_config
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ The package provides generic decorators for automatic timing. You can also creat
 ### Generic Decorators
 
 ```python
-from packages.telemetry.decorators import track_duration, create_timed_context
+from registry_pkgs.telemetry.decorators import track_duration, create_timed_context
 
 # Using track_duration with a custom record function
 def record_func(duration: float, labels: dict) -> None:
@@ -216,7 +216,7 @@ def track_request(endpoint: str, method: str = "GET") -> Callable[[F], F]:
 Call `setup_metrics` during your application's startup phase:
 
 ```python
-from packages.telemetry import setup_metrics
+from registry_pkgs.telemetry import setup_metrics
 
 setup_metrics(
     service_name="your-service-name",
