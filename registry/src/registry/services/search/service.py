@@ -5,17 +5,14 @@ This module provides the main entry point for vector search operations.
 Depending on the configuration (discovery_mode), it will either use:
 - Embedded FAISS with sentence-transformers (default, requires heavy dependencies)
 - Weaviate-based vector search service (uses WeaviateClient for tool indexing)
+As of 2026-02-12, we decide not to use the embedded FAISS service moving forward.
 """
 
 import logging
-from typing import TYPE_CHECKING
 
 from registry.core.config import settings
 
 from .base import VectorSearchService
-
-if TYPE_CHECKING:
-    pass
 
 # Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)

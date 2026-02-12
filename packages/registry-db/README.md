@@ -53,7 +53,7 @@ uv run --package registry-db import-schemas \
 **Available options:**
 - `--tag`: GitHub release version/tag (required)
 - `--files`: Space-separated list of JSON schema files (required)
-- `--output-dir`: Output directory for generated models (default: `./models)
+- `--output-dir`: Output directory for generated models (default: `./models`)
 - `--repo`: GitHub repository (default: `ascending-llc/jarvis-api`)
 - `--token`: GitHub Personal Access Token for private repos
 
@@ -111,7 +111,7 @@ If running from project root, use the following.
 uv run --package registry-db pytest packages/registry-db/tests/
 ```
 
-If running form the workspace member directory `package/registry-db`, use the following.
+If running from the workspace member directory `package/registry-db`, use the following.
 
 ```bash
 uv run poe test

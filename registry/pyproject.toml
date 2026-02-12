@@ -57,7 +57,7 @@ dependencies = [
 
 [tool.uv.sources]
 registry-db = { workspace = true }
-auth-sever = { workspace = true }
+auth-server = { workspace = true }
 
 [build-system]
 requires = ["setuptools>=67", "wheel"]

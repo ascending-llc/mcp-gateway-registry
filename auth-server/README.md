@@ -52,7 +52,7 @@ If running from project root, use the following.
 uv run --package auth-server pytest auth-server/tests/
 ```
 
-If running form the workspace member directory `auth-server`, use the following.
+If running from the workspace member directory `auth-server`, use the following.
 
 ```bash
 # Run all tests

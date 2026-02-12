@@ -40,12 +40,12 @@ from registry.health.service import health_service
 from registry.services.agent_service import agent_service
 from registry.services.federation_service import get_federation_service
 from registry.services.search.service import vector_service
-
-logger = logging.getLogger(__name__)
 from registry.version import __version__
 from registry_db.database import close_mongodb, init_mongodb
 from registry_db.database.redis_client import close_redis, init_redis
 from registry_db.telemetry import setup_metrics
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -300,7 +300,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "registry.main:app",
-        host="0.0.0.0",  # nosec B104 - it's fine to
+        host="0.0.0.0",  # nosec B104 - it's fine to bind to 0.0.0.0 in a container.
         port=7860,
         reload=True,
         log_level=settings.log_level.lower(),

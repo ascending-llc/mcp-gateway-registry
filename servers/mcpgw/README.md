@@ -8,9 +8,8 @@ FastMCP server providing tools to interact with the MCP Gateway Registry API.
 # Install dependencies (from workspace root)
 uv sync
 
-# Run server
-cd servers/mcpgw
-python server.py --port 8003
+# Run server (from workspace root)
+python -m mcpgw.server --port 8003
 ```
 
 ## Key Architecture
@@ -21,14 +20,14 @@ All registry API calls use **JWT-based authentication**:
 - User context extracted from FastMCP `Context` (`ctx.user_auth`).
 - JWT generated with HS256, signed with `JWT_SIGNING_SECRET`.
 - Token includes: user context, `mcpgw` as issuer, 5-min expiration.
-- See [core/registry.py](core/registry.py) `_generate_service_jwt()`.
+- See [mcpgw/src/mcpgw/core/registry.py](./servers/mcpgw/src/mcpgw/core/registry.py) `_generate_service_jwt()`.
 
 ### Registry API Pattern
 
 **All registry API calls MUST use centralized client:**
 
 ```python
-from core.registry import call_registry_api
+from mcpgw.core.registry import call_registry_api
 
 # Automatic: JWT generation, SSE handling, response unwrapping
 result = await call_registry_api("POST", "/api/v1/endpoint", ctx, json=payload)
@@ -46,7 +45,7 @@ servers/mcpgw/src/mcpgw/
 │   ├── proxy_mcp_tools.py     # execute_tool
 │   ├── search.py              # discover_tools
 │   └── service_mgmt.py        # Service management
-└── search/                # Vector search (FAISS/external)
+└── search/                # Vector search external
 ```
 
 ## Environment Variables
