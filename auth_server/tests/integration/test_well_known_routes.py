@@ -197,15 +197,14 @@ class TestWellKnownRoutes:
 
         scopes = data["scopes_supported"]
 
-        # Should include MCP-specific scopes
-        assert any("mcp" in scope.lower() for scope in scopes)
+        expected_scopes = {
+            "registry-admin",
+            "registry-power-user",
+            "register-user",
+            "register-read-only",
+        }
 
-        # Should include admin scope
-        assert any("admin" in scope.lower() for scope in scopes)
-
-        # Should include read/execute scopes
-        assert any("read" in scope.lower() for scope in scopes)
-        assert any("execute" in scope.lower() for scope in scopes)
+        assert expected_scopes.issubset(set(scopes))
 
     def test_jwks_caching_behavior(self, test_client: TestClient):
         """Test that JWKS responses are consistent across requests."""

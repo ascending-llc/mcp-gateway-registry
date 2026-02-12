@@ -113,7 +113,7 @@ async def register_client(registration: ClientRegistrationRequest, request: Requ
             "grant_types": registration.grant_types
             or ["authorization_code", "urn:ietf:params:oauth:grant-type:device_code"],
             "response_types": registration.response_types or ["code"],
-            "scope": registration.scope or "mcp-servers-unrestricted/read mcp-servers-unrestricted/execute",
+            "scope": registration.scope or "registry-admin",
             "token_endpoint_auth_method": registration.token_endpoint_auth_method or "client_secret_post",
             "contacts": registration.contacts or [],
             "registered_at": issued_at,

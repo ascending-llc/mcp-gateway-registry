@@ -83,7 +83,7 @@ async def oauth_authorization_server_metadata():
         ],
         "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
         "code_challenge_methods_supported": ["S256"],
-        "scopes_supported": ["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
+        "scopes_supported": ["registry-admin", "registry-power-user", "register-user", "register-read-only"],
         "service_documentation": f"{auth_server_url}/docs",
     }
 
