@@ -98,7 +98,7 @@ check = { shell = "uv run ruff check . && uv run ruff format --check .", help = 
 fix = { shell = "uv run ruff check --fix . && uv run ruff format .", help = "Fix all auto-fixable issues and format" }
 
 # Pre-commit hooks
-hooks-install = { shell = "uv run pre-commit install", help = "Install pre-commit hooks" }
+hooks-install = { shell = "uv run pre-commit install -t pre-commit -t post-merge", help = "Install pre-commit and post-merge stage hooks" }
 hooks-run = { shell = "uv run pre-commit run --all-files", help = "Run pre-commit on all files" }
 
 # Prepare Python-related artifacts for docker build.
