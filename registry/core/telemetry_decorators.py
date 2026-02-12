@@ -140,13 +140,14 @@ def track_tool_execution[F: Callable[..., Any]](func: F) -> F:
             result = await func(*args, **kwargs)
             success = True
 
-            # Extract server name from result if available
+            # HTTP Response
             if hasattr(result, "server_path"):
-                server_name = result.server_path.strip("/")
-            elif hasattr(result, "media_type") and result.media_type == "text/event-stream":
-                # SSE response - try to get server_path from body
-                if body and hasattr(body, "server_id"):
-                    server_name = f"server:{body.server_id}"
+                path_segments = result.server_path.strip("/").split("/")
+                server_name = path_segments[0] if path_segments else "unknown"
+            # SSE
+            elif body and hasattr(body, "server_path"):
+                path_segments = body.server_path.strip("/").split("/")
+                server_name = path_segments[0] if path_segments else "unknown"
 
             return result
 
@@ -203,7 +204,13 @@ def track_resource_access[F: Callable[..., Any]](func: F) -> F:
 
             # Extract server name from result if available
             if hasattr(result, "server_path"):
-                server_name = result.server_path.strip("/")
+                # Extract first path segment (e.g., "/github/api" -> "github")
+                path_segments = result.server_path.strip("/").split("/")
+                server_name = path_segments[0] if path_segments else "unknown"
+            elif body and hasattr(body, "server_path"):
+                # Fallback to request body
+                path_segments = body.server_path.strip("/").split("/")
+                server_name = path_segments[0] if path_segments else "unknown"
 
             return result
 
@@ -259,7 +266,13 @@ def track_prompt_execution[F: Callable[..., Any]](func: F) -> F:
 
             # Extract server name from result if available
             if hasattr(result, "server_path"):
-                server_name = result.server_path.strip("/")
+                # Extract first path segment (e.g., "/github/api" -> "github")
+                path_segments = result.server_path.strip("/").split("/")
+                server_name = path_segments[0] if path_segments else "unknown"
+            elif body and hasattr(body, "server_path"):
+                # Fallback to request body
+                path_segments = body.server_path.strip("/").split("/")
+                server_name = path_segments[0] if path_segments else "unknown"
 
             return result
 

@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 from typing import Any
 
@@ -20,7 +21,8 @@ from registry.auth.dependencies import (
 )
 from registry.core.config import settings
 from registry.core.telemetry_decorators import AuthMetricsContext
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):

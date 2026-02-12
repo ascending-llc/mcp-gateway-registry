@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,11 +11,12 @@ from packages.models._generated import (
 )
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from packages.database.decorators import get_current_session
-from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
+from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
-from registry.utils.log import logger
-from registry.services.user_service import user_service
 from registry.services.group_service import group_service
+from registry.services.user_service import user_service
+
+logger = logging.getLogger(__name__)
 
 
 class ACLService:
@@ -69,6 +71,7 @@ class ACLService:
 
         # Check if an ACL entry already exists for this principal/resource
         try:
+            session = get_current_session()
             acl_entry = await IAclEntry.find_one(
                 {
                     "principalType": principal_type,
@@ -83,7 +86,7 @@ class ACLService:
                 acl_entry.roleId = role_id
                 acl_entry.grantedAt = now
                 acl_entry.updatedAt = now
-                await acl_entry.save()
+                await acl_entry.save(session=session)
                 return acl_entry
             else:
                 new_entry = IAclEntry(
@@ -96,7 +99,7 @@ class ACLService:
                     createdAt=now,
                     updatedAt=now,
                 )
-                await new_entry.insert()
+                await new_entry.insert(session=session)
                 return new_entry
         except Exception as e:
             logger.error(f"Error upserting ACL entry: {e}")
@@ -112,12 +115,13 @@ class ACLService:
             None (returns 0 on error).
         """
         try:
+            session = get_current_session()
             query = {"resourceType": resource_type, "resourceId": resource_id}
 
             if perm_bits_to_delete:
                 query["permBits"] = {"$lte": perm_bits_to_delete}
 
-            result = await IAclEntry.find(query).delete()
+            result = await IAclEntry.find(query).delete(session=session)
             return result.deleted_count
         except Exception as e:
             logger.error(f"Error deleting ACL entries for {resource_type}/{resource_id}: {e}")
@@ -146,13 +150,14 @@ class ACLService:
                 None (returns 0 on error).
         """
         try:
+            session = get_current_session()
             query = {
                 "resourceType": resource_type,
                 "resourceId": resource_id,
                 "principalType": principal_type,
                 "principalId": principal_id,
             }
-            result = await IAclEntry.find(query).delete()
+            result = await IAclEntry.find(query).delete(session=session)
             return result.deleted_count
         except Exception as e:
             logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")

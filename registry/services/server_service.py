@@ -41,7 +41,6 @@ from registry.schemas.errors import (
     AuthenticationError,
 )
 from registry.core.telemetry_decorators import track_tool_discovery
-from pymongo.asynchronous.client_session import AsyncClientSession
 from packages.database.decorators import get_current_session
 from registry.utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
 
@@ -249,8 +248,10 @@ def _detect_oauth_requirement(oauth_field: Any | None) -> bool:
 
     Returns:
         True if OAuth is required, False otherwise
+
+    Deprecated: Use _calculate_requires_oauth instead which checks if oauth is non-empty
     """
-    return oauth_field is not None
+    return oauth_field is not None and isinstance(oauth_field, dict) and len(oauth_field) > 0
 
 
 def _validate_and_merge_oauth_metadata(
@@ -347,6 +348,16 @@ def _convert_tool_list_to_functions(tool_list: list[dict[str, Any]], server_name
     return tool_functions
 
 
+def _calculate_requires_oauth(config: dict[str, Any]) -> bool:
+    """
+    Auto-calculate requiresOAuth based on oauth field.
+
+    Returns True if oauth exists and is not empty, False otherwise.
+    """
+    oauth_raw = config.get("oauth")
+    return bool(oauth_raw and isinstance(oauth_raw, dict) and len(oauth_raw) > 0)
+
+
 def _build_config_from_request(data: ServerCreateRequest, server_name: str = None) -> dict[str, Any]:
     """
     Build config dictionary from ServerCreateRequest
@@ -355,20 +366,13 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     are stored at root level in MongoDB, NOT in config.
     Config stores MCP-specific configuration only (title, description, type, url, oauth, apiKey, etc.)
     """
-    # Determine if OAuth is required based on oauth field
-    # If oauth field is provided, set requiresOAuth to True
-    requires_oauth = _detect_oauth_requirement(getattr(data, "oauth", None))
-    # If user explicitly sets requires_oauth, respect that (for backward compatibility)
-    if getattr(data, "requires_oauth", False):
-        requires_oauth = True
-
     # Build MCP-specific configuration (stored in config object)
+    # Note: requiresOAuth will be auto-calculated based on oauth field at the end
     config = {
         "title": data.serverName,  # Use serverName as default title
         "description": data.description or "",
         "type": data.supported_transports[0] if data.supported_transports else "streamable-http",
         "url": data.url,
-        "requiresOAuth": requires_oauth,  # Auto-detect based on oauth/authentication fields
         "capabilities": "{}",  # Default empty JSON string
     }
 
@@ -411,6 +415,9 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     # Always set enabled to False during registration (regardless of frontend input)
     config["enabled"] = False
 
+    # Auto-calculate and set requiresOAuth based on oauth field
+    config["requiresOAuth"] = _calculate_requires_oauth(config)
+
     return config
 
 
@@ -429,8 +436,13 @@ def _update_config_from_request(
     # Save enabled field separately before removing it (we'll update config with it)
     enabled_value = update_dict.get("enabled")
 
+    # Check if oauth or apiKey is being updated (before removing them from update_dict)
+    # We'll use this to determine if we need to recalculate requiresOAuth
+    auth_fields_updated = "oauth" in update_dict or "apiKey" in update_dict
+
     # Remove root-level registry fields from update_dict (these are handled at root level)
     # Note: enabled is removed here but will be added to config separately
+    # Note: requiresOAuth is removed here but will be auto-calculated if oauth/apiKey is updated
     registry_fields = [
         "path",
         "tags",
@@ -438,43 +450,37 @@ def _update_config_from_request(
         "serverName",
         "num_stars",
         "enabled",
+        "requiresOAuth",  # Remove this field - will be auto-calculated based on oauth
     ]
     for field in registry_fields:
         update_dict.pop(field, None)
 
     # Handle mutually exclusive authentication fields: oauth and apiKey
-    # If one is being updated, remove the other from config
-    if "oauth" in update_dict:
-        # When oauth is provided, remove apiKey field
-        if "apiKey" in config:
-            del config["apiKey"]
-        # Merge oauth fields (upsert operation - only update provided fields)
-        existing_oauth = config.get("oauth", {})
-        if existing_oauth and isinstance(existing_oauth, dict):
-            # Merge new oauth fields with existing ones
-            existing_oauth.update(update_dict["oauth"])
-            config["oauth"] = existing_oauth
-        else:
-            # No existing oauth, use the new one
-            config["oauth"] = update_dict["oauth"]
-        # Remove from update_dict to avoid duplicate processing
-        del update_dict["oauth"]
-    elif "apiKey" in update_dict:
-        # When apiKey is provided, remove oauth field
-        if "oauth" in config:
-            del config["oauth"]
-        # Merge apiKey fields (upsert operation - only update provided fields)
-        existing_apiKey = config.get("apiKey", {})
-        if existing_apiKey and isinstance(existing_apiKey, dict):
-            # Merge new apiKey fields with existing ones
-            existing_apiKey.update(update_dict["apiKey"])
-            config["apiKey"] = existing_apiKey
-        else:
-            # No existing apiKey, use the new one
-            config["apiKey"] = update_dict["apiKey"]
-        # Remove from update_dict to avoid duplicate processing
-        del update_dict["apiKey"]
+    if "oauth" in update_dict or "apiKey" in update_dict:
+        existing_oauth = config.pop("oauth", {})
+        existing_apikey = config.pop("apiKey", {})
+        if "oauth" in update_dict:
+            oauth_update = update_dict.pop("oauth")
 
+            # Only save if not None and not empty
+            if oauth_update:
+                # Merge new oauth with existing oauth (upsert operation)
+                if isinstance(existing_oauth, dict) and isinstance(oauth_update, dict):
+                    existing_oauth.update(oauth_update)
+                    config["oauth"] = existing_oauth
+                else:
+                    config["oauth"] = oauth_update
+
+        elif "apiKey" in update_dict:
+            apikey_update = update_dict.pop("apiKey")
+
+            # Only save if not None and not empty
+            if apikey_update:
+                if isinstance(existing_apikey, dict) and isinstance(apikey_update, dict):
+                    existing_apikey.update(apikey_update)
+                    config["apiKey"] = existing_apikey
+                else:
+                    config["apiKey"] = apikey_update
     # Update config with MCP-specific fields only
     mcp_config_fields = [
         "url",
@@ -500,13 +506,6 @@ def _update_config_from_request(
     if enabled_value is not None:
         config["enabled"] = enabled_value
 
-    # Update requiresOAuth based on oauth field
-    # If oauth is being updated, recalculate requiresOAuth
-    if "oauth" in update_dict:
-        requires_oauth = _detect_oauth_requirement(config.get("oauth"))
-        config["requiresOAuth"] = requires_oauth
-        logger.info(f"Updated requiresOAuth to {requires_oauth} based on oauth field")
-
     # If tool_list is updated, regenerate toolFunctions and tools string
     if "tool_list" in update_dict and update_dict["tool_list"] is not None:
         tool_list = update_dict["tool_list"]
@@ -521,6 +520,11 @@ def _update_config_from_request(
             config["tools"] = ", ".join(tool_names)
         else:
             config["tools"] = ""
+
+    # Only recalculate requiresOAuth if oauth or apiKey fields were updated
+    # This avoids unnecessary updates when modifying other fields
+    if auth_fields_updated:
+        config["requiresOAuth"] = _calculate_requires_oauth(config)
 
     return config
 

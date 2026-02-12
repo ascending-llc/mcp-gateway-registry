@@ -27,15 +27,14 @@ def test_metrics_client_with_config():
         mock_meter = MagicMock()
         mock_get_meter.return_value = mock_meter
 
-        OTelMetricsClient("test-service", config=config)
+        client = OTelMetricsClient("test-service", config=config)
 
-        # Verify counter was created
+        # Verify counter was created eagerly
         mock_meter.create_counter.assert_called_once_with(name="requests_total", description="Total requests", unit="1")
 
-        # Verify histogram was created
-        mock_meter.create_histogram.assert_called_once_with(
-            name="request_duration_seconds", description="Request duration", unit="s"
-        )
+        # Histogram is deferred - not created at init time
+        mock_meter.create_histogram.assert_not_called()
+        assert "request_duration_seconds" in client._histogram_configs
 
 
 def test_metrics_client_skips_disabled_metrics():
@@ -55,15 +54,18 @@ def test_metrics_client_skips_disabled_metrics():
         mock_meter = MagicMock()
         mock_get_meter.return_value = mock_meter
 
-        OTelMetricsClient("test-service", config=config)
+        client = OTelMetricsClient("test-service", config=config)
 
-        # Only enabled metrics should be created
+        # Only enabled counter should be created eagerly
         assert mock_meter.create_counter.call_count == 1
-        assert mock_meter.create_histogram.call_count == 1
+        # Histograms are deferred - none created at init
+        assert mock_meter.create_histogram.call_count == 0
 
-        # Verify correct metrics were created
+        # Verify correct counter was created
         mock_meter.create_counter.assert_called_with(name="enabled_counter", description="Enabled", unit="1")
-        mock_meter.create_histogram.assert_called_with(name="enabled_histogram", description="Enabled", unit="s")
+        # Enabled histogram should be deferred, disabled should be skipped
+        assert "enabled_histogram" in client._histogram_configs
+        assert "disabled_histogram" not in client._histogram_configs
 
 
 def test_record_counter():

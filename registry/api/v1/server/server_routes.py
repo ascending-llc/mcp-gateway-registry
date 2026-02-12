@@ -11,7 +11,6 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 from beanie import PydanticObjectId
-from pymongo.asynchronous.client_session import AsyncClientSession
 
 from packages.database.decorators import use_transaction
 from registry.auth.dependencies import CurrentUser

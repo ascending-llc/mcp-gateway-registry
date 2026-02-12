@@ -98,6 +98,8 @@ class OTelMetricsClient:
             # Dynamic metric registries - all metrics loaded from config
             self._counters: dict[str, Counter] = {}
             self._histograms: dict[str, Histogram] = {}
+            # Deferred histogram configs for lazy creation after MeterProvider is set
+            self._histogram_configs: dict[str, dict[str, str]] = {}
 
             # Initialize from config
             if config:
@@ -142,11 +144,15 @@ class OTelMetricsClient:
                 logger.debug(f"Skipping histogram '{histogram_def['name']}' (capture=false)")
                 continue
 
-            self.create_histogram(
-                name=histogram_def["name"],
-                description=histogram_def.get("description", ""),
-                unit=histogram_def.get("unit", "s"),
-            )
+            # Defer histogram creation until first use so that the
+            # MeterProvider (with View-based bucket boundaries) is
+            # guaranteed to be set up via setup_metrics() before the
+            # instrument is created.  This prevents histograms from
+            # falling back to the default OTel buckets [0,5,10,25,...].
+            self._histogram_configs[histogram_def["name"]] = {
+                "description": histogram_def.get("description", ""),
+                "unit": histogram_def.get("unit", "s"),
+            }
 
     @safe_telemetry
     def create_counter(
@@ -233,12 +239,22 @@ class OTelMetricsClient:
         """
         Record a value to a histogram metric.
 
+        Histograms are lazily created on first record call so that the
+        MeterProvider (with custom bucket Views) is already in place.
+
         Args:
             name: Name of the histogram metric
             value: Value to record (e.g., duration in seconds)
             attributes: Optional dictionary of label key-value pairs
         """
         histogram = self._histograms.get(name)
+        if histogram is None and name in self._histogram_configs:
+            cfg = self._histogram_configs.pop(name)
+            histogram = self.create_histogram(
+                name=name,
+                description=cfg["description"],
+                unit=cfg["unit"],
+            )
         if histogram:
             histogram.record(value, attributes or {})
         else:
@@ -268,6 +284,9 @@ class OTelMetricsClient:
             self._counters[name].add(value, attributes)
         elif name in self._histograms:
             self._histograms[name].record(value, attributes)
+        elif name in self._histogram_configs:
+            # Lazily create the histogram on first use
+            self.record_histogram(name, value, attributes)
         else:
             logger.warning(f"Metric '{name}' not registered as counter or histogram")
 
@@ -276,8 +295,16 @@ class OTelMetricsClient:
         return self._counters.get(name)
 
     def get_histogram(self, name: str) -> Histogram | None:
-        """Get a registered histogram by name."""
-        return self._histograms.get(name)
+        """Get a registered histogram by name, lazily creating if deferred."""
+        histogram = self._histograms.get(name)
+        if histogram is None and name in self._histogram_configs:
+            cfg = self._histogram_configs.pop(name)
+            histogram = self.create_histogram(
+                name=name,
+                description=cfg["description"],
+                unit=cfg["unit"],
+            )
+        return histogram
 
 
 def create_metrics_client(

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import secrets
 import time
@@ -15,7 +16,8 @@ from registry.models.oauth_models import (
     OAuthTokens,
 )
 from registry.schemas.enums import OAuthFlowStatus
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class FlowStateManager:
