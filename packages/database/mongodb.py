@@ -5,6 +5,7 @@ This module provides MongoDB connection management with connection pooling
 and Beanie ODM initialization for the MCP Gateway Registry.
 """
 
+import logging
 from urllib.parse import quote_plus
 
 from beanie import init_beanie
@@ -25,6 +26,8 @@ from packages.models.extended_mcp_server import (
     ExtendedMCPServer as MCPServerDocument,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
@@ -42,29 +45,48 @@ class MongoDB:
         if cls.client is not None:
             return
         # Get MongoDB configuration from environment variables
-        # Try to get MONGO_URI first (format: mongodb://host:port/dbname)
+        # URI format: mongodb://username:password@host:port/dbname?queryParams
         mongo_uri = settings.MONGO_URI
         mongo_username = settings.MONGODB_USERNAME
         mongo_password = settings.MONGODB_PASSWORD
-        # Parse MONGO_URI to extract db_name if present
-        # Extract database name from URI
+
+        # Parse MONGO_URI to extract db_name and query params if present
         uri_parts = mongo_uri.rsplit("/", 1)
         base_uri = uri_parts[0]
-        extracted_db = uri_parts[1] if len(uri_parts) > 1 else None
+        db_and_params = uri_parts[1] if len(uri_parts) > 1 else None
+
+        # Split database name from query parameters
+        query_params = ""
+        extracted_db = None
+        if db_and_params:
+            if "?" in db_and_params:
+                extracted_db, query_params = db_and_params.split("?", 1)
+                query_params = "?" + query_params
+            else:
+                extracted_db = db_and_params
+
         if extracted_db and not db_name:
             db_name = extracted_db
-        # Insert credentials if provided
+
+        # Construct the final MongoDB URL
         if mongo_username and mongo_password:
+            # Credentials provided via env vars - insert them into the URI
             escaped_username = quote_plus(mongo_username)
             escaped_password = quote_plus(mongo_password)
-            # Insert credentials after mongodb://
             protocol, rest = base_uri.split("://", 1)
-            mongodb_url = f"{protocol}://{escaped_username}:{escaped_password}@{rest}"
+            # Strip any existing credentials from rest (everything before @)
+            if "@" in rest:
+                rest = rest.split("@", 1)[1]
+            mongodb_url = f"{protocol}://{escaped_username}:{escaped_password}@{rest}/{db_name}{query_params}"
         else:
-            mongodb_url = base_uri
+            # Credentials already in URI or not needed
+            mongodb_url = f"{base_uri}/{db_name}{query_params}" if db_name else base_uri
+
         cls.database_name = db_name
         try:
             # Create Motor client with connection pool settings
+            params_info = f" with params: {query_params}" if query_params else ""
+            logger.debug(f"Connecting to MongoDB database: {db_name}{params_info}")
             cls.client = AsyncIOMotorClient(
                 mongodb_url,
                 maxPoolSize=50,  # Maximum number of connections in the pool
