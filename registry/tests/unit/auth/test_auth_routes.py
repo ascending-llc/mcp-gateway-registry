@@ -23,6 +23,9 @@ class TestAuthRoutes:
         request = Mock(spec=Request)
         request.base_url = "http://localhost:8000/"
         request.cookies = {}
+        request.headers = {}
+        request.url = Mock()
+        request.url.scheme = "http"
         return request
 
     @pytest.fixture
@@ -32,6 +35,7 @@ class TestAuthRoutes:
             mock_settings.auth_server_url = "http://auth.example.com"
             mock_settings.auth_server_external_url = "http://auth.example.com"
             mock_settings.session_cookie_name = "session"
+            mock_settings.refresh_cookie_name = "refresh"
             mock_settings.session_max_age_seconds = 3600
             mock_settings.templates_dir = "/templates"
             mock_settings.registry_client_url = "http://localhost:8000/"

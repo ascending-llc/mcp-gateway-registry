@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     admin_user: str = "admin"
     admin_password: str = "password"
     session_cookie_name: str = "jarvis_registry_session"
+    refresh_cookie_name: str = "jarvis_registry_refresh"
     session_max_age_seconds: int = 60 * 60 * 8  # 8 hours
     session_cookie_secure: bool = False  # Set to True in production with HTTPS
     session_cookie_domain: str | None = None  # e.g., ".example.com" for cross-subdomain sharing
