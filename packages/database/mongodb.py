@@ -85,7 +85,8 @@ class MongoDB:
         cls.database_name = db_name
         try:
             # Create Motor client with connection pool settings
-            logger.debug(f"Connecting to MongoDB at {mongodb_url} with database {db_name}")
+            params_info = f" with params: {query_params}" if query_params else ""
+            logger.debug(f"Connecting to MongoDB database: {db_name}{params_info}")
             cls.client = AsyncIOMotorClient(
                 mongodb_url,
                 maxPoolSize=50,  # Maximum number of connections in the pool
