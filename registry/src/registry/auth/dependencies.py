@@ -129,6 +129,14 @@ def load_scopes_config() -> dict[str, Any]:
 
         # Fall back to default location if env var not set
         if not scopes_path:
+            # IMPORTANT, TODO: Currently in the mcpgateway-registry container, the following `scope_file` path happens to work,
+            # because it starts from this file, goes up three levels to reach the `/usr/local/lib/python3.12/site-packages/` folder,
+            # and then reaches down to the `auth_server` package, which does have the `scopes.yml` file at its project root.
+            # However, we normally should not assume all 3rd party dependencies are installed to the same folder,
+            # so we should not rely on this coincidence for things to work.
+            # There is a refactoring ticket where we want to stop `registry` from depending on `auth_server`.
+            # In that ticket we will find a good way for registry to get scopes, and that is the right time to change this piece of code.
+            # This comment is left for that ticket.
             scopes_file = Path(__file__).parent.parent.parent / "auth_server" / "scopes.yml"
         else:
             scopes_file = Path(scopes_path)
