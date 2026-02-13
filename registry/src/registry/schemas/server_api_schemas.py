@@ -15,6 +15,15 @@ from registry.utils.crypto_utils import decrypt_auth_fields
 
 # ==================== Request Schemas ====================
 
+def _validate_headers_value(headers: dict[str, Any] | None) -> dict[str, Any] | None:
+    if headers is not None and isinstance(headers, dict):
+        for key, value in headers.items():
+            if not isinstance(value, (str, list)):
+                raise ValueError(f"Header '{key}' must be a string or list of strings")
+            if isinstance(value, list) and not all(isinstance(item, str) for item in value):
+                raise ValueError(f"Header '{key}' list must contain only strings")
+    return headers
+
 
 class ServerCreateRequest(BaseModel):
     """Request schema for creating a new server"""
@@ -58,6 +67,11 @@ class ServerCreateRequest(BaseModel):
         if isinstance(v, list):
             return [tag.lower() if isinstance(tag, str) else tag for tag in v]
         return v
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, v):
+        return _validate_headers_value(v)
 
 
 class ServerUpdateRequest(BaseModel):
@@ -112,6 +126,11 @@ class ServerUpdateRequest(BaseModel):
             if v not in valid_statuses:
                 raise ValueError(f"status must be one of {valid_statuses}")
         return v
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, v):
+        return _validate_headers_value(v)
 
 
 class ServerToggleRequest(BaseModel):
