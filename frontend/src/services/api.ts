@@ -5,11 +5,9 @@ const SERVER_BASE_URL = `${BASE_URL}/servers`;
 const API = {
   // auth
   getAuthMe: '/api/auth/me',
-
   getToken: `${BASE_URL}/tokens/generate`,
   logout: '/redirect/logout',
-
-  getVersion: '/api/version',
+  refreshToken: '/redirect/refresh',
 
   // mcp
   getServerStatus: `${MCP_BASE_URL}/connection/status`,
@@ -21,6 +19,7 @@ const API = {
   getDiscover: `${MCP_BASE_URL}/oauth/discover`,
 
   // server
+  getVersion: '/api/version',
   getServers: `${SERVER_BASE_URL}`,
   getServerDetail: (id: string) => `${SERVER_BASE_URL}/${id}`,
   testServerUrl: `${SERVER_BASE_URL}/connection`,

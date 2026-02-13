@@ -1,14 +1,21 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
 import { getBasePath } from '@/config';
+import API from '@/services/api';
 import type { GET_TOKEN_RESPONSE } from './auth/type';
 
 const cancelSources: Record<string, () => void> = {};
 const service = axios.create({ baseURL: getBasePath() || '/', timeout: 20000 });
 
-type RequestConfig = AxiosRequestConfig & { cancelTokenKey?: string; skipTokenBarrier?: boolean };
+type RequestConfig = AxiosRequestConfig & {
+  cancelTokenKey?: string;
+  skipTokenBarrier?: boolean;
+  __isRetry?: boolean;
+  __isRefresh?: boolean;
+};
 
 let tokenInitPromise: Promise<GET_TOKEN_RESPONSE> | null = null;
+let refreshTokenPromise: Promise<void> | null = null;
 
 export const setTokenInitPromise = (promise: Promise<GET_TOKEN_RESPONSE> | null) => {
   tokenInitPromise = promise;
@@ -44,6 +51,33 @@ service.interceptors.response.use(
   },
   (error: AxiosError) => {
     if (axios.isCancel(error)) return { Code: -200, message: 'Cancel request', cause: 'Cancel request' };
+    const status = error.response?.status;
+    const originalConfig = (error.config || {}) as RequestConfig;
+    if (status === 401 && !originalConfig.__isRetry && !originalConfig.__isRefresh) {
+      if (!refreshTokenPromise) {
+        refreshTokenPromise = service
+          .post(API.refreshToken, undefined, { skipTokenBarrier: true, __isRefresh: true } as RequestConfig)
+          .then(() => undefined)
+          .catch(async refreshError => {
+            try {
+              await service.post(API.logout, undefined, { skipTokenBarrier: true, __isRefresh: true } as RequestConfig);
+            } catch (_error) {}
+            if (typeof window !== 'undefined') {
+              window.location.href = `${getBasePath()}/login`;
+            }
+            throw refreshError;
+          })
+          .finally(() => {
+            refreshTokenPromise = null;
+          });
+      }
+      return refreshTokenPromise.then(() =>
+        service({
+          ...(originalConfig || {}),
+          __isRetry: true,
+        } as RequestConfig),
+      );
+    }
     return Promise.reject(error);
   },
 );
