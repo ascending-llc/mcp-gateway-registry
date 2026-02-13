@@ -34,6 +34,12 @@ def get_current_user_by_mid(request: Request) -> dict[str, Any]:
     return request.state.user
 
 
+# Use this type to annotate a parameter of a path operation function or its dependency function so that
+# FastAPI extracts the `user` attribute (typed as dict[str, Any]) of the current request and pass it to the parameter.
+# Since it's Python 3.12, we use he new type statement instead of typing.TypeAlias
+type CurrentUser = Annotated[dict[str, Any], Depends(get_current_user_by_mid)]
+
+
 def get_current_user(
     session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> str:
@@ -688,6 +694,3 @@ def ui_permission_required(permission: str, service_name: str = None):
         return user_context
 
     return check_permission
-
-
-CurrentUser: type[dict[str, Any]] = Annotated[dict[str, Any], Depends(get_current_user_by_mid)]
