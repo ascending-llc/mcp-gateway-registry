@@ -106,6 +106,13 @@ class Settings(BaseSettings):
             force=True,  # Override any existing configuration
         )
 
+    # IMPORTANT, TODO: The way the following method gets teh scopes information is not optimal,
+    # but since it currently has no reference at all, we keep it here for now.
+    # There is a ticket about refactoring how registry gets scope info without importing auth_server directly.
+    # This method should probably be taken into consideration when working on that ticket.
+    # If we decide to use a YAML file to convey scopes info, the better way for mcpgw to get this file is:
+    # - Get a file path from a specific env var, which is loaded via the unified settings object.
+    # - If env var isn't defined, try a default path _relative_ to the current working directory.
     @property
     def scopes_config_path(self) -> Path:
         """
