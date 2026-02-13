@@ -1001,6 +1001,7 @@ class TestConfigBuilders:
 
         assert updated["headers"] == {"X-New": "2"}
 
+
 @pytest.mark.unit
 @pytest.mark.servers
 class TestValidateAndMergeOAuthMetadata:

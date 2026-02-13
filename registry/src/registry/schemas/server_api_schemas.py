@@ -15,6 +15,7 @@ from registry.utils.crypto_utils import decrypt_auth_fields
 
 # ==================== Request Schemas ====================
 
+
 def _validate_headers_value(headers: dict[str, Any] | None) -> dict[str, Any] | None:
     if headers is not None and isinstance(headers, dict):
         for key, value in headers.items():
