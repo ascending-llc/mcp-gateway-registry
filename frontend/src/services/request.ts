@@ -59,11 +59,18 @@ service.interceptors.response.use(
           .post(API.refreshToken, undefined, { skipTokenBarrier: true, __isRefresh: true } as RequestConfig)
           .then(() => undefined)
           .catch(async refreshError => {
-            try {
-              await service.post(API.logout, undefined, { skipTokenBarrier: true, __isRefresh: true } as RequestConfig);
-            } catch (_error) {}
-            if (typeof window !== 'undefined') {
-              window.location.href = `${getBasePath()}/login`;
+            const isOnLoginPage =
+              typeof window !== 'undefined' && window.location.pathname === `${getBasePath()}/login`;
+            if (!isOnLoginPage) {
+              try {
+                await service.post(API.logout, undefined, {
+                  skipTokenBarrier: true,
+                  __isRefresh: true,
+                } as RequestConfig);
+              } catch (_error) {}
+              if (typeof window !== 'undefined') {
+                window.location.href = `${getBasePath()}/login`;
+              }
             }
             throw refreshError;
           })
