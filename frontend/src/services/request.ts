@@ -58,7 +58,7 @@ service.interceptors.response.use(
         refreshTokenPromise = service
           .post(API.refreshToken, undefined, { skipTokenBarrier: true, __isRefresh: true } as RequestConfig)
           .then(() => undefined)
-          .catch(async refreshError => {
+          .catch(async () => {
             const isOnLoginPage =
               typeof window !== 'undefined' && window.location.pathname === `${getBasePath()}/login`;
             if (!isOnLoginPage) {
@@ -72,7 +72,10 @@ service.interceptors.response.use(
                 window.location.href = `${getBasePath()}/login`;
               }
             }
-            throw refreshError;
+            throw {
+              __refreshError: true,
+              originalData: (error as AxiosError).response?.data,
+            };
           })
           .finally(() => {
             refreshTokenPromise = null;
@@ -96,6 +99,9 @@ const request = async ({ url, method, data = {}, config = {} }: RequestType) => 
     const response = await service({ url, method, ...body, ...config });
     return response?.data;
   } catch (error) {
+    if (error && typeof error === 'object' && '__refreshError' in error) {
+      throw (error as { originalData?: unknown }).originalData;
+    }
     throw (error as AxiosError).response?.data;
   }
 };
