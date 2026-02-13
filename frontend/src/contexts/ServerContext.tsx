@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-
+import { getBasePath } from '@/config';
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
 import type { PermissionType, Server } from '@/services/server/type';
@@ -133,17 +133,6 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     [agents],
   );
 
-  useEffect(() => {
-    refreshServerData();
-    refreshAgentData();
-    return () => {
-      Object.values(timeoutRef.current).forEach(timeout => {
-        clearTimeout(timeout);
-      });
-      timeoutRef.current = {};
-    };
-  }, []);
-
   // Helper function to map backend health status to frontend status
   const mapHealthStatus = (healthStatus: string): 'healthy' | 'unhealthy' | 'unknown' => {
     if (!healthStatus || healthStatus === 'unknown') return 'unknown';
@@ -228,6 +217,28 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       setAgentLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    const isOnLoginPage = typeof window !== 'undefined' && window.location.pathname === `${getBasePath()}/login`;
+    if (isOnLoginPage) {
+      setServerLoading(false);
+      setAgentLoading(false);
+      return () => {
+        Object.values(timeoutRef.current).forEach(timeout => {
+          clearTimeout(timeout);
+        });
+        timeoutRef.current = {};
+      };
+    }
+    refreshServerData();
+    refreshAgentData();
+    return () => {
+      Object.values(timeoutRef.current).forEach(timeout => {
+        clearTimeout(timeout);
+      });
+      timeoutRef.current = {};
+    };
+  }, [refreshAgentData, refreshServerData]);
 
   const getServerStatusById = useCallback(async (serverId: string): Promise<SERVER_CONNECTION | undefined> => {
     try {
