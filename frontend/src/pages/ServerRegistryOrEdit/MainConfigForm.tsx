@@ -1,7 +1,5 @@
-import { LinkIcon } from '@heroicons/react/24/outline';
-import type React from 'react';
 import { useState } from 'react';
-import { HiCheckCircle } from 'react-icons/hi2';
+import { HiBolt, HiCheckCircle } from 'react-icons/hi2';
 import FormFields from '@/components/FormFields';
 import { useGlobal } from '@/contexts/GlobalContext';
 import SERVICES from '@/services';
@@ -146,7 +144,7 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
                 ) : urlTestPassed ? (
                   <HiCheckCircle className='h-5 w-5 text-green-500' aria-hidden='true' />
                 ) : (
-                  <LinkIcon className='h-5 w-5' aria-hidden='true' />
+                  <HiBolt className='h-5 w-5' aria-hidden='true' />
                 )}
               </button>
             }

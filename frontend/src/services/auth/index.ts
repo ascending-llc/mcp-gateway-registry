@@ -10,8 +10,11 @@ const getToken: (data: TOKEN_TYPE.GET_TOKEN_REQUEST) => Promise<TOKEN_TYPE.GET_T
 
 const logout: () => Promise<void> = async () => await Request.post(API.logout);
 
+const refreshToken: () => Promise<any> = async () => await Request.post(API.refreshToken);
+
 export default {
   getAuthMe,
   getToken,
   logout,
+  refreshToken,
 };
