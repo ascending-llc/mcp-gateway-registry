@@ -1,10 +1,17 @@
+import logging
+import os
+import shutil
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from registry_pkgs.telemetry.metrics_client import (
     OTelMetricsClient,
     create_metrics_client,
+    load_metrics_config,
+    logger,
     safe_telemetry,
 )
 
@@ -449,3 +456,111 @@ class TestGenericMetricMethods:
 
         # Should be registered since capture defaults to true
         assert "no_capture_flag" in client._counters
+
+
+# Fixture: create temp dir, chdir, create config/metrics/{service_name}.yml, cleanup after
+@pytest.fixture
+def temp_dir_with_config():
+    orig_cwd = os.getcwd()
+    temp_dir = tempfile.mkdtemp()
+    service_name = "testservice"
+    config_dir = os.path.join(temp_dir, "config", "metrics")
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = os.path.join(config_dir, f"{service_name}.yml")
+    config_data = {"foo": "bar", "num": 42}
+    with open(config_path, "w") as f:
+        yaml.safe_dump(config_data, f)
+    os.chdir(temp_dir)
+
+    yield {
+        "temp_dir": temp_dir,
+        "service_name": service_name,
+        "config_path": config_path,
+        "config_data": config_data,
+    }
+
+    os.chdir(orig_cwd)
+    shutil.rmtree(temp_dir)
+
+
+# Set logging level to DEBUG during test run
+@pytest.fixture(autouse=True, scope="module")
+def debug_logger():
+    orig_level = logger.level
+    logger.setLevel(logging.DEBUG)
+
+    yield
+
+    logger.setLevel(orig_level)
+
+
+class PatchedSettings:
+    OTEL_METRICS_CONFIG_PATH: str
+
+
+# Fixture for patching settings with env var pointing to an existing config file.
+@pytest.fixture
+def patched_settings_right_file(mocker, temp_dir_with_config):
+    d = temp_dir_with_config
+    patched_settings = PatchedSettings()
+    patched_settings.OTEL_METRICS_CONFIG_PATH = d["config_path"]
+    mocker.patch("registry_pkgs.telemetry.metrics_client.settings", patched_settings)
+
+    yield
+
+
+# Fixture for patching settings with env var pointing to a non-existent config file.
+@pytest.fixture
+def patched_settings_nonexistent_file(mocker):
+    patched_settings = PatchedSettings()
+    patched_settings.OTEL_METRICS_CONFIG_PATH = ".better-not-exist-ha!"
+    mocker.patch("registry_pkgs.telemetry.metrics_client.settings", patched_settings)
+
+    yield
+
+
+class TestLoadMetricsConfig:
+    def test_config_path_exists(self, temp_dir_with_config, caplog):
+        d = temp_dir_with_config
+        with caplog.at_level("INFO"):
+            result = load_metrics_config(d["service_name"], config_path=d["config_path"])
+        assert result == d["config_data"]
+        assert any("Loaded metrics config" in m for m in caplog.messages)
+
+    def test_config_path_not_exists(self, temp_dir_with_config, caplog):
+        d = temp_dir_with_config
+        missing_path = d["config_path"] + ".missing"
+        with caplog.at_level("WARNING"):
+            result = load_metrics_config(d["service_name"], config_path=missing_path)
+        assert result is None
+        assert any(f"Metrics config not found at {missing_path}" in m for m in caplog.messages)
+
+    def test_env_path_exists(self, temp_dir_with_config, patched_settings_right_file, caplog):
+        d = temp_dir_with_config
+        with caplog.at_level("INFO"):
+            result = load_metrics_config(d["service_name"])
+        assert result == d["config_data"]
+        assert any("Loaded metrics config" in m for m in caplog.messages)
+
+    def test_env_path_not_exists(self, temp_dir_with_config, patched_settings_nonexistent_file, caplog):
+        d = temp_dir_with_config
+        with caplog.at_level("WARNING"):
+            result = load_metrics_config(d["service_name"])
+        assert result is None
+        assert any("Metrics config not found at" in m for m in caplog.messages)
+
+    def test_default_path_exists(self, temp_dir_with_config, caplog):
+        d = temp_dir_with_config
+        with caplog.at_level("INFO"):
+            result = load_metrics_config(d["service_name"])
+        assert result == d["config_data"]
+        assert any("Loaded metrics config" in m for m in caplog.messages)
+
+    def test_default_path_not_exists(self, temp_dir_with_config, caplog):
+        d = temp_dir_with_config
+        os.remove(d["config_path"])
+        with caplog.at_level("WARNING"):
+            result = load_metrics_config(d["service_name"])
+        assert result is None
+        expected_path = os.path.join(os.getcwd(), "config", "metrics", f"{d['service_name']}.yml")
+        assert any(f"Metrics config not found at {expected_path}" in m for m in caplog.messages)
