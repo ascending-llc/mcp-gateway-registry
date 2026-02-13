@@ -43,6 +43,7 @@ class ServerCreateRequest(BaseModel):
     oauth: dict[str, Any] | None = Field(default=None, description="OAuth configuration")
     custom_user_vars: dict[str, Any] | None = Field(default=None, description="Custom variables")
     apiKey: dict[str, Any] | None = Field(default=None, description="API Key authentication configuration")
+    headers: dict[str, Any] | None = Field(default=None, description="Custom headers (key/value pairs)")
     enabled: bool | None = Field(
         default=None, description="Whether the server is enabled (auto-set to False during registration)"
     )
@@ -87,6 +88,7 @@ class ServerUpdateRequest(BaseModel):
     oauth: dict[str, Any] | None = None
     custom_user_vars: dict[str, Any] | None = None
     apiKey: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = None
     status: str | None = None
     enabled: bool | None = None
 

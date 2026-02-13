@@ -116,19 +116,22 @@ async def _build_complete_headers_for_server(server: MCPServerDocument, user_id:
         logger.debug(f"Added internal service JWT to {settings.internal_auth_header} header for user {user_id}")
 
     # 1. Add custom headers FIRST (lowest priority)
-    custom_headers = decrypted_config.get("headers", [])
-    if custom_headers and isinstance(custom_headers, list):
-        for header_dict in custom_headers:
-            if isinstance(header_dict, dict):
-                # Ensure all header values are strings (not lists or other types)
-                for key, value in header_dict.items():
-                    if isinstance(value, list):
-                        # Join list values with comma (HTTP header standard)
-                        headers[key] = ", ".join(str(v) for v in value)
-                        logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
-                    elif value is not None:
-                        headers[key] = str(value)
-                        logger.debug(f"Added custom header {key}: {value}")
+    custom_headers = decrypted_config.get("headers", {})
+    if custom_headers:
+        # Support both dict (preferred) and legacy list-of-dict formats
+        header_dicts = [custom_headers] if isinstance(custom_headers, dict) else custom_headers
+        if isinstance(header_dicts, list):
+            for header_dict in header_dicts:
+                if isinstance(header_dict, dict):
+                    # Ensure all header values are strings (not lists or other types)
+                    for key, value in header_dict.items():
+                        if isinstance(value, list):
+                            # Join list values with comma (HTTP header standard)
+                            headers[key] = ", ".join(str(v) for v in value)
+                            logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
+                        elif value is not None:
+                            headers[key] = str(value)
+                            logger.debug(f"Added custom header {key}: {value}")
 
     # 2. Check OAuth and add OAuth headers LAST (highest priority, overrides custom headers)
     requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
@@ -380,6 +383,8 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
         config["oauth"] = data.oauth
     if data.custom_user_vars is not None:
         config["custom_user_vars"] = data.custom_user_vars
+    if data.headers is not None:
+        config["headers"] = data.headers
 
     # Convert tool_list to toolFunctions in OpenAI format
     if data.tool_list is not None:
@@ -485,6 +490,7 @@ def _update_config_from_request(
         "requires_oauth",
         "oauth",
         "custom_user_vars",
+        "headers",
         "tool_list",
     ]
     for key, value in update_dict.items():

@@ -424,12 +424,14 @@ class HealthMonitoringService:
             logger.debug(f"Generated Mcp-Session-Id: {session_id}")
 
         # Merge server-specific headers if present
-        server_headers = server_info.get("headers", [])
-        if server_headers and isinstance(server_headers, list):
-            for header_dict in server_headers:
-                if isinstance(header_dict, dict):
-                    headers.update(header_dict)
-                    logger.debug(f"Added server headers: {header_dict}")
+        server_headers = server_info.get("headers", {})
+        if server_headers:
+            header_dicts = [server_headers] if isinstance(server_headers, dict) else server_headers
+            if isinstance(header_dicts, list):
+                for header_dict in header_dicts:
+                    if isinstance(header_dict, dict):
+                        headers.update(header_dict)
+                        logger.debug(f"Added server headers: {header_dict}")
 
         return headers
 
