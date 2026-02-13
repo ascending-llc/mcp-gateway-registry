@@ -34,6 +34,12 @@ def get_current_user_by_mid(request: Request) -> dict[str, Any]:
     return request.state.user
 
 
+# Use this type to annotate a parameter of a path operation function or its dependency function so that
+# FastAPI extracts the `user` attribute (typed as dict[str, Any]) of the current request and pass it to the parameter.
+# Since it's Python 3.12, we use the new type statement instead of typing.TypeAlias
+type CurrentUser = Annotated[dict[str, Any], Depends(get_current_user_by_mid)]
+
+
 def get_current_user(
     session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> str:
@@ -129,6 +135,14 @@ def load_scopes_config() -> dict[str, Any]:
 
         # Fall back to default location if env var not set
         if not scopes_path:
+            # IMPORTANT, TODO: Currently in the mcpgateway-registry container, the following `scope_file` path happens to work,
+            # because it starts from this file, goes up three levels to reach the `/usr/local/lib/python3.12/site-packages/` folder,
+            # and then reaches down to the `auth_server` package, which does have the `scopes.yml` file at its project root.
+            # However, we normally should not assume all 3rd party dependencies are installed to the same folder,
+            # so we should not rely on this coincidence for things to work.
+            # There is a refactoring ticket where we want to stop `registry` from depending on `auth_server`.
+            # In that ticket we will find a good way for registry to get scopes, and that is the right time to change this piece of code.
+            # This comment is left for that ticket.
             scopes_file = Path(__file__).parent.parent.parent / "auth_server" / "scopes.yml"
         else:
             scopes_file = Path(scopes_path)
@@ -680,6 +694,3 @@ def ui_permission_required(permission: str, service_name: str = None):
         return user_context
 
     return check_permission
-
-
-CurrentUser: type[dict[str, Any]] = Annotated[dict[str, Any], Depends(get_current_user_by_mid)]

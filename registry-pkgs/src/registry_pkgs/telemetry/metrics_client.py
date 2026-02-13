@@ -9,30 +9,40 @@ import yaml
 from opentelemetry import metrics
 from opentelemetry.metrics import Counter, Histogram
 
+from ..core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
-def load_metrics_config(service_name: str, config_path: str | None = None) -> dict | None:
+def load_metrics_config(service_name: str, config_path: str = "") -> dict | None:
     """
     Load metrics configuration from YAML file for a specific service.
 
     Args:
         service_name: Name of the service (e.g., 'registry', 'auth_server')
-        config_path: Optional path to the config file. If not provided,
-                    defaults to standard location relative to this file.
+        config_path: Optional path to the config file. If config_path is the empty string "",
+          try to use the OTEL_METRICS_CONFIG_PATH environment variable from the unified config.
+          If the env var is the empty string, try a standard location relative to the current working directory.
 
     Returns:
         Configuration dictionary or None if file not found/invalid
     """
-    if config_path:
+    if config_path != "":
         path = Path(config_path)
+    elif settings.OTEL_METRICS_CONFIG_PATH != "":
+        path = Path(settings.OTEL_METRICS_CONFIG_PATH)
     else:
-        # Default: config/metrics/{service_name}.yml relative to project root
-        # derived from this file's location: packages/telemetry/metrics_client.py
-        path = Path(__file__).parent.parent.parent / "config" / "metrics" / f"{service_name}.yml"
+        # Default: config/metrics/{service_name}.yml relative to the current working directory.
+        # In a container, if the WORKDIR is /app/ and the "config" folder at project root is copied into /app/,
+        # this default path will find the file correctly.
+        path = Path().cwd() / "config" / "metrics" / f"{service_name}.yml"
 
     if not path.exists():
-        logger.debug(f"Metrics config not found at {path}, using defaults")
+        logger.warning(f"Metrics config not found at {path}, using defaults")
+        return None
+
+    if not path.is_file():
+        logger.warning(f"Metrics config found at {path}, but it's not a file, using defaults")
         return None
 
     try:
