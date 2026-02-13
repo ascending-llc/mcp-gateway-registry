@@ -8,9 +8,9 @@ from time import time
 import httpx
 from fastapi import WebSocket
 
-from registry.constants import HealthStatus
-
+from ..constants import HealthStatus
 from ..core.config import settings
+from ..utils.utils import normalize_headers
 
 logger = logging.getLogger(__name__)
 
@@ -424,13 +424,10 @@ class HealthMonitoringService:
             logger.debug(f"Generated Mcp-Session-Id: {session_id}")
 
         # Merge server-specific headers if present
-        server_headers = server_info.get("headers", [])
-        if server_headers and isinstance(server_headers, list):
-            for header_dict in server_headers:
-                if isinstance(header_dict, dict):
-                    headers.update(header_dict)
-                    logger.debug(f"Added server headers: {header_dict}")
-
+        server_headers = normalize_headers(server_info.get("headers"))
+        if server_headers:
+            headers.update(server_headers)
+            logger.debug(f"Added server headers: {server_headers}")
         return headers
 
     async def _initialize_mcp_session(

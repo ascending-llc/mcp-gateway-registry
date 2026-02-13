@@ -16,6 +16,16 @@ from registry.utils.crypto_utils import decrypt_auth_fields
 # ==================== Request Schemas ====================
 
 
+def _validate_headers_value(headers: dict[str, Any] | None) -> dict[str, Any] | None:
+    if headers is not None and isinstance(headers, dict):
+        for key, value in headers.items():
+            if not isinstance(value, (str, list)):
+                raise ValueError(f"Header '{key}' must be a string or list of strings")
+            if isinstance(value, list) and not all(isinstance(item, str) for item in value):
+                raise ValueError(f"Header '{key}' list must contain only strings")
+    return headers
+
+
 class ServerCreateRequest(BaseModel):
     """Request schema for creating a new server"""
 
@@ -43,6 +53,7 @@ class ServerCreateRequest(BaseModel):
     oauth: dict[str, Any] | None = Field(default=None, description="OAuth configuration")
     custom_user_vars: dict[str, Any] | None = Field(default=None, description="Custom variables")
     apiKey: dict[str, Any] | None = Field(default=None, description="API Key authentication configuration")
+    headers: dict[str, Any] | None = Field(default=None, description="Custom headers (key/value pairs)")
     enabled: bool | None = Field(
         default=None, description="Whether the server is enabled (auto-set to False during registration)"
     )
@@ -57,6 +68,11 @@ class ServerCreateRequest(BaseModel):
         if isinstance(v, list):
             return [tag.lower() if isinstance(tag, str) else tag for tag in v]
         return v
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, v):
+        return _validate_headers_value(v)
 
 
 class ServerUpdateRequest(BaseModel):
@@ -87,6 +103,7 @@ class ServerUpdateRequest(BaseModel):
     oauth: dict[str, Any] | None = None
     custom_user_vars: dict[str, Any] | None = None
     apiKey: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = None
     status: str | None = None
     enabled: bool | None = None
 
@@ -110,6 +127,11 @@ class ServerUpdateRequest(BaseModel):
             if v not in valid_statuses:
                 raise ValueError(f"status must be one of {valid_statuses}")
         return v
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, v):
+        return _validate_headers_value(v)
 
 
 class ServerToggleRequest(BaseModel):
@@ -150,6 +172,7 @@ class ServerListItemResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
     oauthMetadata: dict[str, Any] | None = Field(
@@ -209,6 +232,7 @@ class ServerDetailResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
     oauthMetadata: dict[str, Any] | None = Field(
@@ -275,6 +299,7 @@ class ServerCreateResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     requiresOAuth: bool = Field(False, alias="requiresOAuth")
     capabilities: str | None = None
     oauthMetadata: dict[str, Any] | None = Field(
@@ -335,6 +360,7 @@ class ServerUpdateResponse(BaseModel):
     serverName: str = Field(..., alias="serverName")
     path: str
     description: str | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     tags: list[str] = Field(default_factory=list)
     num_tools: int = 0
     num_stars: int = 0
@@ -563,6 +589,7 @@ def convert_to_list_item(
         url=config.get("url"),
         apiKey=apikey_config,
         oauth=oauth_config,
+        headers=config.get("headers"),
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
         oauthMetadata=config.get("oauthMetadata"),
@@ -644,6 +671,7 @@ def convert_to_detail(
         url=config.get("url"),
         apiKey=apikey_config,
         oauth=oauth_config,
+        headers=config.get("headers"),
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
         oauthMetadata=config.get("oauthMetadata"),
@@ -701,6 +729,7 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         url=config.get("url"),
         apiKey=apikey_config,
         oauth=oauth_config,
+        headers=config.get("headers"),
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=config.get("capabilities", "{}"),
         oauthMetadata=config.get("oauthMetadata"),
@@ -736,6 +765,7 @@ def convert_to_update_response(server) -> ServerUpdateResponse:
         serverName=server.serverName,
         path=server.path,
         description=config.get("description"),
+        headers=config.get("headers"),
         tags=server.tags,
         num_tools=num_tools,
         num_stars=server.numStars,

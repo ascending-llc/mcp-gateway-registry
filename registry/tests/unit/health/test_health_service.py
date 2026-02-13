@@ -193,6 +193,15 @@ class TestHealthMonitoringService:
             assert result["last_checked_iso"] is None
             assert result["num_tools"] == 0
 
+    def test_build_headers_for_server_with_custom_headers_dict(self, health_service: HealthMonitoringService):
+        """Test building headers with custom headers dict."""
+        server_info = {"headers": {"X-Env": "test", "Accept": "application/custom"}}
+
+        headers = health_service._build_headers_for_server(server_info)
+
+        assert headers["X-Env"] == "test"
+        assert headers["Accept"] == "application/custom"
+
     @pytest.mark.asyncio
     async def test_perform_health_checks(self, health_service: HealthMonitoringService):
         """Test performing health checks."""
