@@ -23,4 +23,6 @@ exclude-signatures = [
     {signature = '401b06103097ffe15734419a65da63877defd9b4bbf9fb961e0625111cdb6812', reason = 'public URL is not credential'},
     {signature = '7e1c4628cc213c5896e08f35c7b5837c00577bf22c0dda0a52169662d5659471', reason = 'public URL is not credential'},
     {signature = '8c376644d74fa3d82a64e5bbf7290a0af7b37f88986db19ffdae8aba3173d6fb', reason = 'public URL is not credential'},
+    {signature = '0d9297ac2fdff1a015e6b7352127dd6bce67d66c64fb606a432b260f31f33b4e', reason = 'config file path in a container is not credential'},
+    {signature = '8ebd4236ad5d438dd875a800006ab602de78d5d0d89e0b5f6a2bf055f9cedbba', reason = 'config file path in a container is not credential'},
 ]

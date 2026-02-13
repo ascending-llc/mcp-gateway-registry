@@ -17,6 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
+# Copy over config files
+COPY ./config /app/config/
+
+# Point to the OTEL metrics config file
+ENV OTEL_METRICS_CONFIG_PATH=/app/config/metrics/auth_server.yml
+
 # Create logs directory
 RUN mkdir -p /app/logs
 

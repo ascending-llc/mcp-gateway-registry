@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     MONGODB_USERNAME: str = Field(default="", description="MongoDB username for authentication (optional)")
     MONGODB_PASSWORD: str = Field(default="", description="MongoDB password for authentication (optional)")
 
+    # ========== OpenTelemetry Configuration ==========
+    OTEL_METRICS_CONFIG_PATH: str = Field(default="", description="Path to the OpenTelemetry metrics config file")
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
