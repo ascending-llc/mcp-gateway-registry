@@ -33,6 +33,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.services.user_service import user_service
 from registry.utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
+from registry.utils.header_utils import normalize_headers
 from registry_pkgs.database.decorators import get_current_session
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
@@ -116,22 +117,10 @@ async def _build_complete_headers_for_server(server: MCPServerDocument, user_id:
         logger.debug(f"Added internal service JWT to {settings.internal_auth_header} header for user {user_id}")
 
     # 1. Add custom headers FIRST (lowest priority)
-    custom_headers = decrypted_config.get("headers", {})
+    custom_headers = normalize_headers(decrypted_config.get("headers"))
+    logger.info(f"custom headers: {custom_headers}")
     if custom_headers:
-        # Support both dict (preferred) and legacy list-of-dict formats
-        header_dicts = [custom_headers] if isinstance(custom_headers, dict) else custom_headers
-        if isinstance(header_dicts, list):
-            for header_dict in header_dicts:
-                if isinstance(header_dict, dict):
-                    # Ensure all header values are strings (not lists or other types)
-                    for key, value in header_dict.items():
-                        if isinstance(value, list):
-                            # Join list values with comma (HTTP header standard)
-                            headers[key] = ", ".join(str(v) for v in value)
-                            logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
-                        elif value is not None:
-                            headers[key] = str(value)
-                            logger.debug(f"Added custom header {key}: {value}")
+        headers.update(custom_headers)
 
     # 2. Check OAuth and add OAuth headers LAST (highest priority, overrides custom headers)
     requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config

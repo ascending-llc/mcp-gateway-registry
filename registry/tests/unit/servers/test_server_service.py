@@ -813,6 +813,29 @@ class TestBuildCompleteHeaders:
             assert headers["X-App-Id"] == "app-123"
 
     @pytest.mark.asyncio
+    async def test_custom_headers_dict_format(self):
+        """Test custom headers provided as dict are supported."""
+        from registry.services.server_service import _build_complete_headers_for_server
+        from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
+        server = Mock(spec=MCPServerDocument)
+        server.serverName = "dict-headers-server"
+        server.config = {
+            "headers": {
+                "X-Trace-Id": "trace-123",
+                "Accept": ["application/json", "application/xml"],
+            }
+        }
+
+        with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
+            mock_decrypt.return_value = server.config
+
+            headers = await _build_complete_headers_for_server(server, None)
+
+            assert headers["X-Trace-Id"] == "trace-123"
+            assert headers["Accept"] == "application/json, application/xml"
+
+    @pytest.mark.asyncio
     async def test_custom_header_with_list_values(self):
         """Test custom headers with list values are joined correctly."""
         from registry.services.server_service import _build_complete_headers_for_server
@@ -950,6 +973,33 @@ class TestBuildCompleteHeaders:
             # Should default to Bearer
             assert headers["Authorization"] == "Bearer test-key"
 
+
+@pytest.mark.unit
+@pytest.mark.servers
+class TestConfigBuilders:
+    """Test suite for config builder helpers."""
+
+    def test_build_config_from_request_includes_headers(self):
+        """Ensure headers from create request are stored in config."""
+        from registry.schemas.server_api_schemas import ServerCreateRequest
+        from registry.services.server_service import _build_config_from_request
+
+        data = ServerCreateRequest(serverName="Test Server", path="/test", headers={"X-Test": "1"})
+
+        config = _build_config_from_request(data, server_name="Test Server")
+
+        assert config["headers"] == {"X-Test": "1"}
+
+    def test_update_config_from_request_includes_headers(self):
+        """Ensure headers from update request are stored in config."""
+        from registry.schemas.server_api_schemas import ServerUpdateRequest
+        from registry.services.server_service import _update_config_from_request
+
+        data = ServerUpdateRequest(headers={"X-New": "2"})
+
+        updated = _update_config_from_request({}, data, server_name="Test Server")
+
+        assert updated["headers"] == {"X-New": "2"}
 
 @pytest.mark.unit
 @pytest.mark.servers
