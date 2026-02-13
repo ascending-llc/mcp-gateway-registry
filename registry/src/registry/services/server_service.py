@@ -464,7 +464,7 @@ def _update_config_from_request(
                 else:
                     config["oauth"] = oauth_update
 
-        elif "apiKey" in update_dict:
+        if "apiKey" in update_dict:
             apikey_update = update_dict.pop("apiKey")
 
             # Only save if not None and not empty
