@@ -8,10 +8,9 @@ from time import time
 import httpx
 from fastapi import WebSocket
 
-from registry.constants import HealthStatus
-from registry.utils.header_utils import normalize_headers
-
+from ..constants import HealthStatus
 from ..core.config import settings
+from ..utils.utils import normalize_headers
 
 logger = logging.getLogger(__name__)
 

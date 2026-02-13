@@ -1,10 +1,11 @@
 import logging
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException
 from fastapi import status as http_status
 
-from registry.core.acl_constants import ResourceType
+from ..core.acl_constants import ResourceType
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,29 @@ def load_template(template_name: str, context: dict[str, str]) -> str:
     except Exception as e:
         logger.error(f"Failed to load template {template_name}: {e}")
         return f"<h1>Template Error</h1><p>Failed to load template: {e}</p>"
+
+
+def normalize_headers(config_headers: Any) -> dict[str, str]:
+    """
+    Normalize headers from dict or list-of-dict into a flat dict[str, str].
+    """
+    if isinstance(config_headers, dict):
+        header_dicts = [config_headers]
+    elif isinstance(config_headers, list):
+        header_dicts = config_headers
+    else:
+        header_dicts = []
+
+    normalized: dict[str, str] = {}
+    for header_dict in header_dicts:
+        if isinstance(header_dict, dict):
+            for key, value in header_dict.items():
+                if isinstance(value, list):
+                    normalized[key] = ", ".join(str(v) for v in value)
+                elif value is not None:
+                    normalized[key] = str(value)
+
+    return normalized
 
 
 # ACL utility function

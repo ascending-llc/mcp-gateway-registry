@@ -19,24 +19,25 @@ from typing import Any
 
 from beanie import PydanticObjectId
 
-from registry.core.mcp_client import get_tools_from_server_with_server_info
-from registry.core.telemetry_decorators import track_tool_discovery
-from registry.schemas.errors import (
+from registry_pkgs.database.decorators import get_current_session
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+
+from ..core.mcp_client import get_tools_from_server_with_server_info
+from ..core.telemetry_decorators import track_tool_discovery
+from ..schemas.errors import (
     AuthenticationError,
     MissingUserIdError,
     OAuthReAuthRequiredError,
     OAuthTokenError,
 )
-from registry.schemas.server_api_schemas import (
+from ..schemas.server_api_schemas import (
     ServerCreateRequest,
     ServerUpdateRequest,
 )
-from registry.services.user_service import user_service
-from registry.utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
-from registry.utils.header_utils import normalize_headers
-from registry_pkgs.database.decorators import get_current_session
-from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from ..utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
+from ..utils.utils import normalize_headers
+from .user_service import user_service
 
 logger = logging.getLogger(__name__)
 
