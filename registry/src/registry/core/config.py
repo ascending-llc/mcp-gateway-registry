@@ -143,6 +143,14 @@ class Settings(BaseSettings):
         return self.container_log_dir / "registry.log"
 
     @property
+    def faiss_index_path(self) -> Path:
+        return self.servers_dir / "service_index.faiss"
+
+    @property
+    def faiss_metadata_path(self) -> Path:
+        return self.servers_dir / "service_index_metadata.json"
+
+    @property
     def dotenv_path(self) -> Path:
         if self.is_local_dev:
             return Path.cwd() / ".env"

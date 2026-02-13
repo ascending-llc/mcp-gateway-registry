@@ -62,6 +62,7 @@ class TestSettings:
         assert isinstance(settings.container_log_dir, Path)
 
         # Test derived paths in container mode
+        assert settings.servers_dir == settings.container_registry_dir / "servers"
         assert settings.static_dir == settings.container_registry_dir / "static"
         assert settings.templates_dir == settings.container_registry_dir / "templates"
         assert (
@@ -77,7 +78,10 @@ class TestSettings:
         mock_exists.return_value = True
         settings = Settings()
 
+        assert settings.state_file_path == settings.servers_dir / "server_state.json"
         assert settings.log_file_path == settings.container_log_dir / "registry.log"
+        assert settings.faiss_index_path == settings.servers_dir / "service_index.faiss"
+        assert settings.faiss_metadata_path == settings.servers_dir / "service_index_metadata.json"
         assert settings.dotenv_path == settings.container_registry_dir / ".env"
 
     @pytest.mark.skip(reason="nginx_config_path removed in PR-113")
@@ -128,3 +132,4 @@ class TestSettings:
 
         assert settings.container_app_dir == custom_app_dir
         assert settings.container_registry_dir == custom_registry_dir
+        assert settings.servers_dir == custom_registry_dir / "servers"
