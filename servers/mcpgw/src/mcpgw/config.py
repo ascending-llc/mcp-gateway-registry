@@ -106,7 +106,7 @@ class Settings(BaseSettings):
             force=True,  # Override any existing configuration
         )
 
-    # IMPORTANT, TODO: The way the following method gets teh scopes information is not optimal,
+    # IMPORTANT, TODO: The way the following method gets the scopes information is not optimal,
     # but since it currently has no reference at all, we keep it here for now.
     # There is a ticket about refactoring how registry gets scope info without importing auth_server directly.
     # This method should probably be taken into consideration when working on that ticket.

@@ -22,7 +22,7 @@ def load_metrics_config(service_name: str, config_path: str = "") -> dict | None
         service_name: Name of the service (e.g., 'registry', 'auth_server')
         config_path: Optional path to the config file. If config_path is the empty string "",
           try to use the OTEL_METRICS_CONFIG_PATH environment variable from the unified config.
-          If the env var is the emtpy string, try a standard location relative to the current working directory.
+          If the env var is the empty string, try a standard location relative to the current working directory.
 
     Returns:
         Configuration dictionary or None if file not found/invalid
