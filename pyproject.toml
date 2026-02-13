@@ -115,8 +115,8 @@ registry
 auth-server
 mcpgw
 EOF
-uv export --package registry --package registry-pkgs --package auth-server --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-registry.txt
-uv export --package auth-server --package registry-pkgs --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-auth-server.txt
+uv export --package registry --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-registry.txt
+uv export --package auth-server --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-auth-server.txt
 uv export --package mcpgw --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-mcpgw.txt
 """, help = "Generate artifacts for Docker build and put them in the build-artifacts/ folder." }
 
