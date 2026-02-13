@@ -1,12 +1,8 @@
 import logging
 
-from mcpgw.auth.patch_init_exempt import patch_init_exempt
-
-patch_init_exempt()
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 
-from .auth.custom_jwt import jwtVerifier
 from .auth.middleware import AuthMiddleware, HeaderSwapMiddleware
 from .config import parse_arguments, settings
 from .tools import registry_api, search
@@ -24,7 +20,6 @@ def create_mcp_app() -> FastMCP:
     """
     mcp = FastMCP(
         "JarvisRegistry",
-        auth=jwtVerifier,  # JWT verifier (requires middleware to swap headers if using custom header)
         instructions="""This MCP Gateway provides unified access to 100+ MCP servers, tools, resources, and prompts through a centralized discovery and execution interface.
 
 KEY CAPABILITIES:

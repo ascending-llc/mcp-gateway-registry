@@ -48,6 +48,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const isOnLoginPage =
+      typeof window !== 'undefined' && window.location.pathname === `${getBasePath()}/login`;
+    if (isOnLoginPage) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     checkAuth();
   }, []);
 

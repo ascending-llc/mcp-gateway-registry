@@ -1,5 +1,7 @@
 import logging
+from datetime import datetime
 
+import jwt
 from fastapi import HTTPException
 from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -66,8 +68,8 @@ class AuthMiddleware(Middleware):
     """
     Authentication and authorization middleware for MCP Gateway.
 
-    Extracts user context from authenticated requests and stores it for downstream tools.
-    Use HeaderSwapMiddleware before this if using custom auth headers.
+    Handles JWT token verification and user context extraction.
+    Allows "initialize" handshake without auth, but protects all other methods.
     """
 
     def __init__(self, allowed_methods_without_auth: list[str] | None = None):
@@ -83,20 +85,35 @@ class AuthMiddleware(Middleware):
             "ping",
             "notifications/initialized",
         ]
+        logger.info(f"AuthMiddleware initialized: exempt_methods={self.allowed_methods_without_auth}")
 
     async def on_request(self, context: MiddlewareContext, call_next):
         """
         Process MCP requests with authentication.
 
-        Extracts user context from authenticated requests and makes it available
-        to downstream tools via context.fastmcp_context.user_auth.
+        Verifies JWT tokens and extracts user context for authenticated requests.
+        Allows exempt methods (initialize, ping) without authentication.
         """
         method = context.method
         logger.debug(f"MCP request: {method}")
 
+        # Allow exempt methods without authentication
         if method not in self.allowed_methods_without_auth:
-            # Extract full user context from request
-            user_context = await self._extract_user_context()
+            # Extract token from headers
+            token = await self._extract_token()
+
+            if not token:
+                logger.warning(f"No auth token provided for {method}")
+                raise HTTPException(status_code=401, detail="Authentication required")
+
+            # Verify JWT token
+            user_context = await self._verify_jwt_token(token)
+
+            if not user_context:
+                logger.warning(f"Invalid token for {method}")
+                raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+            # Store user context for downstream tools
             await self._store_auth_context(context, user_context)
 
         try:
@@ -106,54 +123,112 @@ class AuthMiddleware(Middleware):
             logger.error(f"Error processing request {method}: {type(e).__name__}: {e}")
             raise
 
-    async def _extract_user_context(self):
+    async def _extract_token(self) -> str | None:
         """
-        Extract full user context from FastMCP session token claims.
+        Extract JWT token from Authorization header.
+
+        HeaderSwapMiddleware should run before this to swap custom headers.
 
         Returns:
-            Dictionary with user authentication context (JWT claims)
-
-        Raises:
-            ValueError: If user_id is missing and cannot be resolved from database
+            JWT token string (without "Bearer " prefix) or None
         """
-        user_context = {}
-
-        # Extract user claims from FastMCP request.user.access_token.claims
         try:
             request = get_http_request()
-            if request.user.is_authenticated:
-                # Extract claims from access_token
-                if hasattr(request.user, "access_token") and hasattr(request.user.access_token, "claims"):
-                    # Get all claims from the access token
-                    user_context = dict(request.user.access_token.claims)
-                    logger.debug(
-                        f"Extracted user context from access token claims: "
-                        f"sub={user_context.get('sub')}, "
-                        f"user_id={user_context.get('user_id')}, "
-                        f"scopes={len(user_context.get('scopes', []))}, "
-                        f"groups={len(user_context.get('groups', []))}"
-                    )
+            headers = dict(request.headers)
 
-                    if not user_context.get("user_id"):
-                        x_user_id = request.headers.get("x-user-id")
-                        if x_user_id:
-                            user_context["user_id"] = x_user_id
-                            logger.debug(f"Extracted user_id from x-user-id header: {x_user_id}")
-                        else:
-                            logger.error("user_id missing in JWT claims and x-user-id header")
-                            raise HTTPException(
-                                status_code=401, detail="Invalid token: missing user_id (Registry enrichment failed)"
-                            )
-                else:
-                    raise HTTPException(status_code=401, detail="Authenticated request missing access_token.claims")
-        except HTTPException:
-            # Re-raise authentication/authorization errors (fail-fast)
-            raise
+            # Check Authorization header (HeaderSwapMiddleware already swapped custom headers)
+            auth_header = headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+                logger.debug("Token extracted from authorization header")
+                return token
+
+            return None
+
         except Exception as e:
-            logger.error(f"Failed to extract user context: {type(e).__name__}: {e}")
-            raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+            logger.error(f"Failed to extract token: {e}")
+            return None
 
-        return user_context
+    async def _verify_jwt_token(self, token: str) -> dict | None:
+        """
+        Verify JWT token and extract claims.
+
+        Args:
+            token: JWT token string (without "Bearer " prefix)
+
+        Returns:
+            Dictionary with user context (JWT claims) or None if verification fails
+        """
+        if not token:
+            return None
+
+        try:
+            # Decode and verify JWT token
+            decode_options = {
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_iss": True,
+                "verify_aud": False,  # Skip audience validation for self-signed tokens
+                "require": ["exp", "iss", "sub"],
+            }
+
+            claims = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=["HS256"],
+                issuer=settings.JWT_ISSUER,
+                options=decode_options,
+            )
+
+            # Extract user information
+            user_context = dict(claims)
+
+            # Parse scopes from "scope" claim (space-separated string)
+            if "scope" in claims:
+                scope_str = claims["scope"]
+                if isinstance(scope_str, str):
+                    user_context["scopes"] = scope_str.split()
+            elif "scopes" in claims:
+                user_context["scopes"] = claims["scopes"]
+            else:
+                user_context["scopes"] = []
+
+            # Get user_id from claims or x-user-id header
+            if not user_context.get("user_id"):
+                request = get_http_request()
+                x_user_id = request.headers.get("x-user-id")
+                if x_user_id:
+                    user_context["user_id"] = x_user_id
+                    logger.debug(f"Extracted user_id from x-user-id header: {x_user_id}")
+                else:
+                    logger.warning("user_id missing in JWT claims and x-user-id header")
+
+            # Log successful authentication
+            exp_time = datetime.fromtimestamp(claims["exp"]) if claims.get("exp") else None
+            logger.info(
+                f"JWT verified: user={claims.get('sub')}, "
+                f"client_id={claims.get('client_id')}, "
+                f"scopes={len(user_context.get('scopes', []))}, "
+                f"expires={exp_time}"
+            )
+
+            return user_context
+
+        except jwt.ExpiredSignatureError:
+            logger.warning("JWT token has expired")
+            return None
+        except jwt.InvalidIssuerError:
+            logger.warning(f"Invalid token issuer. Expected: {settings.JWT_ISSUER}")
+            return None
+        except jwt.InvalidSignatureError:
+            logger.warning("Invalid JWT signature")
+            return None
+        except jwt.DecodeError as e:
+            logger.error(f"Failed to decode JWT token: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error during JWT validation: {e}", exc_info=True)
+            return None
 
     async def _store_auth_context(self, context: MiddlewareContext, user_context: dict) -> None:
         """
