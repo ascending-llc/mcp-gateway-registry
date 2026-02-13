@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 # Root workspace dependencies needed for scripts
 dependencies = [
     # root must depend on all workspace members, referencing them by distribution names
-    "registry-db",
+    "registry-pkgs",
     "registry",
     "auth-server",
     "mcpgw",
@@ -18,14 +18,14 @@ dependencies = [
 
 [tool.uv.workspace]
 members = [
-    "packages/registry-db",
+    "registry-pkgs",
     "registry",
     "auth-server",
     "servers/mcpgw",
 ]
 
 [tool.uv.sources]
-registry-db = { workspace = true }
+registry-pkgs = { workspace = true }
 registry = { workspace = true }
 auth-server = { workspace = true }
 mcpgw = { workspace = true }
@@ -67,28 +67,28 @@ dev = [
 # Version management
 version = { shell = """
 printf "\n📦 Workspace versions:\n" && \
-printf '   Root        → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
-printf '   registry-db → %s\n' $(grep -m1 '^version = ' packages/registry-db/pyproject.toml | cut -d'\"' -f2) && \
-printf '   registry    → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
-printf '   auth-server → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
+printf '   Root          → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
+printf '   registry-pkgs → %s\n' $(grep -m1 '^version = ' registry-pkgs/pyproject.toml | cut -d'\"' -f2) && \
+printf '   registry      → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
+printf '   auth-server   → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
 printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2)""", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
 # Run all tests across all projects
-test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../packages/registry-db && uv run poe test" }
-test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../packages/registry-db && uv run poe test-cov" }
+test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../registry-pkgs && uv run poe test" }
+test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../registry-pkgs && uv run poe test-cov" }
 
-# Registry tests
+# registry tests
 test-registry = { shell = "cd registry && uv run poe test" }
 test-registry-cov = { shell = "cd registry && uv run poe test-cov" }
 
-# Auth server tests
+# auth-server tests
 test-auth-server = { shell = "cd auth-server && uv run poe test" }
 test-auth-server-cov = { shell = "cd auth-server && uv run poe test-cov" }
 
-# Packages tests
-test-packages = { shell = "cd packages/registry-db && uv run poe test" }
-test-packages-cov = { shell = "cd packages/registry-db && uv run poe test-cov" }
+# registry-pkgs tests
+test-registry-pkgs = { shell = "cd registry-pkgs && uv run poe test" }
+test-registry-pkgs-cov = { shell = "cd registry-pkgs && uv run poe test-cov" }
 
 # Linting and formatting
 lint = { shell = "uv run ruff check .", help = "Run ruff linter" }
@@ -105,13 +105,13 @@ hooks-run = { shell = "uv run pre-commit run --all-files", help = "Run pre-commi
 # Prepare Python-related artifacts for docker build.
 build-artifacts = { shell = """
 xargs -I % sh -c 'uv build --package % --wheel --no-build-logs --out-dir build-artifacts' <<EOF
-registry-db
+registry-pkgs
 registry
 auth-server
 mcpgw
 EOF
-uv export --package registry --package registry-db --package auth-server --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-registry.txt
-uv export --package auth-server --package registry-db --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-auth-server.txt
+uv export --package registry --package registry-pkgs --package auth-server --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-registry.txt
+uv export --package auth-server --package registry-pkgs --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-auth-server.txt
 uv export --package mcpgw --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-mcpgw.txt
 """, help = "Generate artifacts for Docker build and put them in the build-artifacts/ folder." }
 
@@ -127,7 +127,7 @@ exclude = [
     "*.egg-info",
     "node_modules",
     "frontend",
-    "packages/registry-db/src/registry_db/models/_generated",
+    "registry-pkgs/src/registry_pkgs/models/_generated",
 ]
 
 [tool.ruff.lint]
@@ -156,11 +156,11 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # Each value must be the import name of one of our own packages in this workspace.
-known-first-party = ["registry_db", "registry", "auth_server", "mcpgw"]
+known-first-party = ["registry_pkgs", "registry", "auth_server", "mcpgw"]
 
 [tool.ruff.lint.per-file-ignores]
 # Import order matters some files. Exclude them from automatic import sorting.
-"packages/registry-db/src/registry_db/vector/__init__.py" = ["I001"]
+"registry-pkgs/src/registry_pkgs/vector/__init__.py" = ["I001"]
 
 [tool.ruff.format]
 quote-style = "double"

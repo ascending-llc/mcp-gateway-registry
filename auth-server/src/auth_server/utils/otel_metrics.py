@@ -12,7 +12,7 @@ Usage:
 
 import logging
 
-from registry_db.telemetry.metrics_client import create_metrics_client, load_metrics_config
+from registry_pkgs.telemetry.metrics_client import create_metrics_client, load_metrics_config
 
 logger = logging.getLogger(__name__)
 

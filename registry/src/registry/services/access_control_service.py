@@ -10,11 +10,11 @@ from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
 from registry.services.group_service import group_service
 from registry.services.user_service import user_service
-from registry_db.database.decorators import get_current_session
-from registry_db.models._generated import (
+from registry_pkgs.database.decorators import get_current_session
+from registry_pkgs.models._generated import (
     IAccessRole,
 )
-from registry_db.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
+from registry_pkgs.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 
 logger = logging.getLogger(__name__)
 

@@ -94,7 +94,7 @@ async def process_user_registration(email: str, password: str) -> User:
 ### Rule 3: Unit Test File Organization
 **📁 One-to-One Mapping with Source Files**
 
-- **Mirror Source Structure**: Test file paths MUST mirror source code structure
+- **Mirror Source Structure**: Test file paths should try to mirror source code structure
 - **Never Create Duplicates**: If a test file exists for a source file, ALWAYS use it
 - **Check Before Creating**: Always search for existing test files before creating new ones
 
@@ -102,16 +102,14 @@ async def process_user_registration(email: str, password: str) -> User:
 
 | Source File | Test File |
 |-------------|-----------|
-| `registry/services/agent_service.py` | `tests/unit/services/test_agent_service.py` |
-| `registry/api/server_routes.py` | `tests/unit/api/test_server_routes.py` |
-| `auth_server/providers/keycloak_provider.py` | `auth_server/tests/unit/providers/test_keycloak_provider.py` |
-| `packages/models/agent.py` | `packages/tests/unit/models/test_agent.py` |
+| `registry/src/registry/services/agent_service.py` | `tests/unit/services/test_agent_service.py` |
+| `registry/src/registry/api/proxy_routes.py` | `tests/unit/api/test_proxy_routes.py` |
 
 **Workflow:**
 
 1. **Before Writing Tests**: Always check if test file exists
    ```bash
-   # For source file: registry/services/agent_service.py
+   # For source file: registry/src/registry/services/agent_service.py
    # Check: tests/unit/services/test_agent_service.py
    ```
 
@@ -128,9 +126,9 @@ async def process_user_registration(email: str, password: str) -> User:
 - **Developer runs tests manually** - they will execute tests when ready
 - **Update test files when needed** - writing or updating test code is appreciated
 - **When tests ARE run** (only when explicitly requested):
-  - Use `uv run pytest` as the test runner (project uses `uv` for dependency management)
-  - Consult `pyproject.toml` for pytest configuration (test paths, markers, coverage settings)
-  - Respect the project's test configuration defined in pyproject.toml
+  - Change directory into the right workspace member and use `uv run poe test` as the test runner.
+  - Consult `pytest.ini` for pytest configuration (test paths, markers, coverage settings)
+  - Respect the project's test configuration defined in `pytest.ini`
 
 **Workflow:**
 
@@ -139,47 +137,49 @@ async def process_user_registration(email: str, password: str) -> User:
 2. **Do NOT Run Tests Automatically**: Let the developer run tests themselves
 
 3. **If Developer Explicitly Asks to Run Tests**:
+
    ```bash
-   # Use uv to run pytest (respects pyproject.toml)
-   uv run pytest tests/unit -v
+   # Use uv to run pytest (respects pytest.init)
+   cd registry && uv run poe test
 
    # With coverage
-   uv run pytest tests/unit -v --cov=registry
+   cd registry && uv run poe test-cov
 
    # Specific test markers
-   uv run pytest -m "auth and not slow"
+   cd registry && uv run pytest tests/ -m "auth and not slow"
    ```
 
-4. **Read pyproject.toml for Configuration**:
-   ```bash
-   # Check pytest configuration section
-   [tool.pytest.ini_options]
-   testpaths = ["tests"]
-   python_files = ["test_*.py"]
-   python_functions = ["test_*"]
-   addopts = "-v --cov=registry --cov-report=term-missing"
-   ```
+4. **Read `pytest.init` for Configuration**:
 
-**Example pyproject.toml reference:**
-```toml
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_functions = ["test_*"]
-addopts = "-v --cov=registry --cov-report=term-missing"
-markers = [
-    "auth: Authentication tests",
-    "servers: Server management tests",
-    "slow: Slow-running tests"
-]
-```
+   ```init
+   [pytest]
+   # Test discovery
+   testpaths = tests
+   python_files = test_*.py
+   python_classes = Test*
+   python_functions = test_*
+
+   # Add current directory to Python path for imports
+   pythonpath = .
+
+   # Disable coverage and other complex reporting for simple test runs
+   addopts = -v --tb=short
+
+   # Markers (optional, for categorizing tests)
+   markers =
+       slow: marks tests as slow (deselect with '-m "not slow"')
+       unit: unit tests
+       integration: integration tests
+       telemetry: OpenTelemetry related tests
+       metrics: OpenTelemetry metrics related tests
+   ```
 
 **Key Points:**
 - ✅ Write/update test files when making code changes
 - ✅ Explain what tests were added/updated
 - ❌ Do NOT automatically run tests after code changes
-- ✅ Use `uv run pytest` when tests are explicitly requested
-- ✅ Always check pyproject.toml for test configuration
+- ✅ Use `uv run poe test-all` when tests are explicitly requested
+- ✅ Always check `pytest.ini` for test configuration
 
 ## Code Review Rules
 
@@ -189,7 +189,7 @@ markers = [
 - **Look for repeated logic patterns** that should be extracted into shared services
 - **Flag copy-pasted code** that differs only in minor details
 - **Suggest creating utility functions** when similar code appears 3+ times
-- **Check for duplicate constants** - should be centralized in `registry/constants.py`
+- **Check for duplicate constants** - should be centralized in `registry/src/registry/constants.py`
 - **Identify similar API calls** that could use a shared service method
 
 ### Rule 2: Maintain Project Structure
@@ -198,75 +198,77 @@ Enforce strict file organization according to responsibility:
 #### Project Structure (key directories and their purposes)
 
 ```text
-registry/              # Main FastAPI app (Registry Service)
-├── api/              # Routes ONLY: agent, server, proxy, search, internal
-├── services/         # Business logic: agent_service, server_service, etc.
-├── auth/             # Authentication/authorization logic
-├── main.py           # App entry point
-└── constants.py      # Global constants (no hardcoded values elsewhere)
+registry/src/registry/                # Main FastAPI app (Registry Service)
+├── api/                              # Routes ONLY: agent, server, proxy, search, internal
+├── services/                         # Business logic: agent_service, server_service, etc.
+├── auth/                             # Authentication/authorization logic
+├── main.py                           # App entry point
+└── constants.py                      # Global constants (no hardcoded values elsewhere)
 
-auth_server/          # OAuth 2.0 Authorization Server (Standalone FastAPI app)
-├── server.py         # Auth server entry point
-├── providers/        # OAuth provider implementations (Keycloak, Cognito, Entra)
-├── utils/            # Auth utilities and helpers
-├── scopes.yml        # OAuth scope definitions
-├── oauth2_providers.yml  # Provider configurations
-└── metrics_middleware.py # Prometheus metrics
+auth-server/src/auth_server/          # OAuth 2.0 Authorization Server (Standalone FastAPI app)
+├── server.py                         # Auth server entry point
+├── providers/                        # OAuth provider implementations (Keycloak, Cognito, Entra)
+├── utils/                            # Auth utilities and helpers
+├── scopes.yml                        # OAuth scope definitions
+└── oauth2_providers.yml              # Provider configurations
 
-frontend/             # React/TypeScript Web UI (Vite + Tailwind CSS)
-├── src/              # React components and application logic
-├── public/           # Static assets
-├── vite.config.ts    # Vite configuration
-├── tailwind.config.js # Tailwind CSS configuration
-└── package.json      # Node.js dependencies
+frontend/                             # React/TypeScript Web UI (Vite + Tailwind CSS)
+├── src/                              # React components and application logic
+├── public/                           # Static assets
+├── vite.config.ts                    # Vite configuration
+├── tailwind.config.js                # Tailwind CSS configuration
+└── package.json                      # Node.js dependencies
 
-servers/              # Example MCP Servers
-├── mcpgw/            # MCP Gateway server implementation
-├── fininfo/          # Financial information MCP server
-├── currenttime/      # Time service MCP server
-└── example-server/   # Template MCP server for reference
+servers/                              # Example MCP Servers
+├── mcpgw/                            # MCP Gateway server implementation
+├── fininfo/                          # Financial information MCP server
+├── currenttime/                      # Time service MCP server
+└── example-server/                   # Template MCP server for reference
 
-packages/             # Shared ORM and database utilities
-├── models/           # Beanie models and data definitions
-│   └── _generated/   # Auto-generated models (DO NOT manually edit)
-└── database/         # MongoDB connection utilities
+registry-pkgs/src/registry_pkgs/      # Shared ORM and database utilities
+├── models/                           # Beanie models and data definitions
+│   └── _generated/                   # Auto-generated models (DO NOT manually edit)
+└── database/                         # MongoDB connection utilities
 
-tests/                # Test suite (80% coverage required)
-├── unit/             # Unit tests for services and business logic
-├── integration/      # Integration tests for API endpoints
-└── conftest.py       # Pytest fixtures and test configuration
+# Within each workspace member folder (`registry`, `auth-server`, `registry-pkgs`, `servers/mcpgw`),
+# use the following structure for tests. The point is that the `tests` folder should be on the same level
+# as the `src` folder in the workspace member folder. This is the standard Python "src layout".
+tests/                                # Test suite (80% coverage required)
+├── unit/                             # Unit tests for services and business logic
+├── integration/                      # Integration tests for API endpoints
+└── conftest.py                       # Pytest fixtures and test configuration
 ```
 
 #### File Placement Rules
 
-**Registry Service (`/registry`):**
-- **`/api`** - Route definitions ONLY. No business logic, no database calls.
-- **`/services`** - All business logic, data processing, external integrations.
-- **`/auth`** - Authentication and authorization logic only.
-- **`/models`** - Data schemas for registry such as response, request etc.
-- **`/constants.py`** - All application constants (no magic values in code).
+**Registry Service (`registry/src/registry/`):**
+- **`api`/** - Route definitions ONLY. No business logic, no database calls.
+- **`services/`** - All business logic, data processing, external integrations.
+- **`auth/`** - Authentication and authorization logic only.
+- **`models/`** - Data schemas for registry such as response, request etc.
+- **`constants.py`** - All application constants (no magic values in code).
 
-**Auth Server (`/auth_server`):**
+**Auth Server (`auth-server/src/auth_server`):**
 - **`server.py`** - OAuth 2.0 server implementation and endpoints.
-- **`/providers`** - Provider-specific implementations (Keycloak, Cognito, Entra ID).
-- **`/utils`** - Shared authentication utilities and token helpers.
+- **`providers/`** - Provider-specific implementations (Keycloak, Cognito, Entra ID).
+- **`utils/`** - Shared authentication utilities and token helpers.
 - **`scopes.yml`** - OAuth scope definitions (source of truth).
 - **`oauth2_providers.yml`** - Provider connection configurations.
 
-**Frontend (`/frontend`):**
-- **`/src`** - React components, hooks, services, and TypeScript code.
-- **`/public`** - Static assets (images, fonts, etc.).
+**Frontend (`frontend/`):**
+- **`src/`** - React components, hooks, services, and TypeScript code.
+- **`public/`** - Static assets (images, fonts, etc.).
 - **`vite.config.ts`** - Build configuration (DO NOT modify without team review).
 - **`tailwind.config.js`** - UI styling configuration.
 
-**MCP Servers (`/servers`):**
+**MCP Servers (`servers/`):**
 - Each subdirectory is a standalone MCP server implementation.
 - Follow MCP protocol specifications for server implementations.
 - Include `README.md` with setup and usage instructions.
 
-**Shared Libraries (`/packages`):**
-- **`/models`** - ORM models.
-- **`/database`** - Database connection and utility functions.
+**Shared Libraries for the registry service (`registry-pkgs/src/registry_pkgs`):**
+- **`models/`** - ORM models.
+- **`database/`** - Database connection and utility functions.
 - Code here must be framework-agnostic and reusable.
 
 ## Code Standards (Python 3.12)
@@ -285,7 +287,7 @@ tests/                # Test suite (80% coverage required)
 
 - **Routes**: `registry/api/{domain}_routes.py` (e.g., `agent_routes.py`)
 - **Services**: `registry/services/{domain}_service.py` (e.g., `agent_service.py`)
-- **Models**: `packages/models/{entity}.py` (lowercase, singular)
+- **Models**: `registry_pkgs/models/{entity}.py` (lowercase, singular)
 - **Private functions**: `_internal_function_name()`
 - **Constants**: `UPPER_SNAKE_CASE` in `constants.py`
 
@@ -297,8 +299,8 @@ tests/                # Test suite (80% coverage required)
 - ✅ **Unit tests** for all service functions (`tests/unit/`)
 - ✅ **Integration tests** for API endpoints (`tests/integration/`)
 - ✅ **Domain markers**: Use `@pytest.mark.{domain}` (auth, servers, search, health, core)
-- ✅ **One-to-One File Mapping**: Test files MUST mirror source file structure (see Development Workflow Rule 3)
-- ✅ **Consult pyproject.toml**: Always check `pyproject.toml` for pytest CLI configuration before running tests
+- ✅ **One-to-One File Mapping**: Test files should try to mirror source file structure (see Development Workflow Rule 3)
+- ✅ **Consult pyproject.toml**: Always check `pytest.ini` for pytest CLI configuration before running tests
 
 ### Test Review Guidelines
 
@@ -317,10 +319,11 @@ tests/                # Test suite (80% coverage required)
 ### Test Commands
 
 ```bash
-pytest tests/unit -v                    # Unit tests
-pytest tests/integration -v             # Integration tests
-pytest --cov=registry --cov-report=xml  # Coverage check (≥80%)
-pytest -m auth -v                       # Domain-specific tests
+# cd into the workspace member directory first. Then use the following commands
+uv run pytest tests/unit -v                    # Unit tests
+uv run pytest tests/integration -v             # Integration tests
+uv run pytest --cov=registry --cov-report=xml  # Coverage check (≥80%)
+uv run pytest -m auth -v                       # Domain-specific tests
 ```
 
 ## Security Requirements
@@ -328,13 +331,13 @@ pytest -m auth -v                       # Domain-specific tests
 - ✅ **Bandit scan** must pass: `bandit -r registry/ -f json -o bandit-report.json`
 - ✅ **No hardcoded secrets** (use environment variables)
 - ✅ **Input validation** via Pydantic models
-- ✅ **Access control** via scopes (defined in `auth_server/scopes.yml`)
+- ✅ **Access control** via scopes (defined in `auth-server/src/auth_server/scopes.yml`)
 
 ## Code Review Checklist
 
 ### ✅ Structure & Organization
 
-- Routes are in `/api`, services in `/services`, models in `/models`
+- Routes are in `api/`, services in `services/`, models in `models/`
 - No business logic in route handlers (delegate to services)
 - No direct database access in routes (use services)
 - Constants defined in `constants.py`, not hardcoded

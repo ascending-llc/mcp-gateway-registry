@@ -23,7 +23,7 @@ from registry.core.config import settings
 # Internal imports
 from registry.core.mcp_config import mcp_config
 from registry.core.server_strategies import get_server_strategy
-from registry_db.database.redis_client import get_redis_client
+from registry_pkgs.database.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 

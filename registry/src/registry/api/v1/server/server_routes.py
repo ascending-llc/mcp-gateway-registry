@@ -49,7 +49,7 @@ from registry.services.oauth.connection_status_service import (
 )
 from registry.services.oauth.mcp_service import get_mcp_service
 from registry.services.server_service import server_service_v1
-from registry_db.database.decorators import use_transaction
+from registry_pkgs.database.decorators import use_transaction
 
 logger = logging.getLogger(__name__)
 

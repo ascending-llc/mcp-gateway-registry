@@ -104,7 +104,7 @@ uv run poe test-all-cov
 # Run specific project tests
 uv run poe test-registry
 uv run poe test-auth-server
-uv run poe test-packages
+uv run poe test-registry-pkgs
 ```
 
 ## Project Structure
@@ -112,8 +112,8 @@ uv run poe test-packages
 ```
 mcp-gateway/
 ├── registry/          # Main registry service
-├── auth_server/       # Authentication service
-├── packages/          # Shared packages
+├── auth-server/       # Authentication service
+├── registry-pkgs/     # Shared packages
 ├── servers/           # MCP servers
 │   └── mcpgw/         # Gateway server
 ├── frontend/          # Web UI

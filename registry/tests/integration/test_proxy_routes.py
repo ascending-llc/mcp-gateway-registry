@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from registry.main import app
-from registry_db.models.extended_mcp_server import ExtendedMCPServer as Server
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as Server
 
 
 @pytest.mark.integration

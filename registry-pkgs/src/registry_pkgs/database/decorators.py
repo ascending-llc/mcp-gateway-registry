@@ -12,7 +12,7 @@ from pymongo import AsyncMongoClient
 from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.errors import ConnectionFailure, OperationFailure
 
-from registry_db.database.mongodb import MongoDB
+from registry_pkgs.database.mongodb import MongoDB
 
 logger = logging.getLogger(__name__)
 

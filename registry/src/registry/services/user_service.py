@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from beanie import PydanticObjectId
 
-from registry_db.models import IUser
+from registry_pkgs.models import IUser
 
 logger = logging.getLogger(__name__)
 

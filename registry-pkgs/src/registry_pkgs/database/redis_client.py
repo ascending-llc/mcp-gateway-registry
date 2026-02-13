@@ -1,6 +1,6 @@
 """
 Centralized Redis connection management for the registry.
-Follows the same pattern as MongoDB connection in packages/database.
+Follows the same pattern as MongoDB connection in registry_pkgs/database.
 """
 
 import logging

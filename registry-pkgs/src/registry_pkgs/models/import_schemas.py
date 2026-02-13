@@ -150,10 +150,10 @@ class BeanieModelGenerator:
                 headers["Authorization"] = f"token {self.github_token}"
 
             # Create SSL context that doesn't verify certificates (for Windows compatibility)
-            ssl_context = ssl._create_unverified_context()
+            ssl_context = ssl._create_unverified_context()  # nosec B323 - needed for Windows compatibility
 
             req = urllib.request.Request(api_url, headers=headers)
-            with urllib.request.urlopen(req, context=ssl_context) as response:
+            with urllib.request.urlopen(req, context=ssl_context) as response:  # nosec B310 - the schema is HTTPS and doesn't allow variation
                 if response.status != 200:
                     raise Exception(f"HTTP {response.status}")
                 release_data = json.loads(response.read().decode("utf-8"))
@@ -175,7 +175,7 @@ class BeanieModelGenerator:
             headers["Accept"] = "application/octet-stream"
 
             req = urllib.request.Request(download_url, headers=headers)
-            with urllib.request.urlopen(req, context=ssl_context) as response:
+            with urllib.request.urlopen(req, context=ssl_context) as response:  # nosec B310 - the schema is HTTPS and doesn't allow variation
                 if response.status != 200:
                     raise Exception(f"HTTP {response.status}")
                 content = response.read().decode("utf-8")
@@ -211,10 +211,10 @@ class BeanieModelGenerator:
                 headers["Authorization"] = f"token {self.github_token}"
 
             # Create SSL context that doesn't verify certificates (for Windows compatibility)
-            ssl_context = ssl._create_unverified_context()
+            ssl_context = ssl._create_unverified_context()  # nosec B323 - needed for Windows compatibility
 
             req = urllib.request.Request(api_url, headers=headers)
-            with urllib.request.urlopen(req, context=ssl_context) as response:
+            with urllib.request.urlopen(req, context=ssl_context) as response:  # nosec B310 - the schema is HTTPS and doesn't allow variation
                 if response.status != 200:
                     raise Exception(f"HTTP {response.status}")
                 release_data = json.loads(response.read().decode("utf-8"))

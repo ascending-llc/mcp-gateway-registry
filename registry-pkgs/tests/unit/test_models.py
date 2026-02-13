@@ -6,7 +6,7 @@ import pytest
 from beanie import PydanticObjectId
 from pydantic import ValidationError
 
-from registry_db.models.extended_mcp_server import ExtendedMCPServer, MCPServerDocument
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer, MCPServerDocument
 
 
 class TestExtendedMCPServerStructure:

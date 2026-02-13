@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pymongo.errors import ConnectionFailure, OperationFailure
 
-from registry_db.database.decorators import _tx_session, get_current_session, use_transaction
+from registry_pkgs.database.decorators import _tx_session, get_current_session, use_transaction
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +49,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -71,7 +71,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def outer_func():
@@ -96,7 +96,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -116,7 +116,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -134,7 +134,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -154,7 +154,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -174,7 +174,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -194,7 +194,7 @@ class TestUseTransactionDecorator:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -239,7 +239,7 @@ class TestGetCurrentSession:
         mock_client.start_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_client.start_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
 
             @use_transaction
             async def test_func():
@@ -276,7 +276,7 @@ class TestContextVarIsolation:
 
         mock_client.start_session = mock_start_session_factory
 
-        with patch("registry_db.database.decorators.MongoDB.get_client", return_value=mock_client):
+        with patch("registry_pkgs.database.decorators.MongoDB.get_client", return_value=mock_client):
             sessions_seen = []
 
             @use_transaction
