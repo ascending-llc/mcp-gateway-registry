@@ -50,7 +50,11 @@ service.interceptors.response.use(
     return response;
   },
   (error: AxiosError) => {
-    if (axios.isCancel(error)) return { Code: -200, message: 'Cancel request', cause: 'Cancel request' };
+    if (axios.isCancel(error)) {
+      return Promise.resolve({
+        data: { Code: -200, message: 'Cancel request', cause: 'Cancel request' },
+      } as any);
+    }
     const status = error.response?.status;
     const originalConfig = (error.config || {}) as RequestConfig;
     if (status === 401 && !originalConfig.__isRetry && !originalConfig.__isRefresh) {

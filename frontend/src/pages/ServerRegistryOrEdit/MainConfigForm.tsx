@@ -54,7 +54,13 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
         showToast(result.message, 'error');
       }
     } catch (error: any) {
-      showToast(error?.detail || error, 'error');
+      const errorMessage =
+        typeof error?.detail === 'string'
+          ? error.detail
+          : typeof error?.detail?.message === 'string'
+            ? error.detail.message
+            : error?.message || 'Unknown error';
+      showToast(errorMessage, 'error');
     } finally {
       setTestingUrl(false);
     }
@@ -140,7 +146,7 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
                 title={testingUrl ? 'Cancel test' : 'Test URL'}
               >
                 {testingUrl ? (
-                  <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white' />
+                  <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 dark:border-white ' />
                 ) : urlTestPassed ? (
                   <HiCheckCircle className='h-5 w-5 text-green-500' aria-hidden='true' />
                 ) : (
