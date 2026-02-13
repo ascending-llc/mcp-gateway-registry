@@ -172,6 +172,7 @@ class ServerListItemResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
     oauthMetadata: dict[str, Any] | None = Field(
@@ -231,6 +232,7 @@ class ServerDetailResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
     oauthMetadata: dict[str, Any] | None = Field(
@@ -297,6 +299,7 @@ class ServerCreateResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     requiresOAuth: bool = Field(False, alias="requiresOAuth")
     capabilities: str | None = None
     oauthMetadata: dict[str, Any] | None = Field(
@@ -357,6 +360,7 @@ class ServerUpdateResponse(BaseModel):
     serverName: str = Field(..., alias="serverName")
     path: str
     description: str | None = None
+    headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
     tags: list[str] = Field(default_factory=list)
     num_tools: int = 0
     num_stars: int = 0
@@ -585,6 +589,7 @@ def convert_to_list_item(
         url=config.get("url"),
         apiKey=apikey_config,
         oauth=oauth_config,
+        headers=config.get("headers"),
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
         oauthMetadata=config.get("oauthMetadata"),
@@ -666,6 +671,7 @@ def convert_to_detail(
         url=config.get("url"),
         apiKey=apikey_config,
         oauth=oauth_config,
+        headers=config.get("headers"),
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
         oauthMetadata=config.get("oauthMetadata"),
@@ -723,6 +729,7 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         url=config.get("url"),
         apiKey=apikey_config,
         oauth=oauth_config,
+        headers=config.get("headers"),
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=config.get("capabilities", "{}"),
         oauthMetadata=config.get("oauthMetadata"),
@@ -758,6 +765,7 @@ def convert_to_update_response(server) -> ServerUpdateResponse:
         serverName=server.serverName,
         path=server.path,
         description=config.get("description"),
+        headers=config.get("headers"),
         tags=server.tags,
         num_tools=num_tools,
         num_stars=server.numStars,
