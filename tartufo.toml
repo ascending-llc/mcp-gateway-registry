@@ -5,6 +5,7 @@ entropy = true
 
 exclude-path-patterns = [
     {path-pattern = 'uv\.lock$', reason = 'uv lock file'},
+    {path-pattern = '.*package-lock\.json$', reason = 'npm lock file'},
     {path-pattern = 'tartufo\.toml$', reason = 'Tartufo config file'},
 ]
 
