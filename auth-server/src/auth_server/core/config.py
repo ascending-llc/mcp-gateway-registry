@@ -10,8 +10,8 @@ import secrets
 from pathlib import Path
 
 import yaml
-from pydantic import ConfigDict, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..utils.config_loader import get_oauth2_config
 
@@ -38,7 +38,7 @@ def load_scopes_config() -> dict:
 class AuthSettings(BaseSettings):
     """Auth server settings with environment variable support."""
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
         extra="ignore",  # Ignore extra environment variables

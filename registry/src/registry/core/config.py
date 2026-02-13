@@ -2,14 +2,13 @@ import logging
 import secrets
 from pathlib import Path
 
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
         extra="ignore",  # Ignore extra environment variables
@@ -142,14 +141,6 @@ class Settings(BaseSettings):
         if self.is_local_dev:
             return Path.cwd() / "logs" / "registry.log"
         return self.container_log_dir / "registry.log"
-
-    @property
-    def faiss_index_path(self) -> Path:
-        return self.servers_dir / "service_index.faiss"
-
-    @property
-    def faiss_metadata_path(self) -> Path:
-        return self.servers_dir / "service_index_metadata.json"
 
     @property
     def dotenv_path(self) -> Path:
