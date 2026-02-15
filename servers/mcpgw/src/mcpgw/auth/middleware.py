@@ -103,7 +103,7 @@ class AuthMiddleware(Middleware):
             token = await self._extract_token()
 
             if not token:
-                logger.warning(f"No auth token provided for {method}")
+                logger.debug(f"No auth token provided for {method}")
                 raise HTTPException(status_code=401, detail="Authentication required")
 
             # Verify JWT token
