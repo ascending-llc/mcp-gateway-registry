@@ -20,7 +20,7 @@ def sample_user_context():
 @pytest.fixture
 def sample_server_request():
     return ServerCreateRequest(
-        serverName="TestServer",
+        title="Test Server",
         path="/testserver",
         tags=["test"],
         url="http://localhost:8000",
@@ -41,7 +41,8 @@ def sample_server_request():
 def mock_created_server():
     mock_server = MagicMock()
     mock_server.id = PydanticObjectId()
-    mock_server.serverName = "TestServer"
+    mock_server.serverName = "test-server"
+    mock_server.config = {"title": "Test Server"}
     return mock_server
 
 

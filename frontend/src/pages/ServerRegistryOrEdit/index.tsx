@@ -15,7 +15,7 @@ import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './typ
 const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', authorization_type: 'bearer' };
 
 const INIT_DATA: ServerConfig = {
-  serverName: '',
+  title: '',
   description: '',
   path: '',
   url: '',
@@ -69,7 +69,7 @@ const ServerRegistryOrEdit: React.FC = () => {
       const result = await SERVICES.SERVER.getServerDetail(id);
 
       const formData: ServerConfig = {
-        serverName: result.serverName,
+        title: result.title,
         description: result.description,
         path: result.path,
         url: result.url || '',
@@ -110,8 +110,8 @@ const ServerRegistryOrEdit: React.FC = () => {
   const validate = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.serverName.trim()) {
-      newErrors.serverName = 'Name is required';
+    if (!formData.title.trim()) {
+      newErrors.title = 'Title is required';
     }
 
     if (!formData.path.trim()) {
@@ -190,7 +190,7 @@ const ServerRegistryOrEdit: React.FC = () => {
 
   const processDataByAuthType = (data: ServerConfig) => {
     const baseData: Partial<Server> = {
-      serverName: data.serverName,
+      title: data.title,
       description: data.description,
       path: data.path,
       url: data.url,
@@ -263,11 +263,11 @@ const ServerRegistryOrEdit: React.FC = () => {
         showToast('Server updated successfully', 'success');
         goBack();
         handleServerUpdate(id, {
-          name: data.serverName,
-          description: data.description,
-          path: data.path,
-          url: data.url,
-          tags: data.tags,
+          title: result.title,
+          description: result.description,
+          path: result.path,
+          url: result.url,
+          tags: result.tags,
           last_checked_time: result.updatedAt ?? new Date().toISOString(),
         });
       } else {

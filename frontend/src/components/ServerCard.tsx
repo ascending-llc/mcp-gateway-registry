@@ -194,11 +194,11 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onEdit, onServerUpdate,
                     className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px] cursor-pointer hover:text-purple-600 dark:hover:text-purple-400 transition-colors'
                     onClick={() => navigate(`/server-edit?id=${server.id}&isReadOnly=true`)}
                   >
-                    {server.name}
+                    {server.title}
                   </h3>
                 ) : (
                   <h3 className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px]'>
-                    {server.name}
+                    {server.title}
                   </h3>
                 )}
 
