@@ -984,7 +984,7 @@ class TestConfigBuilders:
         from registry.schemas.server_api_schemas import ServerCreateRequest
         from registry.services.server_service import _build_config_from_request
 
-        data = ServerCreateRequest(serverName="Test Server", path="/test", headers={"X-Test": "1"})
+        data = ServerCreateRequest(title="Test Server", path="/test", headers={"X-Test": "1"})
 
         config = _build_config_from_request(data, server_name="Test Server")
 

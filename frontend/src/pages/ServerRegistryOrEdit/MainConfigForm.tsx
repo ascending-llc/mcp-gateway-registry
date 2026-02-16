@@ -76,17 +76,17 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
       <section>
         <h3 className='text-lg font-semibold text-gray-900 dark:text-white mb-2'>Basic Information</h3>
         <div className='space-y-6'>
-          {/* Name */}
+          {/* Title */}
           <FormFields.InputField
-            label='Server Name'
-            name='serverName'
-            id='serverName'
+            label='Title'
+            name='title'
+            id='title'
             required
             disabled={isReadOnly}
-            placeholder='e.g.,my-knowledge-base'
-            value={formData.serverName}
-            onChange={e => handleUpdateField('serverName', e.target.value)}
-            error={errors?.serverName}
+            placeholder='e.g., My Knowledge Base'
+            value={formData.title}
+            onChange={e => handleUpdateField('title', e.target.value)}
+            error={errors?.title}
           />
 
           {/* Description */}

@@ -36,7 +36,7 @@ from ..schemas.server_api_schemas import (
     ServerUpdateRequest,
 )
 from ..utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
-from ..utils.utils import normalize_headers
+from ..utils.utils import generate_server_name_from_title, normalize_headers
 from .user_service import user_service
 
 logger = logging.getLogger(__name__)
@@ -355,7 +355,7 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     # Build MCP-specific configuration (stored in config object)
     # Note: requiresOAuth will be auto-calculated based on oauth field at the end
     config = {
-        "title": data.serverName,  # Use serverName as default title
+        "title": data.title,
         "description": data.description or "",
         "type": data.supported_transports[0] if data.supported_transports else "streamable-http",
         "url": data.url,
@@ -378,7 +378,7 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
 
     # Convert tool_list to toolFunctions in OpenAI format
     if data.tool_list is not None:
-        use_server_name = server_name or data.serverName
+        use_server_name = server_name or generate_server_name_from_title(data.title)
         config["toolFunctions"] = _convert_tool_list_to_functions(data.tool_list, use_server_name)
 
         # Build tools string (comma-separated tool names)
@@ -471,6 +471,7 @@ def _update_config_from_request(
                     config["apiKey"] = apikey_update
     # Update config with MCP-specific fields only
     mcp_config_fields = [
+        "title",
         "url",
         "description",
         "type",
@@ -657,9 +658,10 @@ class ServerServiceV1:
                 raise ValueError(f"Server with path '{data.path}' and URL '{data.url}' already exists")
 
         # Check if serverName already exists
-        existing_name = await MCPServerDocument.find_one({"serverName": data.serverName}, session=session)
+        server_name = generate_server_name_from_title(data.title)
+        existing_name = await MCPServerDocument.find_one({"serverName": server_name}, session=session)
         if existing_name:
-            raise ValueError(f"Server with name '{data.serverName}' already exists")
+            raise ValueError(f"Server with name '{server_name}' already exists")
 
         # Check for duplicate tags (case-insensitive)
         normalized_tags = [tag.lower() for tag in data.tags]
@@ -667,7 +669,7 @@ class ServerServiceV1:
             raise ValueError("Duplicate tags are not allowed (case-insensitive)")
 
         # Build MCP config dictionary (MCP-specific fields only)
-        config = _build_config_from_request(data, server_name=data.serverName)
+        config = _build_config_from_request(data, server_name=server_name)
 
         # Encrypt sensitive authentication fields before storing
         config = encrypt_auth_fields(config)
@@ -685,7 +687,7 @@ class ServerServiceV1:
         # Create server document with registry fields at root level
         now = _get_current_utc_time()
         server = MCPServerDocument(
-            serverName=data.serverName,
+            serverName=server_name,
             config=config,
             author=author.id,  # Use PydanticObjectId instead of Link
             # Registry-specific root-level fields
@@ -867,8 +869,6 @@ class ServerServiceV1:
                 raise ValueError("Duplicate tags are not allowed (case-insensitive)")
 
         # Update root-level registry fields
-        if data.serverName is not None:
-            server.serverName = data.serverName
         if data.path is not None:
             server.path = data.path
         if data.tags is not None:
