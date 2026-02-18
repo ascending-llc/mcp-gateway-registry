@@ -34,6 +34,8 @@ The 2025-11-25 MCP spec introduced the following important changes.
   This is the future-proof approach that we should implement, but we should (optionally?) provide a fallback for old
   clients that do not have the Elicitation capability.
 
+  Reference: [MCP SEP-1036](https://modelcontextprotocol.io/community/seps/1036-url-mode-elicitation-for-secure-out-of-band-intera#url-elicitation-required-error)
+
 - SSE Polling via Server-side Disconnect
 
   When our `auth-server` completes the re-auth, it should notify `mcpgw` (not `registry`) that
