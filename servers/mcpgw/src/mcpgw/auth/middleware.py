@@ -2,9 +2,9 @@ import logging
 from datetime import datetime
 
 import jwt
-from fastapi import HTTPException
 from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware, MiddlewareContext
+from starlette.exceptions import HTTPException
 
 from ..config import settings
 
