@@ -9,7 +9,7 @@ We want to make this flow more user friendly:
 - The client then knows to show some "Please re-authorize" button in its "native" UI.
 - The user clicks the button, causing an auth URL to open in the browser.
 - The user logins, or if session cookies are in place, user is logged in automatically.
-- Identity provider redirects to the callback route of our `auth-server`. Tokens for the downstream MCP server is refreshed.
+- Identity provider redirects to the callback route of our `registry`. Tokens for the downstream MCP server is refreshed.
 - Ideally, the focus should _automatically_ go back to the user's IDE app from the browser.
   The IDE then _automatically_ retries the last failed tool call, which succeeds this time.
 - If the last point cannot be done, bottom line is that the user, after seeing that re-auth succeeds,
@@ -38,8 +38,8 @@ The 2025-11-25 MCP spec introduced the following important changes.
 
 - SSE Polling via Server-side Disconnect
 
-  When our `auth-server` completes the re-auth, it should notify `mcpgw` (not `registry`) that
-  "I'm done for this `elicitation_id`". `mcpgw` then sends a `notifications/elicitation/complete` SSE to the client,
+  When our `registry` completes the re-auth, it should notify `mcpgw` that "I'm done for this `elicitation_id`".
+  `mcpgw` then sends a `notifications/elicitation/complete` SSE to the client,
   this is how the MCP client knows that the re-auth is complete and it can automatically retry the last tool call.
   However, this is an optional feature for now because there are easier ways to notify mainstream agents (Claude, Cursor, VS Code),
   and users of other agents can manually re-focus on their IDE and click some "Retry" button.
@@ -89,6 +89,9 @@ The 2025-11-25 MCP spec introduced the following important changes.
 
 ## High-level flow
 
+- `servers/mcpgw` is the only workspace member that relies on FastMCP. We upgrade FastMCP to v3 first while it's still small.
+  FastMCP v3 makes coding with Elicitation, SSE and `Mcp-Session-Id` much easier.
+
 - In `mcpgw`, once the `call_registry_api` call returns a 401 _due to invalid token_, we start the following flow.
 
 - Check the `request_context` to see if the MCP client supports URL mode elicitation.
@@ -110,8 +113,8 @@ The 2025-11-25 MCP spec introduced the following important changes.
   ```
 
 - If elicitation is supported, simply raise an `UrlElicitationRequiredError`.
-  Note that the auth URL should have a `state` parameter that at least contains the `elicitation_id`,
-  which is needed in the success page returned by the callback route of our `auth-server`.
+  Note that the `redirect_uri` portion of the auth URL should have a `state` parameter that at least contains the `elicitation_id`,
+  so that our `registry` service, upon receiving such a callback, knows which elicitation ID it is for.
   The `elicitation_id` is simply a unique ID (e.g. UUID) that identifies the elicitation.
   Our `mcpgw` stores the mapping from `elicitation_id` to `session_id` in our Redis, so that we know which client the `elicitation_id` is for.
   The MCP client maps `elicitation_id` to the last failed tool call, so it knows what to retry when re-auth completes.
@@ -133,42 +136,14 @@ The 2025-11-25 MCP spec introduced the following important changes.
 
 - The MCP client and Agentic IDE now know to ask user to open the auth URL in browser.
 
-- Once our `auth-server` succeeds with the OAuth callback, it should return a "Universal Success Page" with the following simple JS script embedded.
-  The script uses some specific protocols to communicate with Claude, Cursor and VS Code, letting them know that the elicitation is done
-  and they are free to retry. For other less mainstream agent, the user might have to manually refocus on the app and click some "Retry" button.
-
-  ```javascript
-  <script>
-    // The `auth-server` needs `elicitation_id` to fill in the placeholder `{{id}}`.
-    // That's why we need `elicitation_id` in the `state` parameter.
-    const eid = "{{id}}";
-    // 1. Signal any IDE that opened this as a popup/iframe (VS Code/Cursor)
-    if (window.opener) window.opener.postMessage({ type: "mcp:elicitation_complete", elicitation_id: eid }, "*");
-
-    // 2. Trigger Deep Links for Desktop Apps (Claude/Cursor/VS Code)
-    const protocols = ["cursor", "claude-desktop", "vscode"];
-    protocols.forEach(p => {
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = `${p}://mcp-auth-complete?elicitation_id=${eid}`;
-      document.body.appendChild(iframe);
-    });
-  </script>
-
-  <div style="text-align: center; font-family: sans-serif; margin-top: 50px;">
-    <h2>Authorization Successful</h2>
-    <p>You can now close this window and return to your AI Agent.</p>
-    <button onclick="window.close()" style="padding: 10px 20px; cursor: pointer;">Close Tab</button>
-  </div>
-  ```
-
-- Later, we can implement the `notifications/elicitation/complete` SSE properly, so that all elicitation-capable clients
-  can automatically refocus and retry. Maybe we should do this after migrating to FastMCP v3.
-  This SSE implementation requires our using the pub-sub feature of Redis, so that `auth-server` can tell `mcpgw`
+- Once our `registry` successfully responds to the OAuth callback, it should notify `mcpgw` that this `elicitation_id` is done.
+  Then `mcpgw` sends the `notifications/elicitation/complete` SSE to the client. This way, any MCP client properly
+  implemented according to the 2025-11-25 MCP spec will automatically retry the last tool call without needing the user
+  to click any "Retry" button. This implementation requires our using the pub-sub feature of Redis, so that `registry` can tell `mcpgw`
   that a certain elicitation is done. If also requires saving the `elicitation_id` to `session_id` mapping in Redis,
   so that `mcpgw` can look up the `session_id` for the `elicitation_id` before sending the SSE.
   This also requires starting the MCP server in `mcpgw` via `asyncio` and `mcp.run_async`, because before the MCP server starts up,
-  we need to create an `asyncio` task that listens to a Redis channel for "elicitation-complete" events from the `auth-server`.
+  we need to create an `asyncio` task that listens to a Redis channel for "elicitation-complete" events from the `registry`.
 
   ```python
   import asyncio
@@ -177,7 +152,7 @@ The 2025-11-25 MCP spec introduced the following important changes.
   mcp = FastMCP("mcpgw")
 
   async def redis_listener():
-      """Listens for 'elicitation-complete' signals from the auth-server."""
+      """Listens for 'elicitation-complete' signals from the registry."""
       print("Post-auth listener started...")
       # ... your Redis Pub/Sub logic ...
       # When a message arrives, use mcp.notify_elicitation_complete(id)
@@ -232,12 +207,3 @@ The 2025-11-25 MCP spec introduced the following important changes.
           }
       )
   ```
-
-## Summary
-
-We use a phased approach.
-
-- First use "URL mode elicitation" and "Universal Success Page" so that at least mainstream agents such as Claude, Cursor and VS Code all work well.
-
-- Then add the `notifications/elicitation/complete` SSE implementation later, which is the recommended approach by the 2025-11-25 MCP spec,
-  and we have a plan for SSE anyway.
