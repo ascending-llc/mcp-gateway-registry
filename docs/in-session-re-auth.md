@@ -19,7 +19,7 @@ We want to make this flow more user friendly:
 
 The 2025-11-25 MCP spec, a.k.a "Anniversary Release", introduces several important changes to the MCP spec.
 On the other hand, `FastMCP` v2.14.5 tries its best to be compatible to the 2025-11-25 spec,
-but the ways of doing many things are still cumbersome. Eventually we need to migrate to `FastMCP` v2,
+but the ways of doing many things are still cumbersome. Eventually we need to migrate to `FastMCP` v3,
 which makes many things much easier to code.
 
 The 2025-11-25 MCP spec introduced the following important changes.
