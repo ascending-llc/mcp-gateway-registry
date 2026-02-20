@@ -240,16 +240,126 @@ class TestMCPOAuthService:
 
     @pytest.mark.asyncio
     async def test_initiate_oauth_flow_no_oauth_config(self, oauth_service, mock_server):
-        """Test initiate_oauth_flow when OAuth configuration is missing"""
-
+        """Test initiate_oauth_flow when OAuth configuration is missing (no DCR)"""
         user_id = "test_user"
-        mock_server.config = {}  # No OAuth config
+        mock_server.config = {}  # No OAuth config and no oauthMetadata
 
         flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(user_id, mock_server)
 
         assert flow_id is None
         assert auth_url is None
-        assert "OAuth configuration not found" in error
+        assert "requires either client_id in oauth config or oauthMetadata for DCR" in error
+
+    @pytest.mark.asyncio
+    async def test_initiate_oauth_flow_dcr_success(self, oauth_service, mock_server):
+        """Test successful OAuth flow initiation with DCR"""
+        user_id = "test_user"
+
+        # Mock server with DCR support (no client_id, but has oauthMetadata)
+        mock_server.config = {
+            "oauth": {},  # No client_id
+            "oauthMetadata": {
+                "issuer": "https://example.com",
+                "authorization_endpoint": "https://example.com/oauth/authorize",
+                "token_endpoint": "https://example.com/oauth/token",
+                "registration_endpoint": "https://example.com/oauth/register",
+                "scopes_supported": ["read", "write"],
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+            },
+        }
+
+        # Mock DCR registration
+        from registry.models.oauth_models import OAuthClientInformation
+
+        mock_client_info = OAuthClientInformation(
+            client_id="dcr_registered_client_123",
+            client_secret="dcr_secret_abc",
+            redirect_uris=["https://registry.example.com/api/v1/mcp/test_server/oauth/callback"],
+            scope="read write",
+        )
+        oauth_service.oauth_client.register_client = AsyncMock(return_value=mock_client_info)
+
+        # Mock token service
+        with patch("registry.services.oauth.oauth_service.token_service") as mock_token_service:
+            mock_token_service.store_oauth_client_credentials = AsyncMock()
+
+            # Mock flow manager methods
+            oauth_service.flow_manager.generate_flow_id = Mock(return_value="test_flow_id")
+            mock_metadata = Mock()
+            mock_metadata.client_info = mock_client_info
+            mock_metadata.state = "test_flow_id##security_token"
+            oauth_service.flow_manager.create_flow_metadata = Mock(return_value=mock_metadata)
+            oauth_service.flow_manager.create_flow = Mock(return_value=Mock())
+
+            # Mock authorization URL builder
+            oauth_service.oauth_client.build_authorization_url = AsyncMock(
+                return_value="https://example.com/auth?state=test&client_id=dcr_registered_client_123"
+            )
+
+            flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(user_id, mock_server)
+
+            # Verify DCR was called
+            oauth_service.oauth_client.register_client.assert_awaited_once()
+
+            # Verify credentials were stored
+            mock_token_service.store_oauth_client_credentials.assert_awaited_once()
+
+            # Verify flow was created
+            assert flow_id == "test_flow_id"
+            assert auth_url is not None
+            assert "dcr_registered_client_123" in auth_url
+            assert error is None
+
+    @pytest.mark.asyncio
+    async def test_initiate_oauth_flow_dcr_no_registration_endpoint(self, oauth_service, mock_server):
+        """Test OAuth flow fails when DCR needed but no registration_endpoint"""
+        user_id = "test_user"
+
+        # Mock server with oauthMetadata but no registration_endpoint
+        mock_server.config = {
+            "oauth": {},  # No client_id
+            "oauthMetadata": {
+                "issuer": "https://example.com",
+                "authorization_endpoint": "https://example.com/oauth/authorize",
+                "token_endpoint": "https://example.com/oauth/token",
+                # No registration_endpoint
+            },
+        }
+
+        flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(user_id, mock_server)
+
+        assert flow_id is None
+        assert auth_url is None
+        assert "requires client_id or dynamic client registration support" in error
+
+    @pytest.mark.asyncio
+    async def test_initiate_oauth_flow_dcr_registration_fails(self, oauth_service, mock_server):
+        """Test OAuth flow fails when DCR registration fails"""
+        user_id = "test_user"
+
+        # Mock server with DCR support
+        mock_server.config = {
+            "oauth": {},
+            "oauthMetadata": {
+                "issuer": "https://example.com",
+                "authorization_endpoint": "https://example.com/oauth/authorize",
+                "token_endpoint": "https://example.com/oauth/token",
+                "registration_endpoint": "https://example.com/oauth/register",
+            },
+        }
+
+        # Mock DCR registration failure
+        import httpx
+
+        oauth_service.oauth_client.register_client = AsyncMock(
+            side_effect=httpx.HTTPError("Client registration failed: 400")
+        )
+
+        flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(user_id, mock_server)
+
+        assert flow_id is None
+        assert auth_url is None
+        assert "Dynamic client registration failed" in error
 
     # Tests for complete_oauth_flow method
     @pytest.mark.asyncio
@@ -366,7 +476,8 @@ class TestMCPOAuthService:
         mock_tokens.refresh_token = "new_refresh_token"  # Simulate token rotation
         oauth_service.oauth_client.refresh_tokens = AsyncMock(return_value=mock_tokens)
 
-        # Mock token service
+        # Mock token service methods
+        token_service.get_oauth_client_credentials = AsyncMock(return_value=(None, None))
         token_service.store_oauth_tokens = AsyncMock()
 
         success, error = await oauth_service.refresh_token(
@@ -392,6 +503,9 @@ class TestMCPOAuthService:
 
         # Mock HTTP client to return None (failure)
         oauth_service.oauth_client.refresh_tokens = AsyncMock(return_value=None)
+
+        # Mock token service
+        token_service.get_oauth_client_credentials = AsyncMock(return_value=(None, None))
 
         success, error = await oauth_service.refresh_token(
             user_id, server_id, server_name, refresh_token_value, oauth_config

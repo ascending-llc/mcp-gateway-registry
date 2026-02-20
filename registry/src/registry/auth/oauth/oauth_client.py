@@ -4,10 +4,19 @@ import logging
 import secrets
 from typing import Any
 
+import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
-from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthTokens
+from registry.models.oauth_models import (
+    MCPOAuthFlowMetadata,
+    OAuthClientInformation,
+    OAuthMetadata,
+    OAuthProtectedResourceMetadata,
+    OAuthTokens,
+)
+
+from ...core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -240,3 +249,159 @@ class OAuthClient:
         for client in self._clients.values():
             await client.aclose()
         self._clients.clear()
+
+    async def register_client(
+        self,
+        server_url: str,
+        metadata: OAuthMetadata,
+        resource_metadata: OAuthProtectedResourceMetadata | None = None,
+        redirect_uri: str | None = None,
+        token_exchange_method: str | None = None,
+    ) -> OAuthClientInformation:
+        """
+        Dynamically register OAuth client (RFC 7591).
+
+        Args:
+            server_url: Authorization server URL
+            metadata: OAuth server metadata
+            resource_metadata: Protected resource metadata (optional)
+            redirect_uri: Redirect URI for callbacks
+            token_exchange_method: Preferred token endpoint auth method
+
+        Returns:
+            OAuthClientInformation with registered client_id and client_secret
+
+        Raises:
+            ValueError: If registration_endpoint is not available
+            httpx.HTTPError: If registration request fails
+        """
+        if not metadata.registration_endpoint:
+            raise ValueError(f"Server {server_url} does not support dynamic client registration")
+
+        logger.info(f"[DCR] Registering OAuth client for {server_url}")
+
+        # Build client metadata
+        client_metadata = {
+            "client_name": settings.registry_app_name,
+            "redirect_uris": [redirect_uri] if redirect_uri else [],
+            "grant_types": self._negotiate_grant_types(metadata),
+            "response_types": metadata.response_types_supported or ["code"],
+            "token_endpoint_auth_method": self._negotiate_auth_method(metadata, token_exchange_method),
+            "scope": self._build_scope(metadata, resource_metadata),
+        }
+
+        logger.debug(f"[DCR] Client metadata: {client_metadata}")
+
+        # Make registration request
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+
+            response = await client.post(
+                metadata.registration_endpoint,
+                json=client_metadata,
+                headers=headers,
+            )
+
+            if not response.is_success:
+                error_detail = response.text
+                logger.error(f"[DCR] Registration failed: {response.status_code} - {error_detail}")
+                raise httpx.HTTPError(f"Client registration failed: {response.status_code} - {error_detail}")
+
+        # Parse response
+        registration_response = response.json()
+
+        client_info = OAuthClientInformation(
+            client_id=registration_response["client_id"],
+            client_secret=registration_response.get("client_secret"),
+            redirect_uris=registration_response.get("redirect_uris", [redirect_uri] if redirect_uri else []),
+            scope=registration_response.get("scope", client_metadata.get("scope")),
+            grant_types=registration_response.get("grant_types", client_metadata["grant_types"]),
+            token_endpoint_auth_method=registration_response.get(
+                "token_endpoint_auth_method", client_metadata["token_endpoint_auth_method"]
+            ),
+        )
+
+        logger.info(
+            f"[DCR] Client registered successfully: client_id={client_info.client_id}, "
+            f"has_secret={bool(client_info.client_secret)}"
+        )
+
+        return client_info
+
+    def _negotiate_grant_types(self, metadata: OAuthMetadata) -> list[str]:
+        """
+        Negotiate grant types based on server support.
+
+        Args:
+            metadata: OAuth server metadata
+
+        Returns:
+            List of grant types to request
+        """
+        supported_grants = metadata.grant_types_supported or ["authorization_code"]
+        requested_grants = ["authorization_code"]
+
+        if "refresh_token" in supported_grants:
+            requested_grants.append("refresh_token")
+            logger.debug("[DCR] Server supports refresh_token grant")
+
+        return requested_grants
+
+    def _negotiate_auth_method(self, metadata: OAuthMetadata, preferred_method: str | None = None) -> str:
+        """
+        Negotiate token endpoint authentication method.
+
+        Priority:
+        1. Use preferred_method if specified and supported
+        2. Prefer client_secret_basic (most secure)
+        3. Fallback to client_secret_post
+        4. Last resort: none (public client)
+
+        Args:
+            metadata: OAuth server metadata
+            preferred_method: Preferred authentication method
+
+        Returns:
+            Token endpoint authentication method
+        """
+        supported = metadata.token_endpoint_auth_methods_supported or []
+
+        if preferred_method and preferred_method in supported:
+            return preferred_method
+
+        if "client_secret_basic" in supported:
+            return "client_secret_basic"
+        if "client_secret_post" in supported:
+            return "client_secret_post"
+        if "none" in supported:
+            return "none"
+
+        # Default if server doesn't advertise methods
+        return "client_secret_basic"
+
+    def _build_scope(
+        self, metadata: OAuthMetadata, resource_metadata: OAuthProtectedResourceMetadata | None
+    ) -> str | None:
+        """
+        Build scope string from metadata.
+
+        Args:
+            metadata: OAuth server metadata
+            resource_metadata: Protected resource metadata (optional)
+
+        Returns:
+            Space-separated scope string or None
+        """
+        available_scopes = (
+            resource_metadata.scopes_supported
+            if resource_metadata and resource_metadata.scopes_supported
+            else metadata.scopes_supported
+        )
+
+        if available_scopes:
+            return " ".join(available_scopes)
+
+        return None

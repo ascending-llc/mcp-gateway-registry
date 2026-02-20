@@ -3,7 +3,10 @@ from typing import Any
 
 from registry.auth.oauth import FlowStateManager, get_flow_state_manager, parse_scope
 from registry.auth.oauth.oauth_client import OAuthClient
-from registry.models.oauth_models import OAuthTokens
+from registry.auth.oauth.oauth_utils import get_default_redirect_uri
+from registry.models.oauth_models import (
+    OAuthTokens,
+)
 from registry.schemas.enums import OAuthFlowStatus
 from registry.services.oauth.token_service import token_service
 from registry.utils.crypto_utils import decrypt_auth_fields
@@ -99,7 +102,18 @@ class MCPOAuthService:
         self, user_id: str, server: MCPServerDocument
     ) -> tuple[str | None, str | None, str | None]:
         """
-        Initialize OAuth flow
+        Initialize OAuth flow with automatic DCR support.
+
+        Flow:
+        1. Check if client_id exists in config
+           - If YES: Use static credentials (existing behavior)
+           - If NO: Check for registration_endpoint
+             - If available: Trigger DCR to obtain credentials
+             - If not available: Return error
+
+        2. Generate PKCE parameters
+        3. Create and store OAuth flow
+        4. Build authorization URL
 
         Notes: MCPOAuthHandler.initiateOAuthFlow()
         """
@@ -107,16 +121,123 @@ class MCPOAuthService:
             server_id = str(server.id)
             logger.info(f"Starting OAuth flow for user={user_id}, server={server_id}")
 
-            # Get OAuth config, decrypt, and merge with discovered metadata
-            oauth_config = server.config.get("oauth")
-            if not oauth_config:
-                return None, None, f"Server '{server.serverName}' OAuth configuration not found"
-
-            oauth_config = decrypt_auth_fields(oauth_config)
+            oauth_config = server.config.get("oauth") or {}  # Default to empty dict for DCR-only servers
             oauth_metadata = server.config.get("oauthMetadata")
+            needs_dcr = not oauth_config.get("client_id")
+            if needs_dcr:
+                logger.info(f"[DCR] No client_id found for {server.serverName}, checking for DCR support")
+                if not oauth_metadata:
+                    logger.error(f"[DCR] No oauthMetadata found for {server.serverName}")
+                    return (
+                        None,
+                        None,
+                        f"Server '{server.serverName}' requires either client_id in oauth config or oauthMetadata for DCR",
+                    )
+                registration_endpoint = oauth_metadata.get("registration_endpoint")
+                if not registration_endpoint:
+                    logger.error(f"[DCR] No registration_endpoint in oauthMetadata for {server.serverName}")
+                    return (
+                        None,
+                        None,
+                        f"Server '{server.serverName}' requires client_id or dynamic client registration support",
+                    )
+
+                # Merge oauth_metadata endpoints first (needed for DCR)
+                temp_config = self._merge_oauth_config(oauth_config, oauth_metadata)
+
+                # Trigger DCR to obtain client credentials
+                logger.info(f"[DCR] Initiating dynamic client registration for {server.serverName}")
+
+                try:
+                    # Build OAuth metadata for DCR
+                    from registry.models.oauth_models import OAuthMetadata, OAuthProtectedResourceMetadata
+
+                    metadata_obj = OAuthMetadata(
+                        issuer=oauth_metadata.get("issuer"),
+                        authorization_endpoint=temp_config.get("authorization_url"),
+                        token_endpoint=temp_config.get("token_url"),
+                        registration_endpoint=registration_endpoint,
+                        scopes_supported=oauth_metadata.get("scopes_supported"),
+                        response_types_supported=oauth_metadata.get("response_types_supported"),
+                        grant_types_supported=oauth_metadata.get("grant_types_supported"),
+                        token_endpoint_auth_methods_supported=oauth_metadata.get(
+                            "token_endpoint_auth_methods_supported"
+                        ),
+                        code_challenge_methods_supported=oauth_metadata.get("code_challenge_methods_supported"),
+                    )
+
+                    # Resource metadata (if available)
+                    resource_metadata = None
+                    if oauth_metadata.get("resource"):
+                        resource_metadata = OAuthProtectedResourceMetadata(
+                            resource=oauth_metadata.get("resource"),
+                            authorization_servers=oauth_metadata.get("authorization_servers"),
+                            scopes_supported=oauth_metadata.get("scopes_supported"),
+                        )
+
+                    # Generate redirect_uri (use configured or default)
+                    redirect_uri = oauth_config.get("redirect_uri") or get_default_redirect_uri(path=server.path)
+
+                    # Call DCR endpoint
+                    client_info = await self.oauth_client.register_client(
+                        server_url=server.url if hasattr(server, "url") else server.path,
+                        metadata=metadata_obj,
+                        resource_metadata=resource_metadata,
+                        redirect_uri=redirect_uri,
+                        token_exchange_method=oauth_config.get("token_endpoint_auth_method"),
+                    )
+
+                    logger.info(
+                        f"[DCR] Successfully registered client for {server.serverName}: "
+                        f"client_id={client_info.client_id}"
+                    )
+
+                    # Store DCR credentials immediately for future use
+                    metadata_dict = {
+                        "issuer": oauth_metadata.get("issuer"),
+                        "authorization_endpoint": temp_config.get("authorization_url"),
+                        "token_endpoint": temp_config.get("token_url"),
+                        "registration_endpoint": registration_endpoint,
+                        "scopes_supported": oauth_metadata.get("scopes_supported", []),
+                        "grant_types_supported": oauth_metadata.get(
+                            "grant_types_supported", ["authorization_code", "refresh_token"]
+                        ),
+                        "token_endpoint_auth_methods_supported": oauth_metadata.get(
+                            "token_endpoint_auth_methods_supported", []
+                        ),
+                        "code_challenge_methods_supported": oauth_metadata.get("code_challenge_methods_supported", []),
+                        "response_types_supported": oauth_metadata.get("response_types_supported", ["code"]),
+                    }
+
+                    await token_service.store_oauth_client_credentials(
+                        user_id=user_id,
+                        service_name=server.serverName,
+                        client_info=client_info,
+                        metadata=metadata_dict,
+                    )
+                    logger.info(f"[DCR] Stored client credentials for {server.serverName}")
+
+                    # Build oauth_config from DCR results (merge with existing config if any)
+                    oauth_config = {
+                        **oauth_config,  # Preserve any existing settings (scope, redirect_uri, etc.)
+                        "client_id": client_info.client_id,
+                        "client_secret": client_info.client_secret,
+                    }
+                    if client_info.redirect_uris:
+                        oauth_config["redirect_uri"] = client_info.redirect_uris[0]
+                    if client_info.scope:
+                        oauth_config["scope"] = client_info.scope
+
+                except Exception as dcr_error:
+                    logger.error(f"[DCR] Failed to register client for {server.serverName}: {dcr_error}", exc_info=True)
+                    return None, None, f"Dynamic client registration failed: {str(dcr_error)}"
+            else:
+                logger.debug(f"[OAuth] Using static credentials for {server.serverName}")
+                oauth_config = decrypt_auth_fields(oauth_config)
+
             oauth_config = self._merge_oauth_config(oauth_config, oauth_metadata)
 
-            # Debug logs: verify OAuth configuration
+            # Debug logs: verify final OAuth configuration
             logger.debug(f"OAuth config keys: {list(oauth_config.keys())}")
             logger.debug(f"authorization_url: {oauth_config.get('authorization_url')}")
             logger.debug(f"token_url: {oauth_config.get('token_url')}")
@@ -213,18 +334,41 @@ class MCPOAuthService:
             # Update flow status
             self.flow_manager.complete_flow(flow_id, tokens)
 
-            # Persist tokens to database with OAuth metadata
+            # Persist OAuth metadata
             metadata = {}
             if flow.metadata and flow.metadata.metadata:
                 metadata = {
+                    "issuer": flow.metadata.metadata.issuer,
                     "authorization_endpoint": flow.metadata.metadata.authorization_endpoint,
                     "token_endpoint": flow.metadata.metadata.token_endpoint,
-                    "issuer": flow.metadata.metadata.issuer,
+                    "registration_endpoint": flow.metadata.metadata.registration_endpoint,
                     "scopes_supported": flow.metadata.metadata.scopes_supported or [],
-                    "grant_types_supported": ["authorization_code", "refresh_token"],
-                    "response_types_supported": ["code"],
+                    "grant_types_supported": flow.metadata.metadata.grant_types_supported
+                    or [
+                        "authorization_code",
+                        "refresh_token",
+                    ],
+                    "token_endpoint_auth_methods_supported": flow.metadata.metadata.token_endpoint_auth_methods_supported
+                    or [],
+                    "code_challenge_methods_supported": flow.metadata.metadata.code_challenge_methods_supported or [],
+                    "response_types_supported": flow.metadata.metadata.response_types_supported or ["code"],
                 }
 
+            # Store client credentials separately (for DCR or static config)
+            if flow.metadata and flow.metadata.client_info:
+                try:
+                    await token_service.store_oauth_client_credentials(
+                        user_id=flow.user_id,
+                        service_name=flow.server_name,
+                        client_info=flow.metadata.client_info,
+                        metadata=metadata,
+                    )
+                    logger.info(f"Stored OAuth client credentials for {flow.user_id}/{flow.server_name}")
+                except Exception as e:
+                    logger.error(f"Failed to store client credentials: {e}", exc_info=True)
+                    # Don't fail the flow - credentials can be retrieved from config
+
+            # Store access/refresh tokens
             await token_service.store_oauth_tokens(
                 user_id=flow.user_id, service_name=flow.server_name, tokens=tokens, metadata=metadata
             )
@@ -358,12 +502,19 @@ class MCPOAuthService:
             return False, str(e)
 
     async def refresh_token(
-        self, user_id: str, server_id: str, server_name: str, refresh_token_value: str, oauth_config: dict[str, Any]
+        self,
+        user_id: str,
+        server_id: str,
+        server_name: str,
+        refresh_token_value: str,
+        oauth_config: dict[str, Any],
     ) -> tuple[bool, str | None]:
         """
-        Refresh OAuth token using provided refresh_token value
+        Refresh OAuth token with priority to stored client credentials.
 
-        Core refresh logic: exchanges refresh_token for new access_token and saves to database.
+        Priority:
+        1. Use stored client credentials from MongoDB (dynamic registration)
+        2. Fallback to oauth_config (static credentials)
 
         Args:
             user_id: User ID
@@ -377,6 +528,39 @@ class MCPOAuthService:
         """
         try:
             logger.info(f"[OAuth] Refreshing token for user={user_id}, server={server_id}")
+
+            # NEW: Try to load stored client credentials first
+            stored_client_info, stored_metadata = await token_service.get_oauth_client_credentials(
+                user_id=user_id, service_name=server_name
+            )
+
+            if stored_client_info:
+                logger.info(
+                    f"[OAuth] Using stored client credentials for token refresh "
+                    f"(client_id={stored_client_info.client_id})"
+                )
+
+                # Build oauth_config from stored credentials
+                oauth_config_for_refresh = {
+                    "client_id": stored_client_info.client_id,
+                    "client_secret": stored_client_info.client_secret,
+                    "token_url": stored_metadata.get("token_endpoint") if stored_metadata else None,
+                    "scope": stored_client_info.scope,
+                    "token_endpoint_auth_methods_supported": stored_metadata.get(
+                        "token_endpoint_auth_methods_supported"
+                    )
+                    if stored_metadata
+                    else None,
+                }
+
+                # Merge with original config (for token_url if not in stored metadata)
+                if not oauth_config_for_refresh["token_url"]:
+                    oauth_config_for_refresh["token_url"] = oauth_config.get("token_url")
+
+                # Use stored config for refresh
+                oauth_config = oauth_config_for_refresh
+            else:
+                logger.debug(f"[OAuth] No stored client credentials found for {server_name}, using config credentials")
 
             # 1. Refresh tokens via OAuth provider using Authlib
             new_tokens = await self.oauth_client.refresh_tokens(
