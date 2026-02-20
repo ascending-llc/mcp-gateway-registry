@@ -17,6 +17,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+import inflection
 from beanie import PydanticObjectId
 
 from registry_pkgs.database.decorators import get_current_session
@@ -334,16 +335,6 @@ def _convert_tool_list_to_functions(tool_list: list[dict[str, Any]], server_name
     return tool_functions
 
 
-def _calculate_requires_oauth(config: dict[str, Any]) -> bool:
-    """
-    Auto-calculate requiresOAuth based on oauth field.
-
-    Returns True if oauth exists and is not empty, False otherwise.
-    """
-    oauth_raw = config.get("oauth")
-    return bool(oauth_raw and isinstance(oauth_raw, dict) and len(oauth_raw) > 0)
-
-
 def _build_config_from_request(data: ServerCreateRequest, server_name: str = None) -> dict[str, Any]:
     """
     Build config dictionary from ServerCreateRequest
@@ -353,7 +344,6 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     Config stores MCP-specific configuration only (title, description, type, url, oauth, apiKey, etc.)
     """
     # Build MCP-specific configuration (stored in config object)
-    # Note: requiresOAuth will be auto-calculated based on oauth field at the end
     config = {
         "title": data.title,
         "description": data.description or "",
@@ -366,7 +356,7 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     if data.timeout is not None:
         config["timeout"] = data.timeout
     if data.init_timeout is not None:
-        config["initDuration"] = data.init_timeout  # Match API doc naming
+        config[inflection.camelize("init_timeout", uppercase_first_letter=False)] = data.init_timeout
     if data.server_instructions is not None:
         config["server_instructions"] = data.server_instructions
     if data.oauth is not None:
@@ -375,6 +365,8 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
         config["custom_user_vars"] = data.custom_user_vars
     if data.headers is not None:
         config["headers"] = data.headers
+    if data.requires_oauth is not None:
+        config[inflection.camelize("requires_oauth", uppercase_first_letter=False)] = data.requires_oauth
 
     # Convert tool_list to toolFunctions in OpenAI format
     if data.tool_list is not None:
@@ -403,9 +395,6 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     # Always set enabled to False during registration (regardless of frontend input)
     config["enabled"] = False
 
-    # Auto-calculate and set requiresOAuth based on oauth field
-    config["requiresOAuth"] = _calculate_requires_oauth(config)
-
     return config
 
 
@@ -424,13 +413,8 @@ def _update_config_from_request(
     # Save enabled field separately before removing it (we'll update config with it)
     enabled_value = update_dict.get("enabled")
 
-    # Check if oauth or apiKey is being updated (before removing them from update_dict)
-    # We'll use this to determine if we need to recalculate requiresOAuth
-    auth_fields_updated = "oauth" in update_dict or "apiKey" in update_dict
-
     # Remove root-level registry fields from update_dict (these are handled at root level)
     # Note: enabled is removed here but will be added to config separately
-    # Note: requiresOAuth is removed here but will be auto-calculated if oauth/apiKey is updated
     registry_fields = [
         "path",
         "tags",
@@ -438,7 +422,6 @@ def _update_config_from_request(
         "serverName",
         "num_stars",
         "enabled",
-        "requiresOAuth",  # Remove this field - will be auto-calculated based on oauth
     ]
     for field in registry_fields:
         update_dict.pop(field, None)
@@ -486,11 +469,9 @@ def _update_config_from_request(
     ]
     for key, value in update_dict.items():
         if key in mcp_config_fields and value is not None:
-            # Map init_timeout to initDuration to match API doc
-            if key == "init_timeout":
-                config["initDuration"] = value
-            else:
-                config[key] = value
+            # Convert snake_case to camelCase for config keys using inflection
+            config_key = inflection.camelize(key, uppercase_first_letter=False) if "_" in key else key
+            config[config_key] = value
 
     # Update enabled field in config if provided
     if enabled_value is not None:
@@ -510,11 +491,6 @@ def _update_config_from_request(
             config["tools"] = ", ".join(tool_names)
         else:
             config["tools"] = ""
-
-    # Only recalculate requiresOAuth if oauth or apiKey fields were updated
-    # This avoids unnecessary updates when modifying other fields
-    if auth_fields_updated:
-        config["requiresOAuth"] = _calculate_requires_oauth(config)
 
     return config
 
