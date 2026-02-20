@@ -362,6 +362,7 @@ class ServerUpdateResponse(BaseModel):
     path: str
     description: str | None = None
     headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
+    requiresOAuth: bool = Field(False, alias="requiresOAuth")
     tags: list[str] = Field(default_factory=list)
     num_tools: int = 0
     num_stars: int = 0
@@ -768,6 +769,7 @@ def convert_to_update_response(server) -> ServerUpdateResponse:
         path=server.path,
         description=config.get("description"),
         headers=config.get("headers"),
+        requiresOAuth=config.get("requiresOAuth"),
         tags=server.tags,
         num_tools=num_tools,
         num_stars=server.numStars,

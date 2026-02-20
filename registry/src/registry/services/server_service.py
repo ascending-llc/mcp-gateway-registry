@@ -24,7 +24,7 @@ from registry_pkgs.database.decorators import get_current_session
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
-from ..core.mcp_client import get_tools_from_server_with_server_info
+from ..core.mcp_client import get_oauth_metadata_from_server, get_tools_from_server_with_server_info
 from ..core.telemetry_decorators import track_tool_discovery
 from ..schemas.errors import (
     AuthenticationError,
@@ -764,14 +764,8 @@ class ServerServiceV1:
 
                 logger.info(f"Server {server.serverName} registered successfully. Tools will be fetched on-demand.")
 
-                # 3. OAuth metadata retrieval - OPTIONAL (only if oauth is configured)
-                # Check if server has OAuth configuration
-                has_oauth = data.oauth is not None
-
-                if has_oauth:
+                if data.requires_oauth:
                     logger.info(f"OAuth configuration detected for {server.serverName}, retrieving OAuth metadata...")
-
-                    from registry.core.mcp_client import get_oauth_metadata_from_server
 
                     oauth_metadata = await get_oauth_metadata_from_server(data.url)
 
@@ -858,6 +852,19 @@ class ServerServiceV1:
         # Encrypt sensitive authentication fields if they were updated
         if data.oauth is not None or data.apiKey is not None:
             updated_config = encrypt_auth_fields(updated_config)
+
+        if data.requires_oauth:
+            logger.info(f"OAuth configuration detected for {server.serverName}, retrieving OAuth metadata...")
+            oauth_metadata = await get_oauth_metadata_from_server(data.url)
+            if oauth_metadata:
+                updated_config["oauthMetadata"] = oauth_metadata
+                logger.info(f"Saved raw OAuth metadata for {server.serverName}: {json.dumps(oauth_metadata)}")
+            else:
+                # Save empty oauthMetadata if retrieval failed
+                updated_config["oauthMetadata"] = {}
+                logger.info(
+                    f"No OAuth metadata available for {server.serverName} (server may not support OAuth autodiscovery), saved empty oauthMetadata"
+                )
 
         # If toolFunctions was updated, recalculate numTools
         if "toolFunctions" in updated_config:
