@@ -98,9 +98,9 @@ def get_user_session_data(
 
         # Set defaults for traditional auth users
         if data.get("auth_method") != "oauth2":
-            # Traditional users get admin privileges via registry-admins group
-            data.setdefault("groups", ["registry-admins"])
-            data.setdefault("scopes", ["registry-admins"])
+            # Traditional users get admin privileges via registry-admin role
+            data.setdefault("groups", ["registry-admin"])
+            data.setdefault("scopes", ["registry-admin"])
 
         logger.debug(f"Session data extracted for user: {data.get('username')}")
         return data
@@ -206,7 +206,7 @@ def get_ui_permissions_for_user(user_scopes: list[str]) -> dict[str, list[str]]:
     Get UI permissions for a user based on their scopes.
 
     Args:
-        user_scopes: List of user's scopes (includes UI scope names like 'mcp-registry-admin')
+        user_scopes: List of user's scopes (includes UI scope names like 'registry-admin')
 
     Returns:
         Dict mapping UI actions to lists of services they can perform the action on
@@ -383,20 +383,16 @@ def user_can_modify_servers(user_groups: list[str], user_scopes: list[str]) -> b
         True if user can modify servers, False otherwise
     """
     # Admin users can always modify
-    if "mcp-registry-admin" in user_groups:
+    if "registry-admin" in user_scopes or "registry-admin" in user_groups:
         return True
 
-    # Users with unrestricted execute access can modify
-    if "mcp-servers-unrestricted/execute" in user_scopes:
+    # Power users and register users can modify servers; read-only cannot
+    if "registry-power-user" in user_scopes or "registry-power-user" in user_groups:
+        return True
+    if "register-user" in user_scopes or "register-user" in user_groups:
         return True
 
-    # mcp-registry-user group cannot modify servers
-    if "mcp-registry-user" in user_groups and "mcp-registry-admin" not in user_groups:
-        return False
-
-    # For other cases, check if they have any execute permissions
-    execute_scopes = [scope for scope in user_scopes if "/execute" in scope]
-    return len(execute_scopes) > 0
+    return False
 
 
 def user_can_access_server(server_name: str, user_scopes: list[str]) -> bool:
@@ -460,14 +456,14 @@ def enhanced_auth(
                 f"OAuth2 user {username} has no groups! This user may not have proper group assignments in Cognito."
             )
     else:
-        # Traditional users dynamically map to admin via registry-admins group
+        # Traditional users dynamically map to admin via registry-admin group
         if not groups:
-            groups = ["registry-admins"]
+            groups = ["registry-admin"]
         # Map traditional admin groups to scopes dynamically
         scopes = map_cognito_groups_to_scopes(groups)
         if not scopes:
             # Fallback for traditional users if no mapping exists
-            scopes = ["registry-admins"]
+            scopes = ["registry-admin"]
         logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
 
     # Get UI permissions
@@ -551,12 +547,17 @@ def nginx_proxied_auth(
         groups = []
         if x_auth_method in ["keycloak", "entra", "cognito"]:
             # User authenticated via OAuth2 JWT (Keycloak, Entra ID, or Cognito)
-            # Scopes already contain mapped permissions
-            # Check if user has admin scopes
-            if "mcp-servers-unrestricted/read" in scopes and "mcp-servers-unrestricted/execute" in scopes:
-                groups = ["mcp-registry-admin"]
+            # Scopes already contain mapped permissions; infer role-like groups from scopes
+            if "registry-admin" in scopes:
+                groups = ["registry-admin"]
+            elif "registry-power-user" in scopes:
+                groups = ["registry-power-user"]
+            elif "register-user" in scopes:
+                groups = ["register-user"]
+            elif "register-read-only" in scopes:
+                groups = ["register-read-only"]
             else:
-                groups = ["mcp-registry-user"]
+                groups = []
 
         logger.info(f"nginx-proxied auth for user: {username}, method: {x_auth_method}, scopes: {scopes}")
 
@@ -625,16 +626,16 @@ def create_session_cookie(
         if username != settings.admin_user:
             logger.error(f"Security violation: Attempted to create traditional session for non-admin user: {username}")
             raise ValueError("Traditional authentication only supports the configured admin user")
-        groups = ["mcp-registry-admin"]
+        groups = ["registry-admin"]
 
     session_data = {"username": username, "auth_method": auth_method, "provider": provider, "groups": groups or []}
 
     # For traditional (local) auth users, include groups and scopes in the session cookie
     # This ensures the auth server can validate access without needing to query external systems
-    # Use registry-admins group which has wildcard access to all servers and agents
+    # Use registry-admin group which has wildcard access to all servers and agents
     if auth_method == "traditional":
-        session_data["groups"] = ["registry-admins"]
-        session_data["scopes"] = ["registry-admins"]
+        session_data["groups"] = ["registry-admin"]
+        session_data["scopes"] = ["registry-admin"]
 
     return signer.dumps(session_data)
 

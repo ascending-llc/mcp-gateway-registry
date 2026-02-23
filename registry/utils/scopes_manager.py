@@ -108,8 +108,8 @@ async def add_server_to_scopes(server_path: str, server_name: str, tools: list[s
         # Create the server entry
         server_entry = _create_server_entry(server_path, tools)
 
-        # Add to unrestricted scope sections only
-        sections = ["mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"]
+        # Add to admin scope section only (role-based scopes)
+        sections = ["registry-admin"]
 
         modified = False
         for section in sections:
@@ -162,12 +162,12 @@ async def remove_server_from_scopes(server_path: str) -> bool:
         # Remove leading slash from server path
         server_name = server_path.lstrip("/")
 
-        # Remove from all standard scope sections
+        # Remove from all role-based scope sections
         sections = [
-            "mcp-servers-unrestricted/read",
-            "mcp-servers-unrestricted/execute",
-            "mcp-servers-restricted/read",
-            "mcp-servers-restricted/execute",
+            "registry-admin",
+            "registry-power-user",
+            "register-user",
+            "register-read-only",
         ]
 
         modified = False

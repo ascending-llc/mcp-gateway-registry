@@ -173,7 +173,7 @@ def admin_session_cookie():
 
     return create_test_jwt_token(
         username=settings.admin_user,
-        groups=["registry-admins"],
+        groups=["registry-admin"],
         role="admin",
         auth_method="traditional",
         provider="local",
@@ -187,8 +187,8 @@ def mock_auth_middleware():
     test_user_context = {
         "username": "testadmin",
         "user_id": "test-admin-id",
-        "groups": ["registry-admins"],
-        "scopes": ["registry-admins"],
+        "groups": ["registry-admin"],
+        "scopes": ["registry-admin"],
         "role": "admin",
         "is_admin": True,
         "auth_method": "test",
@@ -222,7 +222,7 @@ def user_session_cookie():
     """Create a valid user session cookie (JWT access token) for testing."""
     return create_test_jwt_token(
         username="testuser",
-        groups=["mcp-registry-user"],
+        groups=["register-user"],
         role="user",
         auth_method="oauth2",
         provider="keycloak",
@@ -268,8 +268,8 @@ def mock_authenticated_user():
     user_context = {
         "username": "testadmin",
         "user_id": "testadmin",
-        "groups": ["registry-admins"],
-        "scopes": ["registry-admins"],
+        "groups": ["registry-admin"],
+        "scopes": ["registry-admin"],
         "is_admin": True,
         "auth_method": "traditional",
         "provider": "local",

@@ -71,7 +71,7 @@ def check_admin_permission(user_context: dict) -> bool:
         True if user has admin scope, False otherwise
     """
     scopes = user_context.get("scopes", [])
-    return "mcp-registry-admin" in scopes
+    return "registry-admin" in scopes
 
 
 def apply_connection_status_to_server(

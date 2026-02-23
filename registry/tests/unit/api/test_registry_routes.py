@@ -25,11 +25,11 @@ def mock_enhanced_auth_admin():
     def _mock_auth(session=None):
         return {
             "username": "testadmin",
-            "groups": ["mcp-registry-admin"],
+            "groups": ["registry-admin"],
             "scopes": [
-                "mcp-registry-admin",
-                "mcp-servers-unrestricted/read",
-                "mcp-servers-unrestricted/execute",
+                "registry-admin",
+                "registry-admin",
+                "registry-admin",
             ],
             "auth_method": "traditional",
             "provider": "local",
@@ -54,7 +54,7 @@ def mock_enhanced_auth_user():
     def _mock_auth(session=None):
         return {
             "username": "testuser",
-            "groups": ["mcp-registry-user"],
+            "groups": ["register-user"],
             "scopes": ["mcp-servers-restricted/read"],
             "auth_method": "oauth2",
             "provider": "cognito",
@@ -74,8 +74,8 @@ def admin_session_cookie():
     from registry.auth.dependencies import map_cognito_groups_to_scopes
     from registry.utils.crypto_utils import generate_access_token
 
-    groups = ["registry-admins"]
-    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+    groups = ["registry-admin"]
+    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admin"]
 
     return generate_access_token(
         user_id="test-admin-id",

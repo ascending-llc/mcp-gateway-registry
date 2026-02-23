@@ -26,9 +26,9 @@ def mock_nginx_proxied_auth_admin():
     def _mock_auth(session=None):
         return {
             "username": "testadmin",
-            "groups": ["a2a-registry-admin"],
+            "groups": ["registry-admin"],
             "scopes": [
-                "a2a-registry-admin",
+                "registry-admin",
                 "a2a-agents-unrestricted/read",
             ],
             "auth_method": "traditional",
@@ -97,8 +97,8 @@ def admin_session_cookie():
     from registry.auth.dependencies import map_cognito_groups_to_scopes
     from registry.utils.crypto_utils import generate_access_token
 
-    groups = ["registry-admins"]
-    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+    groups = ["registry-admin"]
+    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admin"]
 
     return generate_access_token(
         user_id="test-admin-id",

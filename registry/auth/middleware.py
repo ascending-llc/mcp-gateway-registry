@@ -226,8 +226,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Return user context for admin user
             return self._build_user_context(
                 username=username,
-                groups=["mcp-registry-admin"],
-                scopes=["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
+                groups=["registry-admin"],
+                scopes=["registry-admin"],
                 auth_method="basic",
                 provider="basic",
                 auth_source="basic_auth",
@@ -491,8 +491,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return None
             # Sets the default value for traditionally authenticated users (from the original get_user_session_data).
             if data.get("auth_method") != "oauth2":
-                data.setdefault("groups", ["mcp-registry-admin"])
-                data.setdefault("scopes", ["mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"])
+                data.setdefault("groups", ["registry-admin"])
+                data.setdefault("scopes", ["registry-admin"])
             return data
 
         except SignatureExpired as e:
