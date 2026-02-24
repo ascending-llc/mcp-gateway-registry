@@ -4,7 +4,8 @@ import pytest
 from beanie import PydanticObjectId
 
 from registry.api.v1.server.server_routes import create_server
-from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
+from registry_pkgs.models._generated import PrincipalType, ResourceType
+from registry_pkgs.models.enums import RoleBits
 from registry.schemas.server_api_schemas import ServerCreateRequest
 
 

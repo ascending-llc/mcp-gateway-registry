@@ -15,7 +15,8 @@ from fastapi import status as http_status
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
-from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
+from registry_pkgs.models._generated import PrincipalType, ResourceType
+from registry_pkgs.models.enums import RoleBits
 from registry.core.mcp_client import perform_health_check
 from registry.core.telemetry_decorators import track_registry_operation
 from registry.schemas.enums import ConnectionState

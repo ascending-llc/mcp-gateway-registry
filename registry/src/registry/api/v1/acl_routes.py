@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
 
 from registry.auth.dependencies import CurrentUser
-from registry.core.acl_constants import PermissionBits, PrincipalType
+from registry_pkgs.models._generated import PrincipalType
+from registry_pkgs.models.enums import PermissionBits
 from registry.schemas.acl_schema import (
     PermissionPrincipalOut,
     UpdateResourcePermissionsRequest,
