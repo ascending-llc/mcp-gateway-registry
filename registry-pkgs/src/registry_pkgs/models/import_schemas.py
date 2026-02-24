@@ -6,23 +6,23 @@ Supports two modes: Local (read from local files) and Remote (download from GitH
 
 Usage:
     # Local mode - convert from local JSON files
-    python import-schemas.py --mode local --input-dir DIR --files FILE1 FILE2 ... --output-dir DIR
+    python import_schemas.py --mode local --input-dir DIR --files FILE1 FILE2 ... --output-dir DIR
 
     # Remote mode - download from GitHub Release
-    python import-schemas.py --mode remote --tag VERSION --files FILE1 FILE2 ... --output-dir DIR
+    python import_schemas.py --mode remote --tag VERSION --files FILE1 FILE2 ... --output-dir DIR
 
 Examples:
     # Local mode - convert from local directory (recommended for development)
-    python import-schemas.py --mode local --input-dir ./dist/json-schemas --files user.json token.json --output-dir ./models
+    python import_schemas.py --mode local --input-dir ./dist/json-schemas --files user.json token.json --output-dir ./models
 
     # Local mode - batch conversion
-    python import-schemas.py --mode local --input-dir ./dist/json-schemas --files user.json token.json mcpServer.json session.json --output-dir ./app/models
+    python import_schemas.py --mode local --input-dir ./dist/json-schemas --files user.json token.json mcpServer.json session.json --output-dir ./app/models
 
     # Remote mode - download from GitHub Release (private repository)
-    python import-schemas.py --mode remote --tag asc0.4.0 --files user.json token.json --output-dir ./models --token GitHub_Token --repo ascending-llc/jarvis-api
+    python import_schemas.py --mode remote --tag asc0.4.0 --files user.json token.json --output-dir ./models --token GitHub_Token --repo ascending-llc/jarvis-api
 
     # Remote mode - public repository (--mode remote is default, can be omitted)
-    python import-schemas.py --tag asc0.4.0 --files user.json token.json --output-dir ./models
+    python import_schemas.py --tag asc0.4.0 --files user.json token.json --output-dir ./models
 
 Features:
     - No third-party dependencies (uses only Python stdlib)
@@ -30,6 +30,7 @@ Features:
     - Remote mode: Download from GitHub Release, ideal for CI/CD
     - Generates Beanie Document classes with proper type hints
     - Handles indexes, timestamps, references (Link), and nested documents
+    - Generates StrEnum classes from JSON Schema $defs (x-enum-members)
     - Cross-platform compatible (Windows/Linux/macOS)
 """
 
@@ -256,11 +257,11 @@ class BeanieModelGenerator:
 
         return sorted(json_files)
 
-    def generate_model(self, schema: dict[str, Any]) -> tuple[str, str]:
+    def generate_model(self, schema: dict[str, Any]) -> tuple[str, str, list[str]]:
         """Generate Python Beanie model code from JSON schema
 
         Returns:
-            tuple: (model_code, class_name)
+            tuple: (model_code, class_name, enum_class_names)
         """
         self.imported_types = set()
         self.nested_models = []  # Reset nested models
@@ -272,9 +273,33 @@ class BeanieModelGenerator:
         indexes = schema.get("x-indexes", [])
         has_timestamps = schema.get("x-timestamps", False)
 
+        # Parse $defs for named enum definitions
+        self._schema_enum_lookup: dict[tuple, str] = {}
+        self._schema_enum_defs: dict[str, dict[str, Any]] = {}
+        defs = schema.get("$defs", {})
+        for enum_name, enum_def in defs.items():
+            members = enum_def.get("x-enum-members")
+            if members:
+                self._schema_enum_defs[enum_name] = members
+                enum_key = tuple(enum_def.get("enum", []))
+                if enum_key:
+                    self._schema_enum_lookup[enum_key] = enum_name
+
         field_level_indexes = self._collect_field_indexes(properties)
 
         lines = []
+
+        enum_class_names = []
+        if self._schema_enum_defs:
+            self.imported_types.add("StrEnum")
+            for enum_name in sorted(self._schema_enum_defs):
+                members = self._schema_enum_defs[enum_name]
+                lines.append(f"class {enum_name}(StrEnum):")
+                for member_name, member_value in members.items():
+                    lines.append(f'    {member_name} = "{member_value}"')
+                lines.append("")
+                lines.append("")
+                enum_class_names.append(enum_name)
 
         # Generate nested models first
         for field_name, field_def in properties.items():
@@ -337,7 +362,7 @@ class BeanieModelGenerator:
 
         imports = self._generate_imports(has_timestamps)
 
-        return imports + "\n\n" + "\n".join(lines), title
+        return imports + "\n\n" + "\n".join(lines), title, enum_class_names
 
     def _extract_nested_models(self, field_name: str, field_def: dict[str, Any], parent_name: str):
         """
@@ -596,12 +621,15 @@ class BeanieModelGenerator:
         """Convert JSON Schema type to Python type"""
         json_type = field_def.get("type")
 
-        # Handle enum values as Literal types
+        # Handle enum values — prefer named StrEnum from $defs, fall back to Literal
         if "enum" in field_def:
             enum_values = field_def["enum"]
             if enum_values:
+                enum_key = tuple(enum_values)
+                if enum_key in self._schema_enum_lookup:
+                    return self._schema_enum_lookup[enum_key]
+                # Fallback to Literal type
                 self.imported_types.add("Literal")
-                # Format enum values for Literal type
                 formatted_values = ", ".join(f'"{v}"' for v in enum_values)
                 return f"Literal[{formatted_values}]"
 
@@ -759,6 +787,9 @@ class BeanieModelGenerator:
         """Generate import statements based on used types"""
         imports = []
 
+        if "StrEnum" in self.imported_types:
+            imports.append("from enum import StrEnum")
+
         datetime_imports = []
         if "datetime" in self.imported_types:
             datetime_imports.append("datetime")
@@ -867,33 +898,40 @@ class BeanieModelGenerator:
 
         return generated_init
 
-    def generate_init_file(self, models_info: list[tuple[str, str]]):
+    def generate_init_file(self, models_info: list[tuple[str, str, list[str]]]):
         """Generate __init__.py in _generated directory only
 
         Args:
-            models_info: List of (filename, class_name) tuples
+            models_info: List of (filename, class_name, enum_names) tuples
         """
         # Generate _generated/__init__.py
         generated_init = self.generated_dir / "__init__.py"
         lines = ['"""']
         lines.append("Auto-generated Beanie ODM Models")
         lines.append("")
-        lines.append("⚠️  DO NOT EDIT - This directory is auto-generated")
+        lines.append("DO NOT EDIT - This directory is auto-generated")
         lines.append(f"Generated at: {datetime.now(UTC).isoformat()}")
         lines.append('"""')
         lines.append("")
 
-        # Sort models_info by class name for consistent output
-        sorted_models = sorted(models_info, key=lambda x: x[1])
-
-        for filename, class_name in sorted_models:
+        # Collect all exportable symbols: (module_name, symbol_name)
+        all_symbols: list[tuple[str, str]] = []
+        for filename, class_name, enum_names in models_info:
             module = Path(filename).stem
-            lines.append(f"from .{module} import {class_name}")
+            all_symbols.append((module, class_name))
+            for enum_name in enum_names:
+                all_symbols.append((module, enum_name))
+
+        # Sort by symbol name for consistent output
+        all_symbols.sort(key=lambda x: x[1])
+
+        for module, symbol in all_symbols:
+            lines.append(f"from .{module} import {symbol}")
 
         lines.append("")
         lines.append("__all__ = [")
-        for _filename, class_name in sorted_models:
-            lines.append(f'    "{class_name}",')
+        for _, symbol in all_symbols:
+            lines.append(f'    "{symbol}",')
         lines.append("]")
         lines.append("")
 
@@ -962,19 +1000,19 @@ def main():
         epilog="""
 Examples:
   # Local mode - convert specific files
-  python import-schemas.py --mode local --input-dir ./dist/json-schemas --files user.json token.json --output-dir ./models
+  python import_schemas.py --mode local --input-dir ./dist/json-schemas --files user.json token.json --output-dir ./models
 
   # Local mode - convert all .json files in directory
-  python import-schemas.py --mode local --input-dir ./dist/json-schemas --output-dir ./models
+  python import_schemas.py --mode local --input-dir ./dist/json-schemas --output-dir ./models
 
   # Remote mode - download specific files from GitHub Release
-  python import-schemas.py --mode remote --tag asc0.4.0 --files user.json token.json --output-dir ./models --token ghp_xxxxx
+  python import_schemas.py --mode remote --tag asc0.4.0 --files user.json token.json --output-dir ./models --token ghp_xxxxx
 
   # Remote mode - download all .json files from GitHub Release
-  python import-schemas.py --mode remote --tag asc0.4.0 --output-dir ./models --token ghp_xxxxx
+  python import_schemas.py --mode remote --tag asc0.4.0 --output-dir ./models --token ghp_xxxxx
 
   # Remote mode (default) - download all files from public repository
-  python import-schemas.py --tag asc0.4.0 --output-dir ./models
+  python import_schemas.py --tag asc0.4.0 --output-dir ./models
 
 GitHub Release URL format:
   https://github.com/{repo}/releases/download/{tag}/{filename}
@@ -1038,7 +1076,7 @@ GitHub Release URL format:
     generator.cleanup_generated_files()
 
     generated_files = []
-    model_info = []  # List of (module_name, class_name) tuples
+    model_info = []  # List of (module_name, class_name, enum_names) tuples
     failed_files = []
 
     if args.mode == "local":
@@ -1061,16 +1099,15 @@ GitHub Release URL format:
             try:
                 print(f"Processing: {filename}")
                 schema = generator.load_local_schema(args.input_dir, filename)
-                model_code, class_name = generator.generate_model(schema)
+                model_code, class_name, enum_names = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
 
-                # Extract class name from schema title
-                class_name = schema.get("title", "Document")
                 module_name = py_file.stem
-                model_info.append((module_name, class_name))
+                model_info.append((module_name, class_name, enum_names))
 
-                print(f"  Generated: {py_file.name} (class: {class_name})")
+                enum_str = f" + enums: {', '.join(enum_names)}" if enum_names else ""
+                print(f"  Generated: {py_file.name} (class: {class_name}{enum_str})")
             except Exception as e:
                 print(f"  Error: {e}")
                 failed_files.append((filename, str(e)))
@@ -1096,16 +1133,15 @@ GitHub Release URL format:
             try:
                 print(f"Downloading: {filename}")
                 schema = generator.download_schema(args.tag, filename)
-                model_code, class_name = generator.generate_model(schema)
+                model_code, class_name, enum_names = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
 
-                # Extract class name from schema title
-                class_name = schema.get("title", "Document")
                 module_name = py_file.stem
-                model_info.append((module_name, class_name))
+                model_info.append((module_name, class_name, enum_names))
 
-                print(f"  Generated: {py_file.name} (class: {class_name})")
+                enum_str = f" + enums: {', '.join(enum_names)}" if enum_names else ""
+                print(f"  Generated: {py_file.name} (class: {class_name}{enum_str})")
             except Exception as e:
                 print(f"  Error: {e}")
                 failed_files.append((filename, str(e)))
