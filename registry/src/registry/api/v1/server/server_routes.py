@@ -14,12 +14,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from pydantic import ValidationError
 
-from registry.auth.dependencies import CurrentUser
-from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
-from registry.core.mcp_client import perform_health_check
-from registry.core.telemetry_decorators import track_registry_operation
-from registry.schemas.enums import ConnectionState
-from registry.schemas.server_api_schemas import (
+from registry_pkgs.database.decorators import use_transaction
+from registry_pkgs.models._generated import PrincipalType, ResourceType
+from registry_pkgs.models.enums import RoleBits
+
+from ....auth.dependencies import CurrentUser
+from ....core.mcp_client import perform_health_check
+from ....core.telemetry_decorators import track_registry_operation
+from ....schemas.enums import ConnectionState
+from ....schemas.server_api_schemas import (
     PaginationMetadata,
     ServerConnectionTestRequest,
     ServerConnectionTestResponse,
@@ -42,14 +45,13 @@ from registry.schemas.server_api_schemas import (
     convert_to_tools_response,
     convert_to_update_response,
 )
-from registry.services.access_control_service import acl_service
-from registry.services.oauth.connection_status_service import (
+from ....services.access_control_service import acl_service
+from ....services.oauth.connection_status_service import (
     get_servers_connection_status,
     get_single_server_connection_status,
 )
-from registry.services.oauth.mcp_service import get_mcp_service
-from registry.services.server_service import server_service_v1
-from registry_pkgs.database.decorators import use_transaction
+from ....services.oauth.mcp_service import get_mcp_service
+from ....services.server_service import server_service_v1
 
 logger = logging.getLogger(__name__)
 
