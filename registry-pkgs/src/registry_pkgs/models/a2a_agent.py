@@ -71,7 +71,7 @@ Storage Structure:
 
 import logging
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from beanie import Document, Insert, PydanticObjectId, Replace, Save, before_event
@@ -219,8 +219,8 @@ class A2AAgent(Document):
     author: PydanticObjectId = Field(..., description="User who created/registered this agent (for ACL)")
     registeredBy: str | None = Field(None, description="Username or service account who registered")
     registeredAt: datetime | None = Field(None, description="Registration timestamp")
-    createdAt: datetime = Field(default_factory=lambda: datetime.now(datetime.UTC), description="Creation timestamp")
-    updatedAt: datetime = Field(default_factory=lambda: datetime.now(datetime.UTC), description="Last update timestamp")
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Creation timestamp")
+    updatedAt: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Last update timestamp")
 
     # ========== Settings ==========
     class Settings:
@@ -243,9 +243,9 @@ class A2AAgent(Document):
     @before_event(Insert, Replace, Save)
     async def update_timestamps(self):
         """Update timestamps before saving."""
-        self.updatedAt = datetime.now(datetime.UTC)
+        self.updatedAt = datetime.now(UTC)
         if not self.createdAt:
-            self.createdAt = datetime.now(datetime.UTC)
+            self.createdAt = datetime.now(UTC)
 
     # ========== Vector Search Integration ==========
     COLLECTION_NAME: ClassVar[str] = "a2a_agents"
