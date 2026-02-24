@@ -147,7 +147,7 @@ gh auth login
 
 # Run the following commands from project root.
 uv run --package registry-pkgs import-schemas \
---tag asc0.4.2 \
+--tag asc0.4.4 \
 --output-dir ./registry-pkgs/src/registry_pkgs/models \
 --token $(gh auth token)
 
