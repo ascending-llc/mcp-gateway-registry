@@ -4,10 +4,10 @@ import pytest
 from beanie import PydanticObjectId
 from fastapi import HTTPException
 
-from registry_pkgs.models._generated import ResourceType
-from registry_pkgs.models.enums import PermissionBits, RoleBits
 from registry.schemas.acl_schema import ResourcePermissions
 from registry.services.access_control_service import ACLService
+from registry_pkgs.models._generated import ResourceType
+from registry_pkgs.models.enums import PermissionBits, RoleBits
 
 
 class TestACLService:
