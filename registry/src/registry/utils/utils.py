@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -64,3 +65,15 @@ def validate_resource_type(resource_type: str) -> None:
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail={"error": "invalid_resource_type", "message": f"Resource type '{resource_type}' is not valid."},
         )
+
+
+def generate_server_name_from_title(title: str) -> str:
+    """
+    Generate a URL-safe slug from a server title.
+    """
+    slug = title.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)  # Remove special chars except spaces and hyphens
+    slug = re.sub(r"\s+", "-", slug)  # Replace spaces with hyphens
+    slug = re.sub(r"-+", "-", slug)  # Remove consecutive hyphens
+    slug = slug.strip("-")  # Trim leading/trailing hyphens
+    return slug or "mcp-server"

@@ -29,7 +29,7 @@ def _validate_headers_value(headers: dict[str, Any] | None) -> dict[str, Any] | 
 class ServerCreateRequest(BaseModel):
     """Request schema for creating a new server"""
 
-    serverName: str = Field(..., alias="serverName", description="Name of the MCP server")
+    title: str = Field(..., alias="title", description="Display title of the MCP server")
     path: str = Field(..., description="Unique path/route for the server")
     description: str | None = Field(default="", description="Server description")
     url: str | None = Field(default=None, description="Backend proxy URL")
@@ -78,7 +78,7 @@ class ServerCreateRequest(BaseModel):
 class ServerUpdateRequest(BaseModel):
     """Request schema for updating a server (partial update)"""
 
-    serverName: str | None = Field(None, alias="serverName")
+    title: str | None = Field(None, alias="title")
     path: str | None = None
     description: str | None = None
     url: str | None = None
@@ -358,6 +358,7 @@ class ServerUpdateResponse(BaseModel):
 
     id: str
     serverName: str = Field(..., alias="serverName")
+    title: str | None = None
     path: str
     description: str | None = None
     headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
@@ -763,6 +764,7 @@ def convert_to_update_response(server) -> ServerUpdateResponse:
     return ServerUpdateResponse(
         id=str(server.id),
         serverName=server.serverName,
+        title=config.get("title"),
         path=server.path,
         description=config.get("description"),
         headers=config.get("headers"),

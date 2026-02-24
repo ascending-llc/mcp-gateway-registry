@@ -35,6 +35,7 @@ export type PermissionType = {
 export type Server = {
   id: string;
   serverName: string;
+  title: string;
   description: string;
   type: ServerType;
   url: string;
