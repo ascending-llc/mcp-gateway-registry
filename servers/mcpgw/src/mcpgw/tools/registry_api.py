@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 async def execute_tool_impl(
-    server_path: str, tool_name: str, arguments: dict[str, Any], server_id: str | None = None, ctx: Context = None
+    server_path: str, tool_name: str, arguments: dict[str, Any], server_id: str, ctx: Context = None
 ) -> dict[str, Any]:
     """
     Execute a specific tool (implementation layer).
@@ -38,15 +38,12 @@ async def execute_tool_impl(
         by the interface layer (execute_tool). This function just sends the
         request to the registry API.
     """
-    logger.info(
-        f"🔧 Executing tool: {tool_name} on {server_path}" + (f" (server_id: {server_id})" if server_id else "")
-    )
+    logger.info(f"🔧 Executing tool: {tool_name} on server_path: {server_path}, server_id: {server_id}")
 
     try:
         # Build request payload
         payload = {"server_path": server_path, "tool_name": tool_name, "arguments": arguments}
-        if server_id:
-            payload["server_id"] = server_id
+        payload["server_id"] = server_id
 
         # Use centralized registry API call with automatic auth header extraction
         result = await call_registry_api(method="POST", endpoint="/proxy/tools/call", ctx=ctx, json=payload)
