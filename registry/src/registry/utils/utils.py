@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 from fastapi import status as http_status
 
-from ..core.acl_constants import ResourceType
+from registry_pkgs.models._generated import ResourceType
 
 logger = logging.getLogger(__name__)
 

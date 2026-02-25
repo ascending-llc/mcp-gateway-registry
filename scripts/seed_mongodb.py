@@ -17,7 +17,8 @@ from datetime import UTC, datetime, timedelta
 
 from dotenv import load_dotenv
 
-from registry.core.acl_constants import PermissionBits, PrincipalType, ResourceType, RoleBits
+from registry_pkgs.models._generated import PrincipalType, ResourceType
+from registry_pkgs.models.enums import PermissionBits, RoleBits
 
 # Load environment variables from .env file
 load_dotenv()
