@@ -6,7 +6,7 @@ import yaml
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from registry.core.config import settings
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -123,49 +123,18 @@ def get_user_session_data(
 
 
 def load_scopes_config() -> dict[str, Any]:
-    """Load the scopes configuration from auth_server/scopes.yml"""
+    """Load scopes configuration from the path defined in settings."""
     try:
-        # Check for SCOPES_CONFIG_PATH environment variable first
-        import os
+        scopes_file = Path(settings.scopes_config_path)
 
-        scopes_path = os.getenv("SCOPES_CONFIG_PATH")
-
-        # Print to stderr for immediate visibility before logging is configured
-        print(f"[SCOPES_INIT] SCOPES_CONFIG_PATH env var: {scopes_path}", flush=True)
-
-        # Fall back to default location if env var not set
-        if not scopes_path:
-            # IMPORTANT, TODO: Currently in the mcpgateway-registry container, the following `scope_file` path happens to work,
-            # because it starts from this file, goes up three levels to reach the `/usr/local/lib/python3.12/site-packages/` folder,
-            # and then reaches down to the `auth_server` package, which does have the `scopes.yml` file at its project root.
-            # However, we normally should not assume all 3rd party dependencies are installed to the same folder,
-            # so we should not rely on this coincidence for things to work.
-            # There is a refactoring ticket where we want to stop `registry` from depending on `auth_server`.
-            # In that ticket we will find a good way for registry to get scopes, and that is the right time to change this piece of code.
-            # This comment is left for that ticket.
-            scopes_file = Path(__file__).parent.parent.parent / "auth_server" / "scopes.yml"
-        else:
-            scopes_file = Path(scopes_path)
-
-        # If file doesn't exist, try the EFS mounted location (auth_config subdirectory)
-        if not scopes_file.exists():
-            alt_scopes_file = Path(__file__).parent.parent.parent / "auth_server" / "auth_config" / "scopes.yml"
-            if alt_scopes_file.exists():
-                scopes_file = alt_scopes_file
-                print(
-                    f"[SCOPES_INIT] File not found at primary location, using EFS mount location: {scopes_file}",
-                    flush=True,
-                )
-
-        print(f"[SCOPES_INIT] Looking for scopes config at: {scopes_file}", flush=True)
-        print(f"[SCOPES_INIT] Scopes file exists: {scopes_file.exists()}", flush=True)
+        logger.info(f"[SCOPES_INIT] Looking for scopes config at: {scopes_file}")
+        logger.info(f"[SCOPES_INIT] Scopes file exists: {scopes_file.exists()}")
 
         if not scopes_file.exists():
-            print(f"[SCOPES_INIT] ERROR: Scopes config file not found at {scopes_file}", flush=True)
-            auth_server_dir = scopes_file.parent
-            print(f"[SCOPES_INIT] Auth server directory exists: {auth_server_dir.exists()}", flush=True)
-            if auth_server_dir.exists():
-                print(f"[SCOPES_INIT] Auth server directory contents: {list(auth_server_dir.iterdir())}", flush=True)
+            config_dir = scopes_file.parent
+            logger.info(f"[SCOPES_INIT] Directory exists: {config_dir.exists()}")
+            if config_dir.exists():
+                logger.info(f"[SCOPES_INIT] Directory contents: {list(config_dir.iterdir())}")
             logger.warning(f"Scopes config file not found at {scopes_file}")
             return {}
 

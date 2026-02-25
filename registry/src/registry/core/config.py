@@ -87,9 +87,19 @@ class Settings(BaseSettings):
     )
     log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
 
+    # Scopes configuration
+    SCOPES_CONFIG_PATH: str = ""
+
     # Encryption key for sensitive data (client secrets, API keys, etc.)
     # Hex-encoded AES key for encrypting OAuth client secrets and API keys
     CREDS_KEY: str | None = None
+
+    @property
+    def scopes_config_path(self) -> str:
+        """Path to scopes.yml. Set SCOPES_CONFIG_PATH env var to override; falls back to CWD/config/scopes.yml."""
+        if self.SCOPES_CONFIG_PATH:
+            return self.SCOPES_CONFIG_PATH
+        return "config/scopes.yml"
 
     # Local development mode detection
     @property
