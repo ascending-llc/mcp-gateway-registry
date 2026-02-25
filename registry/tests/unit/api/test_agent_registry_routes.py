@@ -49,7 +49,7 @@ def mock_nginx_proxied_auth_user():
     def _mock_auth(session=None):
         return {
             "username": "testuser",
-            "groups": ["a2a-registry-user"],
+            "groups": ["a2a-agent-user"],
             "scopes": ["a2a-agents-restricted/read"],
             "auth_method": "oauth2",
             "provider": "cognito",

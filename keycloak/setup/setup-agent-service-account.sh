@@ -34,21 +34,21 @@ usage() {
     echo ""
     echo "Options:"
     echo "  -a, --agent-id AGENT_ID     Agent identifier (required)"
-    echo "  -g, --group GROUP           Group assignment (default: register-read-only)"
+    echo "  -g, --group GROUP           Group assignment (default: registry-read-only)"
     echo "  -c, --client CLIENT         M2M client name (default: mcp-gateway-m2m)"
     echo "  -h, --help                  Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 --agent-id claude-001"
     echo "  $0 --agent-id bedrock-claude --group registry-admin"
-    echo "  $0 -a gpt4-turbo -g register-read-only"
-    echo "  $0 -a finance-agent -g register-user"
+    echo "  $0 -a gpt4-turbo -g registry-read-only"
+    echo "  $0 -a finance-agent -g registry-user"
     echo ""
     echo "Service Account Naming: agent-{agent-id}-m2m"
     echo ""
     echo "Common Groups:"
-    echo "  - register-read-only         (limited access)"
-    echo "  - register-user              (create servers and agents)"
+    echo "  - registry-read-only         (limited access)"
+    echo "  - registry-user              (create servers and agents)"
     echo "  - registry-power-user        (create/delete/share servers)"
     echo "  - registry-admin             (full access)"
     echo ""
@@ -57,7 +57,7 @@ usage() {
 
 # Parse command line arguments
 AGENT_ID=""
-TARGET_GROUP="register-read-only"
+TARGET_GROUP="registry-read-only"
 
 while [[ $# -gt 0 ]]; do
     case $1 in

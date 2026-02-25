@@ -4,8 +4,8 @@
 # Roles:
 # - registry-admin: full access
 # - registry-power-user: create/delete/share servers, read agents
-# - register-user: create servers and agents, cannot share
-# - register-read-only: read-only access to servers and agents
+# - registry-user: create servers and agents, cannot share
+# - registry-read-only: read-only access to servers and agents
 
 UI-Scopes:
   registry-admin:
@@ -48,7 +48,7 @@ UI-Scopes:
     share_service:
       - all
 
-  register-user:
+  registry-user:
     list_agents:
       - all
     get_agent:
@@ -60,7 +60,7 @@ UI-Scopes:
     register_service:
       - all
 
-  register-read-only:
+  registry-read-only:
     list_agents:
       - all
     get_agent:
@@ -73,18 +73,18 @@ group_mappings:
     - registry-admin
   jarvis-registry-power-user:
     - registry-power-user
-  jarvis-register-user:
-    - register-user
-  jarvis-register-read-only:
-    - register-read-only
+  jarvis-registry-user:
+    - registry-user
+  jarvis-registry-read-only:
+    - registry-read-only
   registry-admin:
     - registry-admin
   registry-power-user:
     - registry-power-user
-  register-user:
-    - register-user
-  register-read-only:
-    - register-read-only
+  registry-user:
+    - registry-user
+  registry-read-only:
+    - registry-read-only
 
 registry-admin:
   - server: '*'
@@ -127,7 +127,7 @@ registry-power-user:
           resources:
             - all
 
-register-user:
+registry-user:
   - server: api
     methods:
       - initialize
@@ -145,7 +145,7 @@ register-user:
           resources:
             - all
 
-register-read-only:
+registry-read-only:
   - server: api
     methods:
       - initialize

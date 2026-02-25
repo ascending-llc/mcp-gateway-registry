@@ -54,8 +54,8 @@ def mock_enhanced_auth_user():
     def _mock_auth(session=None):
         return {
             "username": "testuser",
-            "groups": ["register-user"],
-            "scopes": ["register-read-only"],
+            "groups": ["registry-user"],
+            "scopes": ["registry-read-only"],
             "auth_method": "oauth2",
             "provider": "cognito",
             "accessible_servers": ["mcpgw"],

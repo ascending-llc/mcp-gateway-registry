@@ -387,7 +387,7 @@ def user_can_modify_servers(user_groups: list[str], user_scopes: list[str]) -> b
     # Power users and register users can modify servers; read-only cannot
     if "registry-power-user" in user_scopes or "registry-power-user" in user_groups:
         return True
-    if "register-user" in user_scopes or "register-user" in user_groups:
+    if "registry-user" in user_scopes or "registry-user" in user_groups:
         return True
 
     return False
@@ -550,10 +550,10 @@ def nginx_proxied_auth(
                 groups = ["registry-admin"]
             elif "registry-power-user" in scopes:
                 groups = ["registry-power-user"]
-            elif "register-user" in scopes:
-                groups = ["register-user"]
-            elif "register-read-only" in scopes:
-                groups = ["register-read-only"]
+            elif "registry-user" in scopes:
+                groups = ["registry-user"]
+            elif "registry-read-only" in scopes:
+                groups = ["registry-read-only"]
             else:
                 groups = []
 

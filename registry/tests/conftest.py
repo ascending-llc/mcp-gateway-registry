@@ -222,7 +222,7 @@ def user_session_cookie():
     """Create a valid user session cookie (JWT access token) for testing."""
     return create_test_jwt_token(
         username="testuser",
-        groups=["register-user"],
+        groups=["registry-user"],
         role="user",
         auth_method="oauth2",
         provider="keycloak",

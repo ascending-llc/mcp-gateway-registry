@@ -169,8 +169,8 @@
       }
     },
     {
-      "name": "register-user",
-      "path": "/register-user",
+      "name": "registry-user",
+      "path": "/registry-user",
       "attributes": {
         "description": [
           "Standard user access to MCP Gateway Registry"
@@ -187,8 +187,8 @@
       }
     },
     {
-      "name": "register-read-only",
-      "path": "/register-read-only",
+      "name": "registry-read-only",
+      "path": "/registry-read-only",
       "attributes": {
         "description": [
           "Restricted access to specific MCP servers"
@@ -265,8 +265,8 @@
         }
       ],
       "groups": [
-        "register-user",
-        "register-read-only"
+        "registry-user",
+        "registry-read-only"
       ],
       "realmRoles": [
         "mcp-user"
