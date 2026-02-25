@@ -171,6 +171,32 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
         </div>
       </section>
 
+      {/* Custom Settings */}
+      <section>
+        <h3 className='text-lg font-semibold text-gray-900 dark:text-white'>Custom Settings</h3>
+        <span className='block text-xs text-gray-500 dark:text-gray-400 mb-4'>
+          Configure advanced options for this MCP server.
+        </span>
+        <FormFields.KeyValueListField
+          value={
+            formData.headers === null
+              ? []
+              : formData.headers.map(h => {
+                  const key = Object.keys(h)[0] || '';
+                  const val = h[key] || '';
+                  return { key, value: String(val) };
+                })
+          }
+          onChange={val => {
+            const newHeaders = val.map(v => ({ [v.key]: v.value }));
+            handleUpdateField('headers', newHeaders);
+          }}
+          maxItems={5}
+          className='mt-2'
+          validateEmpty={!!errors?.headers}
+        />
+      </section>
+
       {/* Section Authentication */}
       <AuthenticationConfig
         config={formData.authConfig}

@@ -45,6 +45,7 @@ export type Server = {
   capabilities: string;
   tools: string;
   author: string;
+  headers: Record<string, string>[] | null;
   status: StatusType;
   path: string;
   permissions: PermissionType;

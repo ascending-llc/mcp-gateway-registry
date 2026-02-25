@@ -19,6 +19,7 @@ const INIT_DATA: ServerConfig = {
   description: '',
   path: '',
   url: '',
+  headers: [{ Authorization: '' }, { 'x-jarvis-auth': '' }],
   type: 'streamable-http',
   authConfig: DEFAULT_AUTH_CONFIG,
   trustServer: false,
@@ -74,6 +75,7 @@ const ServerRegistryOrEdit: React.FC = () => {
         path: result.path,
         url: result.url || '',
         type: result.type,
+        headers: result.headers || null,
         authConfig: { type: 'auto', source: 'admin', authorization_type: 'bearer' },
         trustServer: true,
         tags: result.tags || [],
@@ -126,6 +128,18 @@ const ServerRegistryOrEdit: React.FC = () => {
 
     if (!formData.trustServer) {
       newErrors.trustServer = 'You must trust this application';
+    }
+
+    // Headers Validation
+    if (formData.headers && formData.headers.length > 0) {
+      const hasEmptyHeader = formData.headers.some(h => {
+        const key = Object.keys(h)[0] || '';
+        const val = h[key];
+        return !key.trim() || !String(val ?? '').trim();
+      });
+      if (hasEmptyHeader) {
+        newErrors.headers = 'Header name and value cannot be empty';
+      }
     }
 
     // Auth Validation
@@ -196,6 +210,7 @@ const ServerRegistryOrEdit: React.FC = () => {
       url: data.url,
       tags: data.tags,
       type: data.type,
+      headers: data.headers?.length === 0 ? null : data.headers,
     };
     switch (data.authConfig.type) {
       case 'auto':
@@ -281,7 +296,7 @@ const ServerRegistryOrEdit: React.FC = () => {
         }
       }
     } catch (error: any) {
-      showToast(error?.detail || error, 'error');
+      showToast(error?.detail?.[0]?.msg || error?.detail || error, 'error');
     } finally {
       setLoading(false);
     }
