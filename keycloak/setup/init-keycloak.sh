@@ -452,13 +452,6 @@ create_users() {
         echo "  - $admin_username assigned to registry-admin group"
     fi
 
-    # Also assign admin to registry-admin group for full access
-    if [ ! -z "$admin_user_id" ] && [ ! -z "$admin_group_id" ]; then
-        curl -s -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM}/users/$admin_user_id/groups/$admin_group_id" \
-            -H "Authorization: Bearer ${token}" > /dev/null
-        echo "  - $admin_username assigned to registry-admin group"
-    fi
-
     # Assign test user to all groups except admin
     if [ ! -z "$test_user_id" ]; then
         # Arrays of group IDs and names for loop processing

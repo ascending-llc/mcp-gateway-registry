@@ -167,6 +167,7 @@ def load_scopes_config() -> dict[str, Any]:
 # Global scopes configuration
 SCOPES_CONFIG = load_scopes_config()
 
+
 def _filter_role_scopes(user_scopes: list[str]) -> list[str]:
     """Return only role scopes defined in SCOPES_CONFIG (UI-Scopes section), preserving order."""
     role_scopes = set(SCOPES_CONFIG.get("UI-Scopes", {}).keys())
@@ -333,6 +334,7 @@ def get_servers_for_scope(scope: str) -> list[str]:
 
     return list(set(server_names))  # Remove duplicates
 
+
 def user_has_wildcard_access(user_scopes: list[str]) -> bool:
     """
     Check if user should be treated as admin.
@@ -384,12 +386,9 @@ def user_can_modify_servers(user_groups: list[str], user_scopes: list[str]) -> b
     if "registry-admin" in user_scopes or "registry-admin" in user_groups:
         return True
 
-    # Power users and register users can modify servers; read-only cannot
+    # Power users can modify servers; standard users cannot
     if "registry-power-user" in user_scopes or "registry-power-user" in user_groups:
         return True
-    if "registry-user" in user_scopes or "registry-user" in user_groups:
-        return True
-
     return False
 
 

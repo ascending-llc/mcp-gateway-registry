@@ -28,8 +28,6 @@ def mock_enhanced_auth_admin():
             "groups": ["registry-admin"],
             "scopes": [
                 "registry-admin",
-                "registry-admin",
-                "registry-admin",
             ],
             "auth_method": "traditional",
             "provider": "local",

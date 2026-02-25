@@ -1,6 +1,6 @@
 #!/bin/bash
 # Bootstrap script for setting up LOB users and M2M service accounts
-# Creates registry-user and registry-read-only groups
+# # Creates registry-admin, registry-user, and registry-read-only groups
 # Then creates bot and human users in these groups
 
 set -e
