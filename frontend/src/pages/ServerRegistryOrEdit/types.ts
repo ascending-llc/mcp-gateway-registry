@@ -19,7 +19,7 @@ export interface AuthenticationConfig {
 }
 
 export interface ServerConfig {
-  serverName: string;
+  title: string;
   description: string;
   path: string;
   url: string;

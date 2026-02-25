@@ -8,8 +8,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from packages.models.extended_mcp_server import ExtendedMCPServer as Server
 from registry.main import app
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as Server
 
 
 @pytest.mark.integration

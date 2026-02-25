@@ -144,17 +144,17 @@ classDiagram
 
 **Component Responsibilities:**
 
-- **APIRouter** (`registry/api/server_routes.py`): HTTP endpoints with JWT authentication, extracts `UserContext` from tokens
-- **ServerService** (`registry/services/server_service.py`): Business logic, ACL enforcement, coordinates repositories
-- **Models** (`packages/models/**`): MongoDB operations for mcp servers and tokens
-- **EncryptionService** (`packages/database/encryption.py`): AES-CBC encryption/decryption for credentials
-- **UserContext** (`registry/auth/dependencies.py`): Role-based access control, admin validation
+- **APIRouter** (`registry/src/registry/api/server_routes.py`): HTTP endpoints with JWT authentication, extracts `UserContext` from tokens
+- **ServerService** (`registry/src/registry/services/server_service.py`): Business logic, ACL enforcement, coordinates repositories
+- **Models** (`registry-pkgs/src/registry_pkgs/models/**`): MongoDB operations for mcp servers and tokens
+- **EncryptionService** (`registry-pkgs/src/database/encryption.py`): AES-CBC encryption/decryption for credentials
+- **UserContext** (`registry/src/registry/auth/dependencies.py`): Role-based access control, admin validation
 
 ### Data Schema
 
 ### Authorization
 
-Permissions checks are contained within the server API router. It uses RBAC helpers found in `registry/auth/dependencies.py`
+Permissions checks are contained within the server API router. It uses RBAC helpers found in `registry/src/registry/auth/dependencies.py`
 
 
 ### API Endpoints
@@ -354,7 +354,7 @@ All server endpoints return a **flattened response structure** for frontend conv
 - `errorMessage`: string (nullable) - Last error message details *[stored at root in DB]*
 
 **Reference:**
-- Database schema: [mcpServer.py](../packages/models/_generated/mcpServer.py)
+- Database schema: [mcpServer.py](../registry-pkgs/src/registry_pkgs/models/_generated/mcpServer.py)
 - Config schema (TypeScript): https://github.com/ascending-llc/jarvis-api/blob/e15d37b399fc186376843d77e8519545a7ead586/packages/data-provider/src/mcp.ts
 - Retrieval logic: https://github.com/ascending-llc/jarvis-api/blob/e15d37b399fc186376843d77e8519545a7ead586/packages/api/src/mcp/registry/db/ServerConfigsDB.ts
 
@@ -1032,18 +1032,53 @@ Response 200:
 
 MongoDB integration provides a scalable, multi-tenant storage backend for MCP server configurations and OAuth tokens, replacing the file-based JSON storage. This design enables sharing the database with other applications (e.g., jarvis-api) using a unified schema.
 
-### Database Selection: Motor + Beanie ODM(TBD)
+### Database Selection: PyMongo Async + Beanie ODM
 
 **Selected Stack:**
-- **Motor**: Async MongoDB driver for Python (required for FastAPI async endpoints)
+- **PyMongo (async)**: Native async MongoDB driver (`AsyncMongoClient`) - migrated from Motor which is deprecated
 - **Beanie**: Async ODM built on Pydantic models (native FastAPI integration)
 
 **Rationale:**
+- PyMongo 4.x provides native async support via `AsyncMongoClient`, replacing Motor
 - Beanie provides type-safe models with automatic validation via Pydantic
 - Seamless integration with FastAPI's dependency injection and request/response models
 - Built-in support for async operations (critical for high-concurrency scenarios)
 - Automatic index management and migration support
-- Simpler than PyMongo for common CRUD operations while maintaining access to Motor when needed
+
+### Transaction Support
+
+**Why:** Multi-step write operations (e.g., creating a server + granting ACL permissions) must be atomic.
+If the ACL grant fails after the server is created, both operations must be rolled back.
+
+**How:** A decorator-based approach using `@use_transaction` with ContextVar for session management.
+
+**Prerequisite:** MongoDB must run as a **replica set** (single-node is fine for local development).
+The `docker-compose.yml` already configures a single-node replica set (`rs0`).
+
+#### Implementation Pattern
+
+**Decorator (`@use_transaction`):**
+- Applied to route handlers that need transactional behavior
+- Manages transaction lifecycle automatically (start, commit, rollback)
+- Stores session in a ContextVar for async-safe access
+- Prevents nested transactions (raises RuntimeError if detected)
+- Handles replica set errors (OperationFailure code 263) with actionable messages
+
+**Session Access (`get_current_session()`):**
+- Service methods retrieve the active session from ContextVar
+- Returns `None` if no transaction is active (services handle gracefully)
+- No need to pass session parameters through the call chain
+
+**Transaction lifecycle:**
+1. Route handler decorated with `@use_transaction`
+2. Decorator calls `client.start_session()` and starts transaction
+3. Session stored in ContextVar (async-safe, request-isolated)
+4. Service methods call `get_current_session()` to access session
+5. On success: transaction commits automatically (context manager exit)
+6. On exception: transaction aborts automatically (context manager exit)
+7. Session is always closed in `finally` block
+8. ContextVar is reset to ensure no session leakage
+
 
 ### Data Models
 
@@ -1088,7 +1123,7 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 │ scripts/                                                     │
 │   └── generate_schemas.py     (Download & generate)         │
 │                                                              │
-│ packages/models/                                             │
+│ registry-pkgs/src/registry_pkgs/models/                      │
 │   ├── __init__.py             (Exports from _generated)     │
 │   └── _generated/             (⚠️  .gitignored)             │
 │       ├── README.md           (Generation instructions)     │
@@ -1215,7 +1250,7 @@ https://github.com/ascending-llc/jarvis-api/releases/download/v0.0.31/Token.json
 """
 Generate Python Beanie models from Jarvis JSON schemas.
 
-Generated files are placed in packages/models/_generated/ (gitignored).
+Generated files are placed in registry-pkgs/src/registry_pkgs/models/_generated/ (gitignored).
 Engineers run this script to browse schemas in their IDE without repo switching.
 
 Usage:
@@ -1237,7 +1272,7 @@ import urllib.request
 # Configuration
 JARVIS_REPO = "ascending-llc/jarvis-api"
 SCHEMA_BASE_URL = f"https://github.com/{JARVIS_REPO}/releases/download"
-OUTPUT_DIR = Path("packages/models/_generated")
+OUTPUT_DIR = Path("registry-pkgs/src/registry_pkgs/models/_generated")
 SCHEMA_VERSION_FILE = OUTPUT_DIR / ".schema-version"
 
 SCHEMAS = {
@@ -1287,26 +1322,26 @@ python scripts/generate_schemas.py
 **Generated Directory Structure (gitignored):**
 
 ```
-packages/models/_generated/      # ⚠️  In .gitignore
-├── .schema-version              # "v0.0.31"
-├── README.md                    # DO NOT EDIT warning + instructions
-├── __init__.py                  # Exports
-├── mcpserver.py                 # ❌ NOT in git - generated locally
-├── mcpconfig.py                 # ❌ NOT in git - generated locally
-└── token.py                     # ❌ NOT in git - generated locally
+registry-pkgs/src/registry_pkgs/models/_generated/       # ⚠️  In .gitignore
+├── .schema-version                                      # "v0.0.31"
+├── README.md                                            # DO NOT EDIT warning + instructions
+├── __init__.py                                          # Exports
+├── mcpserver.py                                         # ❌ NOT in git - generated locally
+├── mcpconfig.py                                         # ❌ NOT in git - generated locally
+└── token.py                                             # ❌ NOT in git - generated locally
 ```
 
 **Using Generated Schemas:**
 
 ```python
-# packages/models/__init__.py
+# registry_pkgs/models/__init__.py
 from ._generated import MCPServer, MCPConfig, OAuthConfig, Token
 
 __all__ = ["MCPServer", "MCPConfig", "OAuthConfig", "Token"]
 
 
 # In application code - engineers must generate locally to browse
-from packages.models import MCPServer, MCPConfig, Token
+from registry_pkgs.models import MCPServer, MCPConfig, Token
 
 server = MCPServer(
     server_name="github",
@@ -1349,7 +1384,7 @@ token = Token(
 **mcp-gateway-registry Side:**
 1. Run `python scripts/generate_schemas.py --version v0.0.32`
 2. Script downloads JSON from GitHub Release
-3. Generates Python Beanie models in `packages/models/_generated/`
+3. Generates Python Beanie models in `registry-pkgs/src/registry_pkgs/models/_generated/`
 4. Engineers can browse schema code in IDE
 5. Generated files are NOT committed (gitignored)
 6. Each engineer runs generation locally when needed
@@ -1360,7 +1395,7 @@ token = Token(
 $ python scripts/generate_schemas.py --version v0.0.31
 
 # Then can browse schema in IDE
-from packages.models import MCPServer  # Cmd+Click works!
+from registry_pkgs.models import MCPServer  # Cmd+Click works!
 
 # IDE shows (from generated file):
 class MCPServer(Document):
@@ -1376,18 +1411,18 @@ class MCPServer(Document):
 ```gitignore
 # .gitignore
 # Ignore generated schemas (engineers generate locally)
-packages/models/_generated/
-!packages/models/_generated/README.md  # Keep instructions in git
+registry_pkgs/models/_generated/
+!registry_pkgs/models/_generated/README.md  # Keep instructions in git
 ```
 
 ```bash
 # First time setup for new engineers
 $ python scripts/generate_schemas.py --version v0.0.31
-✅ Generated in packages/models/_generated
+✅ Generated in registry_pkgs/models/_generated
 💡 Schemas are gitignored - each engineer runs generation locally
 
 # Verify schemas exist before running app
-$ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
+$ python -c "from registry_pkgs.models import MCPServer; print('✅ Schemas ready')"
 ```
 
 
@@ -1501,7 +1536,7 @@ class MCPServer(Document):
         ]
 ```
 
-**Note:** The complete schema definition is generated automatically from TypeScript. Run `python scripts/generate_schemas.py` to generate and browse `packages/models/_generated/mcpserver.py`.
+**Note:** The complete schema definition is generated automatically from TypeScript. Run `python scripts/generate_schemas.py` to generate and browse `registry_pkgs/models/_generated/mcpserver.py`.
 
 **2. Token Storage Collection**
 
@@ -1546,7 +1581,7 @@ class Token(Document):
         }
 ```
 
-**Note:** Token schema is shared with Jarvis. Run `python scripts/generate_schemas.py` to generate and browse `packages/models/_generated/token.py`.
+**Note:** Token schema is shared with Jarvis. Run `python scripts/generate_schemas.py` to generate and browse `registry_pkgs/models/_generated/token.py`.
 
 ### Storage Examples
 
@@ -2014,13 +2049,13 @@ def check_schema_compatibility():
 python scripts/generate_schemas.py --version v0.0.32
 
 # 2. Review changes in generated files
-git diff packages/models/_generated/
+git diff registry_pkgs/models/_generated/
 
 # 3. Run tests to ensure compatibility
 pytest tests/
 
 # 4. Commit generated code
-git add packages/models/_generated/
+git add registry_pkgs/models/_generated/
 git commit -m "chore: update schemas to Jarvis v0.0.32"
 
 # 5. Deploy

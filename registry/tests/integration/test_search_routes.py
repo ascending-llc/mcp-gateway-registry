@@ -193,7 +193,7 @@ class TestServerSearchRoutes:
 
     def test_search_servers_with_near_text_search(self, test_client: TestClient):
         """Server search supports near_text search type."""
-        from packages.vector.enum.enums import SearchType
+        from registry_pkgs.vector.enum.enums import SearchType
 
         mock_search_results = []
 
@@ -214,7 +214,7 @@ class TestServerSearchRoutes:
 
     def test_search_servers_with_bm25_search(self, test_client: TestClient):
         """Server search supports bm25 search type."""
-        from packages.vector.enum.enums import SearchType
+        from registry_pkgs.vector.enum.enums import SearchType
 
         mock_search_results = []
 
@@ -235,7 +235,7 @@ class TestServerSearchRoutes:
 
     def test_search_servers_with_similarity_store_search(self, test_client: TestClient):
         """Server search supports similarity_store search type."""
-        from packages.vector.enum.enums import SearchType
+        from registry_pkgs.vector.enum.enums import SearchType
 
         mock_search_results = []
 
@@ -261,7 +261,7 @@ class TestServerSearchRoutes:
 
     def test_search_servers_defaults_to_hybrid(self, test_client: TestClient):
         """Server search defaults to hybrid when search_type not specified."""
-        from packages.vector.enum.enums import SearchType
+        from registry_pkgs.vector.enum.enums import SearchType
 
         mock_search_results = []
 

@@ -1,8 +1,9 @@
-import { ClipboardDocumentIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useState } from 'react';
-
+import FormFields from '@/components/FormFields';
 import { getBasePath } from '@/config';
+import SERVICES from '@/services';
 import type { AuthenticationConfig as AuthConfigType } from './types';
 
 interface AuthenticationConfigProps {
@@ -12,6 +13,7 @@ interface AuthenticationConfigProps {
   errors?: Record<string, string | undefined>;
   isReadOnly?: boolean;
   path?: string;
+  mcpUrl?: string;
 }
 
 const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
@@ -21,9 +23,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   errors = {},
   isReadOnly = false,
   path = '',
+  mcpUrl = '',
 }) => {
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [showClientSecret, setShowClientSecret] = useState(false);
   const [isApiKeyDirty, setIsApiKeyDirty] = useState(false);
   const [isClientSecretDirty, setIsClientSecretDirty] = useState(false);
 
@@ -31,18 +32,30 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
     onChange({ ...config, ...updates });
   };
 
-  const getInputClass = (fieldName: string) => {
-    const baseClass =
-      'block w-full rounded-md shadow-sm focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500';
-    const borderClass = errors[fieldName]
-      ? 'border-red-500 focus:border-red-500 pr-10' // Add padding for icon if needed, though error message is below
-      : 'border-gray-300 dark:border-gray-600 focus:border-purple-500';
-    return `${baseClass} ${borderClass}`;
+  const handleGetDiscover = async (baseConfig?: AuthConfigType) => {
+    if (!mcpUrl) return;
+    try {
+      const res = await SERVICES.MCP.getDiscover(mcpUrl);
+      if (res?.metadata) {
+        const { authorization_endpoint, token_endpoint } = res.metadata;
+        const currentConfig = baseConfig || config;
+        onChange({
+          ...currentConfig,
+          client_id: authorization_endpoint || currentConfig.client_id,
+          client_secret: token_endpoint || currentConfig.client_secret,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to discover OAuth endpoints:', error);
+    }
   };
 
-  const renderError = (fieldName: string) => {
-    if (!errors[fieldName]) return null;
-    return <p className='mt-1 text-xs text-red-500'>{errors[fieldName]}</p>;
+  const handleTypeChange = (type: AuthConfigType['type']) => {
+    const nextConfig = { ...config, type };
+    onChange(nextConfig);
+    if (type === 'oauth' && !isReadOnly && mcpUrl && !config.client_id && !config.client_secret) {
+      handleGetDiscover(nextConfig);
+    }
   };
 
   const cleanPath = path?.replace(/\/+$/, '') || '';
@@ -53,50 +66,19 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
     <div className='space-y-6'>
       <div>
         <h3 className='text-lg font-semibold text-gray-900 dark:text-white mb-2'>Authentication</h3>
-
         <div className='space-y-4'>
           <div>
-            <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
-              Authentication Type
-            </label>
-            <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
-              <button
-                type='button'
-                disabled={isReadOnly}
-                onClick={() => updateConfig({ type: 'auto' })}
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                  config.type === 'auto'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                No Auth
-              </button>
-              <button
-                type='button'
-                disabled={isReadOnly}
-                onClick={() => updateConfig({ type: 'apiKey' })}
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                  config.type === 'apiKey'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                API Key
-              </button>
-              <button
-                type='button'
-                disabled={isReadOnly}
-                onClick={() => updateConfig({ type: 'oauth' })}
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                  config.type === 'oauth'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                OAuth
-              </button>
-            </div>
+            <FormFields.RadioGroupField
+              label='Authentication Type'
+              value={config.type}
+              onChange={val => handleTypeChange(val)}
+              options={[
+                { label: 'No Auth', value: 'auto' },
+                { label: 'API Key', value: 'apiKey' },
+                { label: 'OAuth', value: 'oauth' },
+              ]}
+              disabled={isReadOnly}
+            />
           </div>
 
           {config.type === 'auto' && (
@@ -112,117 +94,58 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
                   API Key Source
                 </label>
-                <div className='flex items-center space-x-2'>
-                  <input
-                    type='checkbox'
-                    id='apiKeySource'
-                    disabled={isReadOnly}
-                    checked={config.source === 'user'}
-                    onChange={e => updateConfig({ source: e.target.checked ? 'user' : 'admin' })}
-                    className='h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                  />
-                  <label htmlFor='apiKeySource' className='text-sm text-gray-900 dark:text-gray-100'>
-                    Each user provides their own key
-                    <span className='block text-xs text-gray-500 dark:text-gray-400'>
-                      When unchecked, an admin-provided key is used for all users.
-                    </span>
-                  </label>
-                </div>
+                <FormFields.CheckboxField
+                  id='apiKeySource'
+                  disabled={isReadOnly}
+                  checked={config.source === 'user'}
+                  onChange={e => updateConfig({ source: e.target.checked ? 'user' : 'admin' })}
+                  label='Each user provides their own key'
+                  description='When unchecked, an admin-provided key is used for all users.'
+                />
               </div>
 
               {config.source === 'admin' && (
-                <div>
-                  <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>API Key</label>
-                  <div className='relative rounded-md shadow-sm'>
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      disabled={isReadOnly}
-                      className={`${getInputClass('key')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
-                      style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
-                      value={isEditMode && !isApiKeyDirty ? '' : config.key || ''}
-                      placeholder={isEditMode && !isApiKeyDirty && config.key ? config.key : '...'}
-                      onChange={e => {
-                        setIsApiKeyDirty(true);
-                        updateConfig({ key: e.target.value });
-                      }}
-                    />
-                    {(!isEditMode || isApiKeyDirty) && (
-                      <button
-                        type='button'
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
-                      >
-                        {showApiKey ? (
-                          <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
-                        ) : (
-                          <EyeIcon className='h-5 w-5' aria-hidden='true' />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                  <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                    Leave empty if using OAuth or no authentication
-                  </p>
-                  {renderError('key')}
-                </div>
+                <FormFields.InputField
+                  label='API Key'
+                  type='password'
+                  showPasswordToggle={!isEditMode || isApiKeyDirty}
+                  monospace
+                  disabled={isReadOnly}
+                  value={isEditMode && !isApiKeyDirty ? '' : config.key || ''}
+                  placeholder={isEditMode && !isApiKeyDirty && config.key ? config.key : '...'}
+                  onChange={e => {
+                    setIsApiKeyDirty(true);
+                    updateConfig({ key: e.target.value });
+                  }}
+                  helperText='Leave empty if using OAuth or no authentication'
+                  error={errors.key}
+                />
               )}
 
               <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>Header Format</label>
-                <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
-                  <button
-                    type='button'
-                    disabled={isReadOnly}
-                    onClick={() => updateConfig({ authorization_type: 'bearer' })}
-                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      config.authorization_type === 'bearer'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    Bearer
-                  </button>
-                  <button
-                    type='button'
-                    disabled={isReadOnly}
-                    onClick={() => updateConfig({ authorization_type: 'basic' })}
-                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      config.authorization_type === 'basic'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    Basic
-                  </button>
-                  <button
-                    type='button'
-                    disabled={isReadOnly}
-                    onClick={() => updateConfig({ authorization_type: 'custom' })}
-                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      config.authorization_type === 'custom'
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    Custom
-                  </button>
-                </div>
+                <FormFields.RadioGroupField
+                  label='Header Format'
+                  value={config.authorization_type || 'bearer'}
+                  onChange={val => updateConfig({ authorization_type: val })}
+                  options={[
+                    { label: 'Bearer', value: 'bearer' },
+                    { label: 'Basic', value: 'basic' },
+                    { label: 'Custom', value: 'custom' },
+                  ]}
+                  disabled={isReadOnly}
+                />
 
                 {config.authorization_type === 'custom' && (
                   <div className='mt-4 animate-fadeIn'>
-                    <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                      Custom Header Name <span className='text-red-500'>*</span>
-                    </label>
-                    <input
-                      type='text'
+                    <FormFields.InputField
+                      label='Custom Header Name'
                       required
                       disabled={isReadOnly}
-                      className={`${getInputClass('custom_header')} disabled:opacity-50 disabled:cursor-not-allowed`}
                       value={config.custom_header || ''}
                       onChange={e => updateConfig({ custom_header: e.target.value })}
                       placeholder='X-Custom-Auth'
+                      error={errors.custom_header}
                     />
-                    {renderError('custom_header')}
                   </div>
                 )}
               </div>
@@ -231,138 +154,96 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
 
           {config.type === 'oauth' && (
             <div className='space-y-4 animate-fadeIn'>
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Client ID</label>
-                <input
-                  type='text'
-                  disabled={isReadOnly}
-                  className={`${getInputClass('client_id')} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  placeholder='your-client-id-here'
-                  value={config.client_id || ''}
-                  onChange={e => updateConfig({ client_id: e.target.value })}
-                />
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  Required for static clients. Leave blank if using dynamic client registration
-                </p>
-                {renderError('client_id')}
-              </div>
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Client Secret</label>
-                <div className='relative rounded-md shadow-sm'>
-                  <input
-                    type={showClientSecret ? 'text' : 'password'}
-                    disabled={isReadOnly}
-                    className={`${getInputClass('client_secret')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
-                    style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
-                    value={isEditMode && !isClientSecretDirty ? '' : config.client_secret || ''}
-                    placeholder={
-                      isEditMode && !isClientSecretDirty && config.client_secret
-                        ? config.client_secret
-                        : 'your-client-secret-here'
-                    }
-                    onChange={e => {
-                      setIsClientSecretDirty(true);
-                      updateConfig({ client_secret: e.target.value });
-                    }}
-                  />
-                  {(!isEditMode || isClientSecretDirty) && (
-                    <button
-                      type='button'
-                      onClick={() => setShowClientSecret(!showClientSecret)}
-                      className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
-                    >
-                      {showClientSecret ? (
-                        <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
-                      ) : (
-                        <EyeIcon className='h-5 w-5' aria-hidden='true' />
-                      )}
-                    </button>
-                  )}
-                </div>
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  Required for static clients. Never share this value.
-                </p>
-                {renderError('client_secret')}
-              </div>
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                  Authorization URL <span className='text-red-500'>*</span>
-                </label>
-                <input
-                  type='url'
-                  required
-                  disabled={isReadOnly}
-                  className={`${getInputClass('authorization_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  placeholder='https://auth.example.com/oauth/authorize'
-                  value={config.authorization_url || ''}
-                  onChange={e => updateConfig({ authorization_url: e.target.value })}
-                />
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  The endpoint where users are redirected to authenticate and grant permissions.
-                </p>
-                {renderError('authorization_url')}
-              </div>
+              <FormFields.InputField
+                label='Client ID'
+                disabled={isReadOnly}
+                placeholder='your-client-id-here'
+                value={config.client_id || ''}
+                onChange={e => updateConfig({ client_id: e.target.value })}
+                helperText='Required for static clients. Leave blank if using dynamic client registration'
+                error={errors.client_id}
+              />
 
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                  Token URL <span className='text-red-500'>*</span>
-                </label>
-                <input
-                  type='url'
-                  required
-                  disabled={isReadOnly}
-                  className={`${getInputClass('token_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  placeholder='https://auth.example.com/oauth/token'
-                  value={config.token_url || ''}
-                  onChange={e => updateConfig({ token_url: e.target.value })}
-                />
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  The backend endpoint for exchanging authorization codes for access tokens.
-                </p>
-                {renderError('token_url')}
-              </div>
+              <FormFields.InputField
+                label='Client Secret'
+                type='password'
+                showPasswordToggle={!isEditMode || isClientSecretDirty}
+                monospace
+                disabled={isReadOnly}
+                value={isEditMode && !isClientSecretDirty ? '' : config.client_secret || ''}
+                placeholder={
+                  isEditMode && !isClientSecretDirty && config.client_secret
+                    ? config.client_secret
+                    : 'your-client-secret-here'
+                }
+                onChange={e => {
+                  setIsClientSecretDirty(true);
+                  updateConfig({ client_secret: e.target.value });
+                }}
+                helperText='Required for static clients. Never share this value.'
+                error={errors.client_secret}
+              />
 
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Scope</label>
-                <input
-                  type='text'
-                  disabled={isReadOnly}
-                  className={`${getInputClass('scope')} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  placeholder='read write'
-                  value={config.scope || ''}
-                  onChange={e => updateConfig({ scope: e.target.value })}
-                />
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  Space-separated list of permissions.Examples:
-                </p>
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  Generic: <span className='italic'>rea d write profile</span> • GitHub:
-                  <span className='italic'>repo read:user</span> • Google:
-                  <span className='italic'>openid email profile</span>
-                </p>
-              </div>
+              <FormFields.InputField
+                label='Authorization URL'
+                required
+                type='url'
+                disabled={isReadOnly}
+                placeholder='https://auth.example.com/oauth/authorize'
+                value={config.authorization_url || ''}
+                onChange={e => updateConfig({ authorization_url: e.target.value })}
+                helperText='The endpoint where users are redirected to authenticate and grant permissions.'
+                error={errors.authorization_url}
+              />
 
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Redirect URI</label>
-                <div className='flex gap-2'>
-                  <input
-                    type='text'
-                    readOnly
-                    disabled={isReadOnly}
-                    className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm sm:text-sm bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed focus:ring-0 focus:border-gray-300 dark:focus:border-gray-600'
-                    value={redirectUri}
-                  />
+              <FormFields.InputField
+                label='Token URL'
+                required
+                type='url'
+                disabled={isReadOnly}
+                placeholder='https://auth.example.com/oauth/token'
+                value={config.token_url || ''}
+                onChange={e => updateConfig({ token_url: e.target.value })}
+                helperText='The backend endpoint for exchanging authorization codes for access tokens.'
+                error={errors.token_url}
+              />
+
+              <FormFields.InputField
+                label='Scope'
+                disabled={isReadOnly}
+                placeholder='read write'
+                value={config.scope || ''}
+                onChange={e => updateConfig({ scope: e.target.value })}
+                helperText={
+                  <>
+                    <span className='block'>Space-separated list of permissions.Examples:</span>
+                    <span className='block'>
+                      Generic: <span className='italic'>rea d write profile</span> • GitHub:
+                      <span className='italic'>repo read:user</span> • Google:
+                      <span className='italic'>openid email profile</span>
+                    </span>
+                  </>
+                }
+              />
+
+              <FormFields.InputField
+                label='Redirect URI'
+                readOnly
+                disabled={isReadOnly}
+                value={redirectUri}
+                inputClassName='cursor-not-allowed'
+                suffix={
                   <button
                     type='button'
                     onClick={() => {
                       navigator.clipboard.writeText(redirectUri);
                     }}
-                    className='inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500'
+                    className='btn-input-suffix'
                   >
                     <ClipboardDocumentIcon className='h-5 w-5' aria-hidden='true' />
                   </button>
-                </div>
-              </div>
+                }
+              />
             </div>
           )}
         </div>

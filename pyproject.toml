@@ -4,62 +4,96 @@ version = "0.2.0"
 description = "Jarvis Registry - Monorepo Workspace Root"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-
 # Root workspace dependencies needed for scripts
-dependencies = []
+dependencies = [
+    # root must depend on all workspace members, referencing them by distribution names
+    "registry-pkgs",
+    "registry",
+    "auth-server",
+    "mcpgw",
 
-[project.scripts]
-# Data management scripts (use workspace dependencies)
-seed-data = "scripts.seed_mongodb:cli"
-sync-mongo-weaviate = "scripts.sync_mongo_to_weaviate:cli"
-
-# Optional dependencies are defined in sub-projects where they're used
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-# Workspace root - no packages defined here
-# Packages are defined in sub-projects
-packages = []
-
-# Pytest and coverage configurations are in sub-projects
+    # External direct dependencies
+    "python-dotenv>=1.0.0",
+]
 
 [tool.uv.workspace]
 members = [
-    "packages",
+    "registry-pkgs",
     "registry",
-    "auth_server",
+    "auth-server",
     "servers/mcpgw",
 ]
+
+[tool.uv.sources]
+registry-pkgs = { workspace = true }
+registry = { workspace = true }
+auth-server = { workspace = true }
+mcpgw = { workspace = true }
+
+[tool.uv]
+# Constrain onnxruntime to a version with macOS Intel (x86_64) support
+# v1.24.1 only has ARM64 wheels for macOS, so we use an older version
+constraint-dependencies = ["onnxruntime<=1.23.2"]
+
+[project.scripts]
+# Data management scripts
+seed-data = "scripts.seed_mongodb:cli"
+sync-mongo-weaviate = "scripts.sync_mongo_to_weaviate:cli"
+sync-version = "scripts.sync_version:main"
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Workspace root - script folders that are referenced in the [project.scripts] table should be included explicitly in "packages".
+packages = ["scripts"]
 
 [dependency-groups]
 dev = [
     "poethepoet>=0.40.0",
     "ruff>=0.15.0",
     "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-xdist>=3.5.0",
+    "coverage[toml]>=7.4.0",
+    "pytest-html>=4.1.1",
+    "pytest-json-report>=1.5.0",
+    "factory-boy>=3.3.0",
+    "faker>=24.0.0",
+    "types-pyyaml>=6.0.12.20250915",
+    "mypy>=1.0.0",
 ]
 
 [tool.poe.tasks]
 # Version management
-version = { shell = "echo '\n📦 Workspace versions:\n' && echo '  Root       →' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && echo '  packages   →' $(grep -m1 '^version = ' packages/pyproject.toml | cut -d'\"' -f2) && echo '  registry   →' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && echo '  auth_server →' $(grep -m1 '^version = ' auth_server/pyproject.toml | cut -d'\"' -f2) && echo '  mcpgw      →' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2) && echo ''", help = "Show versions across all projects" }
+version = { shell = """
+printf "\n📦 Workspace versions:\n" && \
+printf '   Root          → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
+printf '   registry-pkgs → %s\n' $(grep -m1 '^version = ' registry-pkgs/pyproject.toml | cut -d'\"' -f2) && \
+printf '   registry      → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
+printf '   auth-server   → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
+printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2)""", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
 # Run all tests across all projects
-test-all = { shell = "cd registry && uv run poe test && cd ../auth_server && uv run poe test && cd ../packages && uv run poe test" }
-test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth_server && uv run poe test-cov && cd ../packages && uv run poe test-cov" }
+test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../registry-pkgs && uv run poe test" }
+test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../registry-pkgs && uv run poe test-cov" }
 
-# Registry tests
+# registry tests
 test-registry = { shell = "cd registry && uv run poe test" }
 test-registry-cov = { shell = "cd registry && uv run poe test-cov" }
 
-# Auth server tests
-test-auth-server = { shell = "cd auth_server && uv run poe test" }
-test-auth-server-cov = { shell = "cd auth_server && uv run poe test-cov" }
+# auth-server tests
+test-auth-server = { shell = "cd auth-server && uv run poe test" }
+test-auth-server-cov = { shell = "cd auth-server && uv run poe test-cov" }
 
-# Packages tests
-test-packages = { shell = "cd packages && uv run poe test" }
-test-packages-cov = { shell = "cd packages && uv run poe test-cov" }
+# registry-pkgs tests
+test-registry-pkgs = { shell = "cd registry-pkgs && uv run poe test" }
+test-registry-pkgs-cov = { shell = "cd registry-pkgs && uv run poe test-cov" }
 
 # Linting and formatting
 lint = { shell = "uv run ruff check .", help = "Run ruff linter" }
@@ -70,8 +104,21 @@ check = { shell = "uv run ruff check . && uv run ruff format --check .", help = 
 fix = { shell = "uv run ruff check --fix . && uv run ruff format .", help = "Fix all auto-fixable issues and format" }
 
 # Pre-commit hooks
-hooks-install = { shell = "uv run pre-commit install", help = "Install pre-commit hooks" }
+hooks-install = { shell = "uv run pre-commit install -t pre-commit -t post-merge", help = "Install pre-commit and post-merge stage hooks" }
 hooks-run = { shell = "uv run pre-commit run --all-files", help = "Run pre-commit on all files" }
+
+# Prepare Python-related artifacts for docker build.
+build-artifacts = { shell = """
+xargs -I % sh -c 'uv build --package % --wheel --no-build-logs --out-dir build-artifacts' <<EOF
+registry-pkgs
+registry
+auth-server
+mcpgw
+EOF
+uv export --package registry --package registry-pkgs --package auth-server --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-registry.txt
+uv export --package auth-server --package registry-pkgs --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-auth-server.txt
+uv export --package mcpgw --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-mcpgw.txt
+""", help = "Generate artifacts for Docker build and put them in the build-artifacts/ folder." }
 
 [tool.ruff]
 target-version = "py312"
@@ -85,19 +132,19 @@ exclude = [
     "*.egg-info",
     "node_modules",
     "frontend",
-    "packages/models/_generated",
+    "registry-pkgs/src/registry_pkgs/models/_generated",
 ]
 
 [tool.ruff.lint]
 select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # Pyflakes
-    "I",      # isort
-    "B",      # flake8-bugbear
-    "C4",     # flake8-comprehensions
-    "UP",     # pyupgrade
-    "SIM",    # flake8-simplify
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
@@ -113,11 +160,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["registry", "auth_server", "packages"]
+# Each value must be the import name of one of our own packages in this workspace.
+known-first-party = ["registry_pkgs", "registry", "auth_server", "mcpgw"]
 
 [tool.ruff.lint.per-file-ignores]
-# Import order matters in __init__.py to avoid circular imports
-"packages/vector/__init__.py" = ["I001"]
+# Import order matters some files. Exclude them from automatic import sorting.
+"registry-pkgs/src/registry_pkgs/vector/__init__.py" = ["I001"]
 
 [tool.ruff.format]
 quote-style = "double"

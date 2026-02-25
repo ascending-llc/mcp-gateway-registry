@@ -145,28 +145,19 @@ If you need to import database schemas from the jarvis-api repository for local 
 # Authenticate with GitHub CLI (for private repository access)
 gh auth login
 
-# Run from repository root (important for correct paths!)
-cd /path/to/mcp-gateway-registry/packages
+# Run the following commands from project root.
+uv run --package registry-pkgs import-schemas \
+--tag asc0.4.2 \
+--output-dir ./registry-pkgs/src/registry_pkgs/models \
+--token $(gh auth token)
 
-# Import ALL schemas from a specific release version (recommended)
-uv run import-schemas --tag asc0.4.2 \
-  --output-dir ./models \
-  --token $(gh auth token)
-
-# Or import specific files only
-uv run import-schemas --tag asc0.4.2 \
-  --files user.json token.json mcpServer.json session.json \
-  --output-dir ./models \
-  --token $(gh auth token)
-
-# Verify schemas were imported (should be in packages/models/_generated/)
-ls -la models/_generated/
+# Verify schemas were imported
+ls -la ./registry-pkgs/src/registry_pkgs/models/_generated
 ```
 
 **Important Notes**:
-- Always run from the **package** directory to ensure correct paths
-- When building Docker images, `SCHEMA_VERSION` and `GITHUB_TOKEN` are **required** build arguments
-- The schemas will be automatically imported during Docker builds in CI/CD
+- In CI/CD, the schemas will be automatically imported before generating Python wheels.
+  Then the wheels that contain generated model code will be used for Docker builds.
 - When `--files` is omitted, **all .json files** from the release will be imported
 
 ### Create Docker Compose Override File
@@ -259,17 +250,17 @@ After starting the services, you can populate MongoDB with sample data including
 # Make sure MongoDB is running
 
 # Seed the database with sample data
-uv run seed_data
+uv run seed-data
+
 # sync data into vector database(optional)
 uv run sync-mongo-weaviate
-
-# Or use the full command:
-# uv run python scripts/seed_mongodb.py
 ```
+
 **Clean the database:**
+
 ```bash
 # Remove all seeded data
-uv run seed_data clean
+uv run seed-data clean
 ```
 
 **Environment Configuration:**
@@ -288,6 +279,12 @@ docker compose logs -f auth-server
 docker compose logs -f registry
 
 # Press Ctrl+C to exit log viewing
+```
+
+### Stop the services
+
+```bash
+docker compose --profile full down
 ```
 
 ---

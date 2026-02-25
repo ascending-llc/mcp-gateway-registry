@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 MongoDB to Weaviate Sync Script for MCP Gateway Registry
 
@@ -19,7 +18,6 @@ import os
 import sys
 import traceback
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -27,13 +25,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Add packages to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from packages.database.mongodb import MongoDB
-from packages.models.extended_mcp_server import ExtendedMCPServer
-from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.services.server_service import server_service_v1
+from registry_pkgs.database.mongodb import MongoDB
+from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer
+from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 mcp_server_repo = get_mcp_server_repo()
 

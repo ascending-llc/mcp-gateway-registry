@@ -1,68 +1,38 @@
 # MCPGW Server Dockerfile - MCP Gateway API Server
 FROM python:3.12-slim
 
+# PYTHONUNBUFFERED optimizes logging in a container
+# PIP_ROOT_USER_ACTION and PIP_NO_CACHE_DIR optimizes pip install
+# DEBIAN_FRONTEND is for apt-get
 ENV PYTHONUNBUFFERED=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
+# Install system dependencies - curl and procps are included in case `kubectl exec` uses them.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    git \
-    netcat-openbsd \
+    procps \
     ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy workspace root pyproject.toml to enable workspace resolution
-COPY pyproject.toml /app/
-
-# Copy mcpgw application code
-COPY servers/mcpgw/ /app/servers/mcpgw/
-
-# Install Python dependencies
-# Step 1: Install uv package manager
-# Step 2: Install mcpgw server dependencies
-RUN pip install --no-cache-dir uv && \
-    echo "Installing MCPGW server dependencies..." && \
-    cd /app && \
-    uv pip install --system -e ./servers/mcpgw && \
-    echo "Dependencies installed successfully"
-
 # Create logs directory
 RUN mkdir -p /app/logs
-COPY auth_server/scopes.yml /app/auth_server/scopes.yml
 
-# Expose default port
+# Copy over the Python related build artifacts - these files are prepared by GitHub Actions in CI
+COPY ./build-artifacts /opt/build/
+
+# Install all 3rd party dependencies with the exact versions locked by uv
+RUN pip install --only-binary :all: -r /opt/build/requirements-mcpgw.txt
+
+# Install own packages from wheels
+RUN pip install --no-deps --no-index --find-links /opt/build/ mcpgw
+
+# Expose port
 EXPOSE 8003
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8003}/health || exit 1
-
-# Create entrypoint script that validates environment and runs server.py
-RUN echo '#!/bin/bash\n\
-set -e\n\
-\n\
-echo "================================="\n\
-echo "MCPGW Server Configuration"\n\
-echo "================================="\n\
-echo "Port: ${PORT:-8003}"\n\
-echo "Registry URL: ${REGISTRY_URL:-not set}"\n\
-echo "================================="\n\
-\n\
-# Validate required environment variables\n\
-if [ -z "${REGISTRY_URL:-}" ]; then\n\
-    echo "WARNING: REGISTRY_URL environment variable is not set."\n\
-    echo "The MCPGW server may not function properly without registry access."\n\
-fi\n\
-\n\
-echo "================================="\n\
-\n\
-# Run the server (environment variables are automatically available to Python)\n\
-cd /app/servers/mcpgw\n\
-exec python server.py --port ${PORT:-8003}' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+# Start the mcpgw server
+CMD ["python", "-m", "mcpgw.server", "--port", "8003"]

@@ -22,7 +22,7 @@ from registry.services.search.base import VectorSearchService
 from registry.services.server_service import ServerServiceV1
 
 # Import test utilities
-from registry.tests.fixtures.factories import (
+from tests.fixtures.factories import (
     ServerInfoFactory,
     create_multiple_servers,
     create_server_with_tools,

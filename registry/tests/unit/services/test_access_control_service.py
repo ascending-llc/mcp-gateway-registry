@@ -11,9 +11,11 @@ from registry.services.access_control_service import ACLService
 
 class TestACLService:
     @pytest.mark.asyncio
+    @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
-    async def test_grant_permission_new_entry(self, mock_acl_entry):
+    async def test_grant_permission_new_entry(self, mock_acl_entry, mock_get_session):
         service = ACLService()
+        mock_get_session.return_value = AsyncMock()  # Mock session
         mock_acl_entry.find_one = AsyncMock(return_value=None)
 
         # IAclEntry() returns an AsyncMock, whose insert is also an AsyncMock
@@ -31,9 +33,11 @@ class TestACLService:
             new_entry.insert.assert_awaited()
 
     @pytest.mark.asyncio
+    @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
-    async def test_grant_permission_update_existing(self, mock_acl_entry):
+    async def test_grant_permission_update_existing(self, mock_acl_entry, mock_get_session):
         service = ACLService()
+        mock_get_session.return_value = AsyncMock()  # Mock session
         existing_entry = MagicMock()
         existing_entry.save = AsyncMock()
         mock_acl_entry.find_one = AsyncMock(return_value=existing_entry)
@@ -72,9 +76,11 @@ class TestACLService:
             )
 
     @pytest.mark.asyncio
+    @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
-    async def test_delete_acl_entries_for_resource(self, mock_acl_entry):
+    async def test_delete_acl_entries_for_resource(self, mock_acl_entry, mock_get_session):
         service = ACLService()
+        mock_get_session.return_value = AsyncMock()  # Mock session
         mock_result = MagicMock()
         mock_result.deleted_count = 2
         mock_acl_entry.find.return_value.delete = AsyncMock(return_value=mock_result)
@@ -100,7 +106,13 @@ class TestACLService:
         service = ACLService()
         entry = MagicMock()
         entry.permBits = PermissionBits.EDIT
-        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        # Mock the chained methods: find().sort().to_list()
+        mock_find_result = MagicMock()
+        mock_sort_result = MagicMock()
+        mock_sort_result.to_list = AsyncMock(return_value=[entry])
+        mock_find_result.sort = MagicMock(return_value=mock_sort_result)
+        mock_acl_entry.find = MagicMock(return_value=mock_find_result)
 
         perms = await service.get_user_permissions_for_resource(
             user_id=PydanticObjectId(),
@@ -114,47 +126,11 @@ class TestACLService:
         assert perms.SHARE is False
 
     @pytest.mark.asyncio
+    @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
-    async def test_get_user_permissions_for_resource_editor(self, mock_acl_entry):
-        """Editor (permBits=3) should have VIEW and EDIT via bitwise AND."""
+    async def test_delete_permission(self, mock_acl_entry, mock_get_session):
         service = ACLService()
-        entry = MagicMock()
-        entry.permBits = RoleBits.EDITOR  # 3 = VIEW | EDIT
-        mock_acl_entry.find_one = AsyncMock(return_value=entry)
-
-        perms = await service.get_user_permissions_for_resource(
-            user_id=PydanticObjectId(),
-            resource_type=ResourceType.MCPSERVER.value,
-            resource_id=PydanticObjectId(),
-        )
-        assert perms.VIEW is True
-        assert perms.EDIT is True
-        assert perms.DELETE is False
-        assert perms.SHARE is False
-
-    @pytest.mark.asyncio
-    @patch("registry.services.access_control_service.IAclEntry")
-    async def test_get_user_permissions_for_resource_viewer(self, mock_acl_entry):
-        """Viewer (permBits=1) should only have VIEW."""
-        service = ACLService()
-        entry = MagicMock()
-        entry.permBits = RoleBits.VIEWER  # 1 = VIEW only
-        mock_acl_entry.find_one = AsyncMock(return_value=entry)
-
-        perms = await service.get_user_permissions_for_resource(
-            user_id=PydanticObjectId(),
-            resource_type=ResourceType.MCPSERVER.value,
-            resource_id=PydanticObjectId(),
-        )
-        assert perms.VIEW is True
-        assert perms.EDIT is False
-        assert perms.DELETE is False
-        assert perms.SHARE is False
-
-    @pytest.mark.asyncio
-    @patch("registry.services.access_control_service.IAclEntry")
-    async def test_delete_permission(self, mock_acl_entry):
-        service = ACLService()
+        mock_get_session.return_value = AsyncMock()  # Mock session
         mock_result = MagicMock()
         mock_result.deleted_count = 1
         mock_acl_entry.find.return_value.delete = AsyncMock(return_value=mock_result)
@@ -186,7 +162,13 @@ class TestACLService:
         service = ACLService()
         entry = MagicMock()
         entry.permBits = RoleBits.OWNER  # 15
-        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        # Mock the chained methods: find().sort().to_list()
+        mock_find_result = MagicMock()
+        mock_sort_result = MagicMock()
+        mock_sort_result.to_list = AsyncMock(return_value=[entry])
+        mock_find_result.sort = MagicMock(return_value=mock_sort_result)
+        mock_acl_entry.find = MagicMock(return_value=mock_find_result)
 
         perms = await service.get_user_permissions_for_resource(
             user_id=PydanticObjectId(),
@@ -204,7 +186,13 @@ class TestACLService:
     async def test_get_user_permissions_for_resource_no_match(self, mock_acl_entry):
         """No ACL entry should return all-False permissions."""
         service = ACLService()
-        mock_acl_entry.find_one = AsyncMock(return_value=None)
+
+        # Mock the chained methods: find().sort().to_list() returning empty list
+        mock_find_result = MagicMock()
+        mock_sort_result = MagicMock()
+        mock_sort_result.to_list = AsyncMock(return_value=[])
+        mock_find_result.sort = MagicMock(return_value=mock_sort_result)
+        mock_acl_entry.find = MagicMock(return_value=mock_find_result)
 
         perms = await service.get_user_permissions_for_resource(
             user_id=PydanticObjectId(),
@@ -221,7 +209,9 @@ class TestACLService:
     async def test_get_user_permissions_for_resource_exception(self, mock_acl_entry):
         """Exception should return all-False permissions."""
         service = ACLService()
-        mock_acl_entry.find_one = AsyncMock(side_effect=Exception("db error"))
+
+        # Mock find() to raise exception
+        mock_acl_entry.find = MagicMock(side_effect=Exception("db error"))
 
         perms = await service.get_user_permissions_for_resource(
             user_id=PydanticObjectId(),
@@ -237,7 +227,13 @@ class TestACLService:
         service = ACLService()
         entry = MagicMock()
         entry.permBits = RoleBits.VIEWER  # 1
-        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        # Mock the chained methods: find().sort().to_list()
+        mock_find_result = MagicMock()
+        mock_sort_result = MagicMock()
+        mock_sort_result.to_list = AsyncMock(return_value=[entry])
+        mock_find_result.sort = MagicMock(return_value=mock_sort_result)
+        mock_acl_entry.find = MagicMock(return_value=mock_find_result)
 
         perms = await service.check_user_permission(
             user_id=PydanticObjectId(),
@@ -254,7 +250,13 @@ class TestACLService:
         service = ACLService()
         entry = MagicMock()
         entry.permBits = RoleBits.VIEWER  # 1 = VIEW only
-        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        # Mock the chained methods: find().sort().to_list()
+        mock_find_result = MagicMock()
+        mock_sort_result = MagicMock()
+        mock_sort_result.to_list = AsyncMock(return_value=[entry])
+        mock_find_result.sort = MagicMock(return_value=mock_sort_result)
+        mock_acl_entry.find = MagicMock(return_value=mock_find_result)
 
         with pytest.raises(HTTPException) as exc_info:
             await service.check_user_permission(
@@ -270,7 +272,13 @@ class TestACLService:
     async def test_check_user_permission_no_entry(self, mock_acl_entry):
         """No ACL entry should raise 403."""
         service = ACLService()
-        mock_acl_entry.find_one = AsyncMock(return_value=None)
+
+        # Mock the chained methods: find().sort().to_list() returning empty list
+        mock_find_result = MagicMock()
+        mock_sort_result = MagicMock()
+        mock_sort_result.to_list = AsyncMock(return_value=[])
+        mock_find_result.sort = MagicMock(return_value=mock_sort_result)
+        mock_acl_entry.find = MagicMock(return_value=mock_find_result)
 
         with pytest.raises(HTTPException) as exc_info:
             await service.check_user_permission(

@@ -4,8 +4,9 @@ version = "0.2.0"
 description = "MCP Server Registry Service"
 requires-python = ">=3.12"
 dependencies = [
-    # Shared packages
-    "packages",
+    # workspace packages
+    "registry-pkgs",
+    "auth-server",
 
     # Web framework
     "fastapi>=0.115.12",
@@ -49,50 +50,40 @@ dependencies = [
     # Security scanning
     "bandit>=1.8.3",
     "cisco-ai-mcp-scanner>=3.0.1",
-    "cisco-ai-a2a-scanner @ git+https://github.com/cisco-ai-defense/a2a-scanner.git@main",
+    "cisco-ai-a2a-scanner>=1.0.0",
 
     "langchain-text-splitters>=1.1.0",
 ]
 
 [tool.uv.sources]
-packages = { workspace = true }
-
-[tool.uv]
-package = false
+registry-pkgs = { workspace = true }
+auth-server = { workspace = true }
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=67", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# Auto-discover all packages, excluding tests
-packages = { find = { where = ["."], exclude = ["tests*"] } }
+zip-safe = false
+include-package-data = true
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+registry = ["py.typed"]
+
+# Tasks of this specific workspace member should be run from the member directory, i.e. `./registry`.
 [tool.poe.tasks]
-# Development server (runs from parent directory with parent's env)
-dev = { shell = "cd .. && uv run uvicorn registry.main:app --reload --host 0.0.0.0 --port 8000" }
+# Development server
+dev = { shell = "uv run uvicorn registry.main:app --reload --host 0.0.0.0 --port 8000" }
 
-# Run all tests (use parent's uv environment)
-test = { shell = "cd .. && uv run pytest registry/tests/ -v" }
-test-cov = { shell = "cd .. && uv run pytest registry/tests/ -v --cov=registry --cov-report=html --cov-report=term --cov-report=xml" }
+# Run all tests
+test = { shell = "uv run pytest tests/ -v" }
+test-cov = { shell = "uv run pytest tests/ -v --cov=registry --cov-report=html --cov-report=term --cov-report=xml" }
 
 # Run unit tests only
-test-unit = { shell = "cd .. && uv run pytest registry/tests/unit -v -m unit" }
+test-unit = { shell = "uv run pytest tests/unit -v -m unit" }
 
 # Run integration tests only
-test-integration = { shell = "cd .. && uv run pytest registry/tests/integration -v -m integration" }
-
-[dependency-groups]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "pytest-xdist>=3.5.0",
-    "coverage[toml]>=7.4.0",
-    "pytest-html>=4.1.1",
-    "pytest-json-report>=1.5.0",
-    "factory-boy>=3.3.0",
-    "faker>=24.0.0",
-    "poethepoet>=0.40.0",
-]
+test-integration = { shell = "uv run pytest tests/integration -v -m integration" }

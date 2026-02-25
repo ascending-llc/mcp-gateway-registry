@@ -21,10 +21,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.registry
       args:
-        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
+        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-external}
         BUILD_VERSION: ${BUILD_VERSION:-}
-        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
-        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     networks:
       default:
         aliases:
@@ -65,9 +63,6 @@ services:
     volumes:
       - ./registry/logs:/app/logs
       - ./security_scans:/app/security_scans
-      - ./auth_server/scopes.yml:/app/auth_server/scopes.yml
-      - ./auth_server/oauth2_providers.yml:/app/oauth2_providers.yml
-      - ${APP_HOME}/mcp-gateway/federation.json:/app/config/federation.json
     depends_on:
       auth-server:
         condition: service_started
@@ -115,9 +110,15 @@ services:
     volumes:
       - mongodb-data:/data/db
       - mongodb-config:/data/configdb
-    command: mongod --noauth
+    command: mongod --noauth --replSet rs0
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      test: [
+        "CMD",
+        "mongosh",
+        "--quiet",
+        "--eval",
+        "try { if (rs.status().myState === 1) quit(0); else quit(1); } catch(e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'registry-mongodb:27017'}]}); quit(1); }"
+      ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -125,6 +126,7 @@ services:
     profiles:
       - full
       - dev
+
 
   registry-redis:
     container_name: registry-redis
@@ -148,9 +150,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.auth
-      args:
-        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
-        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       # Keycloak configuration
@@ -181,9 +180,7 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - ./auth_server/logs:/app/logs
-      - ./auth_server/scopes.yml:/app/scopes.yml
-      - ./auth_server/oauth2_providers.yml:/app/oauth2_providers.yml
+      - ./auth-server/logs:/app/logs
     restart: unless-stopped
     env_file:
       - .env
@@ -203,7 +200,7 @@ services:
       - "8000:8000"
     restart: unless-stopped
     profiles:
-      - full
+      - disabled
 
   # MCP Gateway Server
   mcpgw-server:
@@ -217,8 +214,6 @@ services:
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET_KEY=${SECRET_KEY}
       - WEAVIATE_HOST=weaviate
-    volumes:
-      - ./auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"
     #    depends_on:
@@ -234,7 +229,7 @@ services:
     restart: on-failure:0
     ports:
       - 8099:8080
-      # - 50051:50051
+      - 50051:50051
     env_file:
       - .env
     volumes:
