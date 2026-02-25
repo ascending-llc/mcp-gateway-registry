@@ -1,9 +1,20 @@
-# Copilot Instructions for Code Standard - Jarvis Registry
+# Copilot Instructions - Jarvis Registry
 
-## Project Context
-Enterprise platform for MCP (Model Context Protocol) servers with OAuth authentication.
-**Stack:** Python 3.12, FastAPI, MongoDB (Beanie), Weaviate vector DB, Keycloak auth.
-All Python workspaces are managed together via `uv` from the root `pyproject.toml`.
+## Project Overview
+
+Jarvis Registry is an enterprise monorepo for MCP (Model Context Protocol) server discovery, registration, and proxying with OAuth authentication.
+
+**Stack:** Python 3.12, FastAPI, MongoDB (Beanie ODM), Weaviate vector DB, Redis, Keycloak/Cognito/Entra auth.
+All Python workspaces are managed via `uv` from the root `pyproject.toml`.
+
+| Workspace | Language | Side | Dependencies | Purpose |
+|---|---|---|---|---|
+| `registry/` | Python (FastAPI) | Backend | `registry-pkgs` | Main MCP server registry + agent registry REST API |
+| `auth-server/` | Python (FastAPI) | Backend | `registry-pkgs` | OAuth2/OIDC auth server (Keycloak, Cognito, Entra) |
+| `registry-pkgs/` | Python | Shared | — | Shared Beanie models, MongoDB/Redis clients, vector DB, telemetry |
+| `servers/mcpgw/` | Python (FastMCP) | Backend | — (standalone) | MCP gateway server — discovers and proxies to 100+ MCP servers |
+| `frontend/` | TypeScript/React | Frontend | — | SPA (Vite + React 18 + TailwindCSS + Biome) |
+| `cli/` | TypeScript (Ink) | CLI | — | Interactive terminal CLI (Ink framework + Anthropic/Bedrock SDK) |
 
 ---
 
@@ -122,78 +133,99 @@ Then STOP and wait for my response.
 
 ---
 
-## Project Structure & Boundaries
+## Workspace Boundaries
 
-Enforce strict file organization according to responsibility. 
+These rules are non-negotiable. They define where code lives and how workspaces interact.
 
-### Workspace Overview
-- **`registry/`**: Python (FastAPI) - Main MCP server registry and agent registry REST API.
-- **`auth-server/`**: Python (FastAPI) - OAuth2/OIDC authentication server, AWS Cognito integration.
-- **`registry-pkgs/`**: Python - Shared models, utilities, vector database integration.
-- **`servers/mcpgw/`**: Python - MCP gateway server implementation.
-- **`frontend/`**: TypeScript/React - Frontend SPA (Vite + React 18 + TailwindCSS).
-- **`cli/`**: TypeScript - Interactive CLI (Ink framework, Anthropic/Bedrock SDK).
-
-### Directory Rules
-**Registry Service (`registry/src/registry/`):**
-- `api/`: Route definitions ONLY. No business logic, no database calls.
-- `services/`: All business logic, data processing, external integrations.
-- `auth/`: Authentication and authorization logic only.
-- `constants.py`: Global constants (no hardcoded values elsewhere).
-
-**Auth Server (`auth-server/src/auth_server/`):**
-- `server.py`: Auth server entry point.
-- `providers/`: OAuth provider implementations (Keycloak, Cognito, Entra).
-- `utils/`: Auth utilities and helpers.
-- `scopes.yml` / `oauth2_providers.yml`: Configurations.
-
-**Shared Packages (`registry-pkgs/src/registry_pkgs/`):**
-- `models/`: Beanie models and data definitions.
-- `database/`: MongoDB connection utilities.
-
-**Frontend (`frontend/`) & CLI (`cli/`):**
-- `src/`: Application logic.
-- Frontend uses Biome for formatting (not Prettier or ESLint).
+- **Beanie Document models** live ONLY in `registry-pkgs/src/registry_pkgs/models/`. Never define Beanie Documents in `registry/` or `auth-server/`.
+- **Dependency flows one-way**: `registry` → `registry-pkgs` ← `auth-server`. Never import from `registry` into `auth-server` or vice versa.
+- **`mcpgw` is standalone**: It talks to the registry via HTTP. Never import from `registry`, `auth-server`, or `registry-pkgs` into `mcpgw`.
+- **Route handlers are thin**: `registry/src/registry/api/` contains route definitions ONLY — no business logic, no direct database calls. All logic lives in `services/`.
+- **Frontend uses Biome** for formatting/linting (not ruff, ESLint, or Prettier). Never suggest Python tooling for `frontend/`.
+- **CLI uses Ink (TSX)** for terminal UI. It is a Node.js project, not Python.
 
 ---
 
-## Development Workflow
+## Project Structure & Directory Rules
 
-### Rule 1: Think Before You Code
-When tackling complex problems or features:
-1. **Present Technical Approach First**: Outline your thought process, architecture decisions, and trade-offs.
-2. **Wait for Developer Agreement**: Do NOT start implementation until the developer reviews and agrees.
-3. **Then Implement**: Follow the agreed-upon approach faithfully.
+### Registry Service (`registry/src/registry/`)
 
-### Rule 2: Modular Code Design
-- **Single Responsibility**: Each function should do ONE thing well.
-- **Small Functions**: Aim for functions under 50 lines.
-- **Extract Logic**: Pull out complex logic into separate, testable functions.
+| Directory | Responsibility |
+|---|---|
+| `api/` | Route definitions only. Delegates to services. Organized into `v1/` sub-routers. |
+| `services/` | All business logic, data processing, external integrations. Uses Beanie ODM. |
+| `auth/` | Auth dependencies (`CurrentUser` type alias), middleware, OAuth flow management. |
+| `schemas/` | Pydantic request/response models for the API layer. |
+| `models/` | API-layer data models (not Beanie Documents — those are in `registry-pkgs`). |
+| `core/` | Config (`BaseSettings`), MCP client, server strategies, telemetry decorators. |
+| `utils/` | Crypto, Keycloak admin, OTEL metrics, general helpers. |
+| `health/` | Health check routes and monitoring service. |
+| `constants.py` | Global constants (Pydantic frozen model). No hardcoded values elsewhere. |
 
-### Rule 3: Duplicate Code Detection
-- Scan for duplicate code blocks across the codebase.
-- Identify similar functions/API calls that could be consolidated into reusable utilities.
-- Check for duplicate constants - centralize in `constants.py`.
+### Auth Server (`auth-server/src/auth_server/`)
+
+| Directory | Responsibility |
+|---|---|
+| `server.py` | FastAPI app factory, lifespan, JWT token generation, rate limiting. |
+| `providers/` | OAuth provider implementations extending `AuthProvider` ABC (Keycloak, Cognito, Entra). |
+| `routes/` | Auth flow routes (authorize, device flow, PKCE, well-known). |
+| `services/` | Token validation, user service. |
+| `models/` | Device flow and token Pydantic models. |
+| `utils/` | Config loader (YAML), OTEL metrics, security masking. |
+| `scopes.yml` | Scope definitions for access control. |
+| `oauth2_providers.yml` | Provider configurations. |
+
+### Shared Packages (`registry-pkgs/src/registry_pkgs/`)
+
+| Directory | Responsibility |
+|---|---|
+| `models/` | Beanie Document models (`ExtendedMCPServer`, `A2AAgent`, `ExtendedAclEntry`, etc.). Single source of truth. |
+| `database/` | MongoDB connection (`connect_db`/`close_db`, Beanie init), Redis client, DB decorators. |
+| `vector/` | Weaviate vector DB integration: adapters, backends, repositories, rerankers (FlashRank). |
+| `core/` | Shared `Settings` (`BaseSettings`): vector store, Weaviate, AWS Bedrock, MongoDB, OTEL config. |
+| `telemetry/` | OpenTelemetry decorators and metrics client. |
+
+### MCP Gateway (`servers/mcpgw/src/mcpgw/`)
+
+| Directory | Responsibility |
+|---|---|
+| `server.py` | FastMCP app factory. Exposes `discover_servers` and `execute_tool`. |
+| `auth/` | Auth middleware, header management. |
+| `core/` | Registry HTTP client integration. |
+| `tools/` | MCP tools: registry API, search. |
 
 ---
 
 ## Code Style & Standards
 
-### General Python (3.12+)
+### Python Tooling (3.12+)
 - **Package manager**: `uv` + `pyproject.toml`. Never use `pip` directly.
 - **Web APIs**: `fastapi` (never `flask`).
 - **Data processing**: `polars` (never `pandas`).
-- **Linting/formatting**: `ruff`.
+- **Linting/formatting**: `ruff` (target `py312`, line-length 120).
 - **Type checking**: `mypy` — required in CI; never use `Any` without justification.
-- **Validation**: Pydantic `BaseModel` for all request/response models and config.
-- **Async**: Use `async/await` for all I/O operations (database, external APIs).
+- **Validation**: Pydantic `BaseModel` for all request/response models and config. `BaseSettings` for env-loaded configuration.
+- **Async**: Use `async/await` for all I/O operations (database, HTTP, vector search).
+- **ODM**: Beanie for MongoDB documents. All Document classes in `registry-pkgs`.
 
-### Python Formatting & Patterns
-- **Type hints** on all functions and methods.
+### Python Patterns
+- **Type hints** on all functions and methods. No exceptions.
 - **Optional params**: Always use `Optional[type]` explicitly; never bare `= None` without annotation.
-- **Private functions**: Prefix with `_` (e.g., `_internal_function_name()`).
-- **Spacing**: Two blank lines between top-level functions/classes. One parameter per line for functions with multiple parameters.
-- **Error Handling**: Specific exception types only — no bare `except:`. Fail fast with clear messages.
+- **Private functions**: Prefix with `_` (e.g., `_validate_server_input()`).
+- **Function size**: Aim for under 50 lines. Extract complex logic into testable helpers.
+- **Spacing**: Two blank lines between top-level functions/classes. One parameter per line for functions with 3+ parameters.
+- **Error handling**: Specific exception types only — no bare `except:`. Fail fast with clear, actionable messages. Chain exceptions with `from e`.
+- **Never-nesting**: Use early returns to keep code flat. Limit nesting to 2-3 levels max.
+- **Constants**: No hardcoded values in functions. Use `constants.py` (Pydantic frozen model) or module-level constants.
+
+### Code Organization (File Layout)
+
+Within each Python file, organize code in this order:
+1. Module docstring
+2. Imports (ruff isort handles ordering — first-party packages: `registry_pkgs`, `registry`, `auth_server`, `mcpgw`)
+3. Module-level constants
+4. Private functions (`_prefixed`)
+5. Public functions / classes
 
 ### TypeScript (Frontend + CLI)
 - Strict types — never use `any`; avoid `unknown` and `as unknown as T`.
@@ -215,25 +247,85 @@ logging.basicConfig(
 
 ---
 
+## Development Commands
+
+All Python commands use `uv run poe <task>`. Run from the **repo root** unless noted otherwise.
+
+| Command | Purpose |
+|---|---|
+| `uv sync --all-groups` | Install all deps (including dev tools) |
+| `uv run poe test-all` | Run all tests across all workspaces |
+| `uv run poe test-all-cov` | Run all tests with coverage |
+| `uv run poe test-registry` | Run registry tests only |
+| `uv run poe test-auth-server` | Run auth-server tests only |
+| `uv run poe test-registry-pkgs` | Run registry-pkgs tests only |
+| `uv run poe lint` | Run ruff linter (check only) |
+| `uv run poe lint-fix` | Run ruff linter with auto-fix |
+| `uv run poe format` | Format code with ruff |
+| `uv run poe format-check` | Check formatting without changes |
+| `uv run poe check` | Run all checks (lint + format check) |
+| `uv run poe fix` | Auto-fix all lint issues + format |
+| `uv run poe hooks-install` | Install pre-commit + post-merge hooks |
+| `uv run poe hooks-run` | Run pre-commit on all files |
+| `uv run poe build-artifacts` | Build wheel artifacts for Docker |
+| `uv run poe version` | Show versions across all workspaces |
+| `uv run poe version-sync <ver>` | Sync version across all workspaces |
+
+**Workspace-level commands** (run from within the workspace directory, e.g., `cd registry`):
+
+| Command | Purpose |
+|---|---|
+| `uv run poe dev` | Start dev server (registry: :8000, auth-server: :8888) |
+| `uv run poe test` | Run workspace tests |
+| `uv run poe test-cov` | Run workspace tests with coverage |
+| `uv run bandit -r src/` | Security scan |
+| `uv run mypy src/` | Type checking |
+
+**Frontend** (from `frontend/`): `npm run dev` (Vite dev server), `npm run build`, `npx @biomejs/biome check --write .`
+
+---
+
+## Development Workflow
+
+### Rule 1: Think Before You Code
+When tackling complex problems or features:
+1. **Present Technical Approach First**: Outline your thought process, architecture decisions, and trade-offs.
+2. **Wait for Developer Agreement**: Do NOT start implementation until the developer reviews and agrees.
+3. **Then Implement**: Follow the agreed-upon approach faithfully.
+
+### Rule 2: Modular Code Design
+- **Single Responsibility**: Each function should do ONE thing well.
+- **Small Functions**: Aim for functions under 50 lines.
+- **Extract Logic**: Pull out complex logic into separate, testable functions.
+
+### Rule 3: Duplicate Code Detection
+- Scan for duplicate code blocks across the codebase.
+- Identify similar functions/API calls that could be consolidated into reusable utilities.
+- Check for duplicate constants — centralize in `constants.py`.
+
+---
+
 ## Testing Requirements
 
 ### Test Organization
-- **One-to-One Mapping**: Test file paths should mirror source code structure (e.g., `src/registry/services/agent_service.py` -> `tests/unit/services/test_agent_service.py`).
+- **One-to-One Mapping**: Test file paths mirror source structure (e.g., `src/registry/services/agent_service.py` → `tests/unit/services/test_agent_service.py`).
 - **Never Create Duplicates**: Always search for existing test files before creating new ones.
-- **Structure**: 
+- **Structure**:
   - `tests/unit/`: Unit tests for services and business logic.
   - `tests/integration/`: Integration tests for API endpoints.
+- **Config**: All workspaces use `pytest.ini` with `asyncio_mode = auto`.
 
 ### Test Execution
 - **Developer Runs Tests**: NEVER automatically run tests after making code changes unless explicitly requested.
 - **Commands**: Run tests from the workspace directory (e.g., `cd registry`).
   - `uv run poe test` or `uv run pytest tests/unit -v`
-  - Check `pytest.ini` for configuration (markers, paths).
+  - Check `pytest.ini` for markers and paths.
 
 ### Coverage & Quality
 - **Minimum 80% code coverage** required.
 - Follow AAA pattern: Arrange, Act, Assert.
-- Mock all external dependencies.
+- Use `factory-boy` and `faker` for test data generation.
+- Mock all external dependencies (MongoDB, Redis, Weaviate, Keycloak, HTTP clients).
 - **Review Guidelines**: Be lenient with test code style. Minor issues (unused imports, verbose assertions) are acceptable if tests pass and verify correct behavior. Focus strict review on production code.
 
 ---
@@ -241,7 +333,7 @@ logging.basicConfig(
 ## Security Requirements
 
 - **Network**: Never bind servers to `0.0.0.0` — use `127.0.0.1` or a specific private IP.
-- **Secrets**: Never hardcode secrets — use environment variables.
+- **Secrets**: Never hardcode secrets — use environment variables via Pydantic `BaseSettings`.
 - **Validation**: Use Pydantic models for all input validation.
 - **Scanning**: Bandit scan must pass (`uv run bandit -r src/`). Handle false positives with `# nosec` and clear justification.
 - **Access Control**: Enforce via scopes defined in `auth-server/src/auth_server/scopes.yml`.
@@ -250,40 +342,51 @@ logging.basicConfig(
 
 ## Pre-commit Workflow
 
-Before committing, run these checks from within the workspace member directory:
+Pre-commit hooks run automatically on `git commit`. They include: ruff lint/format, trailing whitespace, YAML check, bandit security scan, tartufo credential scan.
 
+**From repo root** (covers all workspaces):
 ```bash
-# Format, lint, fix
+# Quick: auto-fix everything
+uv run poe fix
+
+# Full check (what CI runs)
+uv run poe check
+```
+
+**From workspace directory** (e.g., `cd registry`):
+```bash
+# Format + lint + fix
 uv run ruff check --fix . && uv run ruff format .
 
-# Security scanning
+# Security scan
 uv run bandit -r src/
 
-# Type checking
+# Type check
 uv run mypy src/
 
 # Tests
-uv run pytest
-
-# Or all at once (if supported in the workspace)
-poe check
+uv run poe test
 ```
 
 ---
 
 ## Code Review Checklist
 
-### ✅ Structure & Organization
-- Routes are in `api/`, services in `services/`, models in `models/`.
+### Structure & Organization
+- Routes in `api/`, services in `services/`, Beanie models in `registry-pkgs/models/`.
 - No business logic or direct database access in route handlers.
-- Constants defined in `constants.py`, not hardcoded.
+- Constants in `constants.py`, not hardcoded.
+- New Beanie Documents added to `registry-pkgs` (never in `registry/` or `auth-server/`).
 
-### ✅ Code Quality
+### Code Quality
 - No duplicate functions; repeated patterns extracted to utilities.
 - Type hints on all functions; Pydantic models for validation.
-- Proper async/await usage.
+- Proper async/await usage — no blocking calls in async functions.
+- Early returns to avoid deep nesting.
+- `ruff` and `mypy` checks pass.
 
-### ✅ Testing & Security
-- Unit tests written for new services; Integration tests for new endpoints.
+### Testing & Security
+- Unit tests written for new services; integration tests for new endpoints.
 - Bandit scan passes; no sensitive data in logs.
-- Environment variables used for configuration.
+- Environment variables used for configuration via `BaseSettings`.
+- All external dependencies mocked in tests.
