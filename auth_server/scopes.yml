@@ -77,6 +77,14 @@ group_mappings:
     - register-user
   jarvis-register-read-only:
     - register-read-only
+  registry-admin:
+    - registry-admin
+  registry-power-user:
+    - registry-power-user
+  register-user:
+    - register-user
+  register-read-only:
+    - register-read-only
 
 registry-admin:
   - server: '*'
