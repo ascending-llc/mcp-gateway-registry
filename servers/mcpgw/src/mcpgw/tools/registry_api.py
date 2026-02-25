@@ -12,7 +12,13 @@ from typing import Any
 from fastmcp import Context
 from pydantic import Field
 
-from ..core.registry import call_registry_api
+from ..core.registry import (
+    PromptsExecutePayload,
+    RegistryRoute,
+    ResourcesReadPayload,
+    ToolsCallPayload,
+    call_registry_api,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +48,15 @@ async def execute_tool_impl(
 
     try:
         # Build request payload
-        payload = {"server_path": server_path, "tool_name": tool_name, "arguments": arguments}
-        payload["server_id"] = server_id
+        payload: ToolsCallPayload = {
+            "server_path": server_path,
+            "server_id": server_id,
+            "tool_name": tool_name,
+            "arguments": arguments,
+        }
 
         # Use centralized registry API call with automatic auth header extraction
-        result = await call_registry_api(ctx, method="POST", endpoint="/proxy/tools/call", payload=payload)
+        result = await call_registry_api(ctx, method="POST", endpoint=RegistryRoute.TOOLS_CALL, payload=payload)
 
         logger.info(f"✅ Tool execution successful: {tool_name}")
         return result
@@ -78,10 +88,10 @@ async def read_resource_impl(ctx: Context, server_id: str, resource_uri: str) ->
 
     try:
         # Build request payload
-        payload = {"server_id": server_id, "resource_uri": resource_uri}
+        payload: ResourcesReadPayload = {"server_id": server_id, "resource_uri": resource_uri}
 
         # Use centralized registry API call with automatic auth header extraction
-        result = await call_registry_api(ctx, method="POST", endpoint="/proxy/resources/read", payload=payload)
+        result = await call_registry_api(ctx, method="POST", endpoint=RegistryRoute.RESOURCES_READ, payload=payload)
 
         logger.info(f"✅ Resource read successful: {resource_uri}")
         return result
@@ -120,10 +130,14 @@ async def execute_prompt_impl(
 
     try:
         # Build request payload
-        payload = {"server_id": server_id, "prompt_name": prompt_name, "arguments": arguments or {}}
+        payload: PromptsExecutePayload = {
+            "server_id": server_id,
+            "prompt_name": prompt_name,
+            "arguments": arguments or {},
+        }
 
         # Use centralized registry API call with automatic auth header extraction
-        result = await call_registry_api(ctx, method="POST", endpoint="/proxy/prompts/execute", payload=payload)
+        result = await call_registry_api(ctx, method="POST", endpoint=RegistryRoute.PROMPTS_EXECUTE, payload=payload)
 
         logger.info(f"✅ Prompt execution successful: {prompt_name}")
         return result

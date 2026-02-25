@@ -9,12 +9,15 @@ import json
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from enum import StrEnum
+from typing import Any, Literal, TypedDict, overload
 
 import httpx
 import jwt
 from fastmcp import Context
 from fastmcp.server.dependencies import get_http_request
+
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +66,97 @@ def _generate_service_jwt(user_context: dict[str, Any]) -> str:
     return f"Bearer {token}"
 
 
+class RegistryRoute(StrEnum):
+    TOOLS_CALL = "/proxy/tools/call"
+    RESOURCES_READ = "/proxy/resources/read"
+    PROMPTS_EXECUTE = "/proxy/prompts/execute"
+    SEARCH_SERVERS = f"/api/{settings.API_VERSION}/search/servers"
+
+
+class ProxyRoutePayload(TypedDict):
+    server_id: str
+
+
+class ToolsCallPayload(ProxyRoutePayload):
+    server_path: str
+    tool_name: str
+    arguments: dict[str, Any]
+
+
+class ResourcesReadPayload(ProxyRoutePayload):
+    resource_uri: str
+
+
+class PromptsExecutePayload(ProxyRoutePayload):
+    prompt_name: str
+    arguments: dict[str, Any]
+
+
+class SearchServersPayload(TypedDict):
+    query: str
+    top_n: int | None
+    search_type: str
+    type_list: list[str] | None
+
+
+type RegistryRequestPayload = ToolsCallPayload | ResourcesReadPayload | PromptsExecutePayload | SearchServersPayload
+
+
+@overload
 async def call_registry_api(
     ctx: Context,
     /,
     *,
     method: Literal["POST"],
-    endpoint: str,
-    payload: dict[str, Any],
+    endpoint: Literal[RegistryRoute.TOOLS_CALL],
+    payload: ToolsCallPayload,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+async def call_registry_api(
+    ctx: Context,
+    /,
+    *,
+    method: Literal["POST"],
+    endpoint: Literal[RegistryRoute.RESOURCES_READ],
+    payload: ResourcesReadPayload,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+async def call_registry_api(
+    ctx: Context,
+    /,
+    *,
+    method: Literal["POST"],
+    endpoint: Literal[RegistryRoute.PROMPTS_EXECUTE],
+    payload: PromptsExecutePayload,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+async def call_registry_api(
+    ctx: Context,
+    /,
+    *,
+    method: Literal["POST"],
+    endpoint: Literal[RegistryRoute.SEARCH_SERVERS],
+    payload: SearchServersPayload,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]: ...
+
+
+async def call_registry_api(
+    ctx: Context,
+    /,
+    *,
+    method: Literal["POST"],
+    endpoint: RegistryRoute,
+    payload: RegistryRequestPayload,
     headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """

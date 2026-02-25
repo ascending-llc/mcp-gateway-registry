@@ -5,8 +5,7 @@ from typing import Any
 from fastmcp import Context
 from pydantic import Field
 
-from ..config import settings
-from ..core.registry import call_registry_api
+from ..core.registry import RegistryRoute, call_registry_api
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ async def discover_servers_impl(
         result = await call_registry_api(
             ctx,
             method="POST",
-            endpoint=f"/api/{settings.API_VERSION}/search/servers",
+            endpoint=RegistryRoute.SEARCH_SERVERS,
             payload={"query": query, "top_n": top_n, "search_type": search_type, "type_list": type_list},
         )
 
