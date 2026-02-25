@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastmcp import FastMCP
@@ -282,7 +283,7 @@ def register_tools(mcp: FastMCP) -> None:
 # ============================================================================
 
 
-def main():
+async def main():
     """
     Main entry point for the MCPGW server.
     Creates a new stateless application instance and starts the server.
@@ -317,11 +318,10 @@ def main():
 
     logger.info("Starting server...")
     try:
-        mcp.run(
+        await mcp.run_async(
             transport=settings.MCP_TRANSPORT,
             host=settings.MCP_SERVER_HOST,
             port=int(settings.MCP_SERVER_LISTEN_PORT),
-            stateless_http=True,
         )
     except KeyboardInterrupt:
         logger.info("Server shutdown requested by user")
@@ -331,4 +331,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
