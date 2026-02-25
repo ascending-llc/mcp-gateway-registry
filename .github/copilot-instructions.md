@@ -14,7 +14,6 @@ All Python workspaces are managed via `uv` from the root `pyproject.toml`.
 | `registry-pkgs/` | Python | Shared | — | Shared Beanie models, MongoDB/Redis clients, vector DB, telemetry |
 | `servers/mcpgw/` | Python (FastMCP) | Backend | — (standalone) | MCP gateway server — discovers and proxies to 100+ MCP servers |
 | `frontend/` | TypeScript/React | Frontend | — | SPA (Vite + React 18 + TailwindCSS + Biome) |
-| `cli/` | TypeScript (Ink) | CLI | — | Interactive terminal CLI (Ink framework + Anthropic/Bedrock SDK) |
 
 ---
 
@@ -142,7 +141,6 @@ These rules are non-negotiable. They define where code lives and how workspaces 
 - **`mcpgw` is standalone**: It talks to the registry via HTTP. Never import from `registry`, `auth-server`, or `registry-pkgs` into `mcpgw`.
 - **Route handlers are thin**: `registry/src/registry/api/` contains route definitions ONLY — no business logic, no direct database calls. All logic lives in `services/`.
 - **Frontend uses Biome** for formatting/linting (not ruff, ESLint, or Prettier). Never suggest Python tooling for `frontend/`.
-- **CLI uses Ink (TSX)** for terminal UI. It is a Node.js project, not Python.
 
 ---
 
@@ -203,7 +201,6 @@ These rules are non-negotiable. They define where code lives and how workspaces 
 - **Web APIs**: `fastapi` (never `flask`).
 - **Data processing**: `polars` (never `pandas`).
 - **Linting/formatting**: `ruff` (target `py312`, line-length 120).
-- **Type checking**: `mypy` — required in CI; never use `Any` without justification.
 - **Validation**: Pydantic `BaseModel` for all request/response models and config. `BaseSettings` for env-loaded configuration.
 - **Async**: Use `async/await` for all I/O operations (database, HTTP, vector search).
 - **ODM**: Beanie for MongoDB documents. All Document classes in `registry-pkgs`.
@@ -214,9 +211,22 @@ These rules are non-negotiable. They define where code lives and how workspaces 
 - **Private functions**: Prefix with `_` (e.g., `_validate_server_input()`).
 - **Function size**: Aim for under 50 lines. Extract complex logic into testable helpers.
 - **Spacing**: Two blank lines between top-level functions/classes. One parameter per line for functions with 3+ parameters.
-- **Error handling**: Specific exception types only — no bare `except:`. Fail fast with clear, actionable messages. Chain exceptions with `from e`.
 - **Never-nesting**: Use early returns to keep code flat. Limit nesting to 2-3 levels max.
 - **Constants**: No hardcoded values in functions. Use `constants.py` (Pydantic frozen model) or module-level constants.
+
+### Error Handling Strategy
+
+General rules: specific exception types only — no bare `except:`. Chain exceptions with `from e`. Use the same JSON shape for all error responses (`{"detail": "...message..."}`).
+
+**Service layer** (`services/`):
+- Catch exceptions caused by invalid input and raise `HTTPException(4xx)` from them.
+- Let all other exceptions (DB errors, unexpected failures) bubble up unhandled.
+
+**Route layer** (`api/`):
+- Catch **all** exceptions in each route handler.
+- Log the exception.
+- Re-raise `HTTPException` with 4xx status codes directly (these come from services).
+- Wrap any other unrecognized exception in `HTTPException(500, detail="Internal server error")`.
 
 ### Code Organization (File Layout)
 
@@ -227,7 +237,7 @@ Within each Python file, organize code in this order:
 4. Private functions (`_prefixed`)
 5. Public functions / classes
 
-### TypeScript (Frontend + CLI)
+### TypeScript (Frontend)
 - Strict types — never use `any`; avoid `unknown` and `as unknown as T`.
 - Functional first: pure functions, immutable data; avoid unnecessary OOP.
 - All TypeScript and Biome warnings must be resolved.
@@ -279,7 +289,6 @@ All Python commands use `uv run poe <task>`. Run from the **repo root** unless n
 | `uv run poe test` | Run workspace tests |
 | `uv run poe test-cov` | Run workspace tests with coverage |
 | `uv run bandit -r src/` | Security scan |
-| `uv run mypy src/` | Type checking |
 
 **Frontend** (from `frontend/`): `npm run dev` (Vite dev server), `npm run build`, `npx @biomejs/biome check --write .`
 
@@ -332,7 +341,6 @@ When tackling complex problems or features:
 
 ## Security Requirements
 
-- **Network**: Never bind servers to `0.0.0.0` — use `127.0.0.1` or a specific private IP.
 - **Secrets**: Never hardcode secrets — use environment variables via Pydantic `BaseSettings`.
 - **Validation**: Use Pydantic models for all input validation.
 - **Scanning**: Bandit scan must pass (`uv run bandit -r src/`). Handle false positives with `# nosec` and clear justification.
@@ -361,9 +369,6 @@ uv run ruff check --fix . && uv run ruff format .
 # Security scan
 uv run bandit -r src/
 
-# Type check
-uv run mypy src/
-
 # Tests
 uv run poe test
 ```
@@ -383,7 +388,7 @@ uv run poe test
 - Type hints on all functions; Pydantic models for validation.
 - Proper async/await usage — no blocking calls in async functions.
 - Early returns to avoid deep nesting.
-- `ruff` and `mypy` checks pass.
+- `ruff` checks pass.
 
 ### Testing & Security
 - Unit tests written for new services; integration tests for new endpoints.
