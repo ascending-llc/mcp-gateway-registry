@@ -4,7 +4,7 @@ import secrets
 import time
 from typing import Any
 
-from registry.auth.oauth.oauth_utils import get_default_redirect_uri, parse_scope, scope_to_string
+from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.models.oauth_models import (
     MCPOAuthFlowMetadata,
@@ -15,6 +15,8 @@ from registry.models.oauth_models import (
 )
 from registry.schemas.enums import OAuthFlowStatus
 from registry_pkgs.database.redis_client import get_redis_client
+
+from ...core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +116,7 @@ class FlowStateManager:
 
         server_path = server_path.strip()
 
-        return MCPOAuthFlowMetadata(
+        return MCPOAuthFlowMetadata(  # type: ignore [call-arg]
             server_id=server_id.strip(),
             server_name=server_name.strip(),
             server_path=server_path,
@@ -336,16 +338,19 @@ class FlowStateManager:
         """
         Build OAuth client information from server configuration
         """
-        redirect_uri = oauth_config.get("redirect_uri")
-        if not redirect_uri:
-            # Use shared utility for consistent redirect_uri generation
-            redirect_uri = get_default_redirect_uri(path=server_path)
+        base_url = settings.registry_url
+        if base_url.endswith("/"):
+            base_url = base_url.removesuffix("/")
 
-        redirect_uris = [redirect_uri] if redirect_uri else []
+        # Ensure server_path starts with / for proper URL construction
+        normalized_path = server_path if server_path.startswith("/") else f"/{server_path}"
+        redirect_uri = f"{base_url}/api/v1/mcp{normalized_path}/oauth/callback"
+
+        redirect_uris = [redirect_uri]
 
         scope_string = scope_to_string(oauth_config.get("scope"))
         logger.debug(f"Client info - redirect_uris: {redirect_uris}, scopes: {scope_string}")
-        return OAuthClientInformation(
+        return OAuthClientInformation(  # type: ignore [call-arg]
             client_id=str(oauth_config.get("client_id", "")).strip(),
             client_secret=str(oauth_config.get("client_secret")).strip(),
             redirect_uris=redirect_uris,
@@ -362,7 +367,7 @@ class FlowStateManager:
 
         scopes = parse_scope(oauth_config.get("scope"), default=[])
 
-        return OAuthMetadata(
+        return OAuthMetadata(  # type: ignore [call-arg]
             authorization_endpoint=auth_url,
             token_endpoint=token_url,
             issuer=oauth_config.get("issuer", ""),
