@@ -11,9 +11,9 @@ for both MCP server management and A2A agent management operations. The JWT toke
 account is automatically loaded from .oauth-tokens/ingress.json.
 
 PERMISSIONS:
-- Token scopes: mcp-servers-restricted/*, mcp-servers-unrestricted/*, a2a-agent-admin
+- Token scopes: registry-admin, registry-power-user, register-user, register-read-only, a2a-agent-admin
 - Agent operations: register, modify, delete, list (full admin access)
-- Group assignment: mcp-servers-unrestricted, a2a-agent-admin
+- Group assignment: registry-admin, a2a-agent-admin
 
 API: /api/agents (A2A Agent Management API - dedicated endpoints for agent management)
 - List agents: GET /api/agents

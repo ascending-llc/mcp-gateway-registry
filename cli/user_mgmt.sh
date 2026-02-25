@@ -63,7 +63,7 @@ usage() {
     echo "  $0 create-m2m --name agent-finance-bot --groups 'mcp-servers-finance/read,mcp-servers-finance/execute'"
     echo ""
     echo "  # Create human user"
-    echo "  $0 create-human --username jdoe --email jdoe@example.com --firstname John --lastname Doe --groups 'mcp-servers-restricted/read'"
+    echo "  $0 create-human --username jdoe --email jdoe@example.com --firstname John --lastname Doe --groups 'register-read-only'"
     echo ""
     echo "  # Delete user"
     echo "  $0 delete-user --username agent-finance-bot"

@@ -292,7 +292,7 @@ async def add_server_to_groups(server_path: str, group_names: list[str]) -> bool
 
     Args:
         server_path: The server's path (e.g., '/example-server')
-        group_names: List of group names to add the server to (e.g., ['mcp-servers-restricted/read'])
+        group_names: List of group names to add the server to (e.g., ['registry-admin'])
 
     Returns:
         True if successful, False otherwise

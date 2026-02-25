@@ -167,6 +167,11 @@ def load_scopes_config() -> dict[str, Any]:
 # Global scopes configuration
 SCOPES_CONFIG = load_scopes_config()
 
+def _filter_role_scopes(user_scopes: list[str]) -> list[str]:
+    """Return only role scopes defined in SCOPES_CONFIG (UI-Scopes section), preserving order."""
+    role_scopes = set(SCOPES_CONFIG.get("UI-Scopes", {}).keys())
+    return [scope for scope in user_scopes if scope in role_scopes]
+
 
 def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:
     """
@@ -203,7 +208,7 @@ def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:
 
 def get_ui_permissions_for_user(user_scopes: list[str]) -> dict[str, list[str]]:
     """
-    Get UI permissions for a user based on their scopes.
+    Get UI permissions for a user based on their role scopes.
 
     Args:
         user_scopes: List of user's scopes (includes UI scope names like 'registry-admin')
@@ -215,7 +220,7 @@ def get_ui_permissions_for_user(user_scopes: list[str]) -> dict[str, list[str]]:
     ui_permissions = {}
     ui_scopes = SCOPES_CONFIG.get("UI-Scopes", {})
 
-    for scope in user_scopes:
+    for scope in _filter_role_scopes(user_scopes):
         if scope in ui_scopes:
             scope_config = ui_scopes[scope]
             logger.debug(f"Processing UI scope '{scope}' with config: {scope_config}")
@@ -271,6 +276,9 @@ def get_accessible_services_for_user(user_ui_permissions: dict[str, list[str]]) 
     """
     Get list of services the user can see based on their list_service permission.
 
+    Note: ACL is the authoritative source for resource-level access. These UI permissions
+    are coarse hints for front-end visibility only.
+
     Args:
         user_ui_permissions: User's UI permissions dict from get_ui_permissions_for_user()
 
@@ -288,6 +296,9 @@ def get_accessible_services_for_user(user_ui_permissions: dict[str, list[str]]) 
 def get_accessible_agents_for_user(user_ui_permissions: dict[str, list[str]]) -> list[str]:
     """
     Get list of agents the user can see based on their list_agents permission.
+
+    Note: ACL is the authoritative source for resource-level access. These UI permissions
+    are coarse hints for front-end visibility only.
 
     Args:
         user_ui_permissions: User's UI permissions dict from get_ui_permissions_for_user()
@@ -308,7 +319,7 @@ def get_servers_for_scope(scope: str) -> list[str]:
     Get list of server names that a scope provides access to.
 
     Args:
-        scope: The scope to check (e.g., 'mcp-servers-restricted/read')
+        scope: The scope to check (e.g., 'registry-admin')
 
     Returns:
         List of server names the scope grants access to
@@ -322,27 +333,14 @@ def get_servers_for_scope(scope: str) -> list[str]:
 
     return list(set(server_names))  # Remove duplicates
 
-
 def user_has_wildcard_access(user_scopes: list[str]) -> bool:
     """
-    Check if user has wildcard access to all servers via their scopes.
+    Check if user should be treated as admin.
 
-    A user has wildcard access if any of their scopes includes server: '*'.
-    This is determined dynamically from the scopes configuration, not hardcoded group names.
-
-    Args:
-        user_scopes: List of user's scopes
-
-    Returns:
-        True if user has wildcard access to all servers, False otherwise
+    In the new role-based model, admin is determined by role scope only and
+    does not require server: '*' in scopes.yml.
     """
-    for scope in user_scopes:
-        servers = get_servers_for_scope(scope)
-        if "*" in servers:
-            logger.debug(f"User scope '{scope}' grants wildcard access to all servers")
-            return True
-
-    return False
+    return "registry-admin" in user_scopes
 
 
 def get_user_accessible_servers(user_scopes: list[str]) -> list[str]:
@@ -360,7 +358,7 @@ def get_user_accessible_servers(user_scopes: list[str]) -> list[str]:
     logger.info(f"DEBUG: get_user_accessible_servers called with scopes: {user_scopes}")
     logger.info(f"DEBUG: Available scope configs: {list(SCOPES_CONFIG.keys())}")
 
-    for scope in user_scopes:
+    for scope in _filter_role_scopes(user_scopes):
         logger.info(f"DEBUG: Processing scope: {scope}")
         server_names = get_servers_for_scope(scope)
         logger.info(f"DEBUG: Scope {scope} maps to servers: {server_names}")

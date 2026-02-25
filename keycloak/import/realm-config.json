@@ -165,15 +165,15 @@
 
   "groups": [
     {
-      "name": "mcp-registry-admin",
-      "path": "/mcp-registry-admin",
+      "name": "registry-admin",
+      "path": "/registry-admin",
       "attributes": {
         "description": ["Full administrative access to MCP Gateway Registry"]
       }
     },
     {
-      "name": "mcp-registry-user",
-      "path": "/mcp-registry-user",
+      "name": "register-user",
+      "path": "/register-user",
       "attributes": {
         "description": ["Standard user access to MCP Gateway Registry"]
       }
@@ -193,15 +193,15 @@
       }
     },
     {
-      "name": "mcp-servers-unrestricted",
-      "path": "/mcp-servers-unrestricted",
+      "name": "registry-power-user",
+      "path": "/registry-power-user",
       "attributes": {
-        "description": ["Unrestricted access to all MCP servers"]
+        "description": ["Create/delete/share access to MCP servers"]
       }
     },
     {
-      "name": "mcp-servers-restricted",
-      "path": "/mcp-servers-restricted",
+      "name": "register-read-only",
+      "path": "/register-read-only",
       "attributes": {
         "description": ["Restricted access to specific MCP servers"]
       }
@@ -257,8 +257,7 @@
         }
       ],
       "groups": [
-        "mcp-registry-admin",
-        "mcp-servers-unrestricted"
+        "registry-admin"
       ],
       "realmRoles": [
         "mcp-admin"
@@ -279,8 +278,8 @@
         }
       ],
       "groups": [
-        "mcp-registry-user",
-        "mcp-servers-restricted"
+        "register-user",
+        "register-read-only"
       ],
       "realmRoles": [
         "mcp-user"

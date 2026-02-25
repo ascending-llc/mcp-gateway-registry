@@ -69,13 +69,13 @@ UI-Scopes:
       - all
 
 group_mappings:
-  registry-admin:
+  jarvis-registry-admin:
     - registry-admin
-  registry-power-user:
+  jarvis-registry-power-user:
     - registry-power-user
-  register-user:
+  jarvis-register-user:
     - register-user
-  register-read-only:
+  jarvis-register-read-only:
     - register-read-only
 
 registry-admin:

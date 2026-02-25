@@ -241,7 +241,7 @@ _create_admin_users() {
     echo "Creating M2M service account: admin-bot"
     if "$USER_MGMT_SCRIPT" create-m2m \
         --name "admin-bot" \
-        --groups "registry-admins" \
+        --groups "registry-admin" \
         --description "M2M service account for admin operations" 2>&1 | tee /tmp/admin_bot_output.txt; then
         _print_success "Created admin-bot"
     else
@@ -260,7 +260,7 @@ _create_admin_users() {
         --email "admin-user@example.com" \
         --firstname "Admin" \
         --lastname "User" \
-        --groups "registry-admins" \
+        --groups "registry-admin" \
         --password "$INITIAL_USER_PASSWORD" 2>&1 | tee /tmp/admin_user_output.txt; then
         _print_success "Created admin-user"
     else
@@ -275,7 +275,7 @@ _create_admin_users() {
 
 
 _assign_mcp_gateway_to_registry_admins() {
-    _print_section "Assigning MCP Gateway Service Account to registry-admins"
+    _print_section "Assigning MCP Gateway Service Account to registry-admin"
 
     local service_account_name="service-account-mcp-gateway-m2m"
 
@@ -291,27 +291,27 @@ _assign_mcp_gateway_to_registry_admins() {
 
     echo "Found service account with ID: $service_account_id"
 
-    echo "Looking up registry-admins group"
+    echo "Looking up registry-admin group"
     local registry_admins_group_id=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/groups" | \
-        jq -r '.[] | select(.name=="registry-admins") | .id')
+        jq -r '.[] | select(.name=="registry-admin") | .id')
 
     if [ -z "$registry_admins_group_id" ] || [ "$registry_admins_group_id" = "null" ]; then
-        _print_error "Could not find registry-admins group"
+        _print_error "Could not find registry-admin group"
         return 1
     fi
 
-    echo "Found registry-admins group with ID: $registry_admins_group_id"
+    echo "Found registry-admin group with ID: $registry_admins_group_id"
 
-    echo "Assigning service account to registry-admins group"
+    echo "Assigning service account to registry-admin group"
     local assign_response=$(curl -s -o /dev/null -w "%{http_code}" \
         -X PUT "$ADMIN_URL/admin/realms/$REALM/users/$service_account_id/groups/$registry_admins_group_id" \
         -H "Authorization: Bearer $TOKEN")
 
     if [ "$assign_response" = "204" ]; then
-        _print_success "Service account assigned to registry-admins group"
+        _print_success "Service account assigned to registry-admin group"
     else
-        _print_error "Failed to assign service account to registry-admins group (HTTP $assign_response)"
+        _print_error "Failed to assign service account to registry-admin group (HTTP $assign_response)"
         return 1
     fi
 }
@@ -324,7 +324,7 @@ _print_summary() {
     _print_info "Created Groups:"
     echo "  - registry-users-lob1"
     echo "  - registry-users-lob2"
-    echo "  - registry-admins"
+    echo "  - registry-admin"
 
     echo ""
     _print_info "Created LOB1 Users:"
@@ -371,7 +371,7 @@ main() {
     _print_section "Creating Keycloak Groups"
     _create_group "registry-users-lob1"
     _create_group "registry-users-lob2"
-    _create_group "registry-admins"
+    _create_group "registry-admin"
 
     # Create LOB1 users
     _create_lob1_users
@@ -382,7 +382,7 @@ main() {
     # Create Admin users
     _create_admin_users
 
-    # Assign MCP Gateway service account to registry-admins group
+    # Assign MCP Gateway service account to registry-admin group
     _assign_mcp_gateway_to_registry_admins
 
     # Print summary
