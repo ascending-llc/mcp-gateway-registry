@@ -41,7 +41,7 @@ type CurrentUser = Annotated[dict[str, Any], Depends(get_current_user_by_mid)]
 
 
 def get_current_user(
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> str:
     """
     Get the current authenticated user from session cookie.
@@ -80,7 +80,7 @@ def get_current_user(
 
 # @DeprecationWarning
 def get_user_session_data(
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> dict[str, Any]:
     """
     Get the full session data for the authenticated user.
@@ -262,7 +262,7 @@ def get_ui_permissions_for_user(user_scopes: list[str]) -> dict[str, list[str]]:
 
 
 def user_has_ui_permission_for_service(
-        permission: str, service_name: str, user_ui_permissions: dict[str, list[str]]
+    permission: str, service_name: str, user_ui_permissions: dict[str, list[str]]
 ) -> bool:
     """
     Check if user has a specific UI permission for a specific service.
@@ -420,7 +420,7 @@ def user_can_access_server(server_name: str, user_scopes: list[str]) -> bool:
 
 
 def api_auth(
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> str:
     """
     API authentication dependency that returns the username.
@@ -430,7 +430,7 @@ def api_auth(
 
 
 def web_auth(
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> str:
     """
     Web authentication dependency that returns the username.
@@ -441,7 +441,7 @@ def web_auth(
 
 # @DeprecationWarning
 def enhanced_auth(
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> dict[str, Any]:
     """
     Enhanced authentication dependency that returns full user context.
@@ -510,12 +510,12 @@ def enhanced_auth(
 
 # @DeprecationWarning
 def nginx_proxied_auth(
-        request: Request,
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name, include_in_schema=False)] = None,
-        x_user: Annotated[str | None, Header(alias="X-User", include_in_schema=False)] = None,
-        x_username: Annotated[str | None, Header(alias="X-Username", include_in_schema=False)] = None,
-        x_scopes: Annotated[str | None, Header(alias="X-Scopes", include_in_schema=False)] = None,
-        x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method", include_in_schema=False)] = None,
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name, include_in_schema=False)] = None,
+    x_user: Annotated[str | None, Header(alias="X-User", include_in_schema=False)] = None,
+    x_username: Annotated[str | None, Header(alias="X-Username", include_in_schema=False)] = None,
+    x_scopes: Annotated[str | None, Header(alias="X-Scopes", include_in_schema=False)] = None,
+    x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method", include_in_schema=False)] = None,
 ) -> dict[str, Any]:
     """
     Authentication dependency that works with both nginx-proxied requests and direct requests.
@@ -608,7 +608,7 @@ def nginx_proxied_auth(
 
 
 def create_session_cookie(
-        username: str, auth_method: str = "traditional", provider: str = "local", groups: list[str] = None
+    username: str, auth_method: str = "traditional", provider: str = "local", groups: list[str] = None
 ) -> str:
     """
     Create a session cookie for a user.
