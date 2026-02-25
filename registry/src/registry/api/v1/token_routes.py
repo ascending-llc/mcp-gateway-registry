@@ -5,8 +5,8 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
-from ...core.config import settings
 from ...auth.dependencies import CurrentUser
+from ...core.config import settings
 from ...utils.keycloak_manager import KEYCLOAK_ADMIN_URL, KEYCLOAK_REALM
 
 logger = logging.getLogger(__name__)

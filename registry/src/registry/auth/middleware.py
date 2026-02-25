@@ -10,6 +10,9 @@ from itsdangerous import BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
+from ..core.config import settings
+from ..core.telemetry_decorators import AuthMetricsContext
+from ..utils.crypto_utils import verify_access_token
 from .dependencies import (
     get_accessible_agents_for_user,
     get_accessible_services_for_user,
@@ -20,9 +23,6 @@ from .dependencies import (
     user_can_modify_servers,
     user_has_wildcard_access,
 )
-from ..core.config import settings
-from ..core.telemetry_decorators import AuthMetricsContext
-from ..utils.crypto_utils import verify_access_token
 
 logger = logging.getLogger(__name__)
 
