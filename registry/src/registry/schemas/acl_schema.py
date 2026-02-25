@@ -7,7 +7,7 @@ ACL Management endpoints based on the API documentation.
 
 from pydantic import BaseModel, Field
 
-from registry.core.acl_constants import PrincipalType
+from registry_pkgs.models._generated import PrincipalType
 
 
 class ResourcePermissions(BaseModel):
