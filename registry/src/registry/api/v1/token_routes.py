@@ -5,8 +5,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
-from auth_server.core.config import settings
-from registry.auth.dependencies import CurrentUser
+from ...core.config import settings
+from ...auth.dependencies import CurrentUser
+from ...utils.keycloak_manager import KEYCLOAK_ADMIN_URL, KEYCLOAK_REALM
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +155,6 @@ async def get_admin_tokens(
         )
 
     try:
-        from registry.utils.keycloak_manager import KEYCLOAK_ADMIN_URL, KEYCLOAK_REALM
-
         # Get M2M client credentials from environment
         m2m_client_id = os.getenv("KEYCLOAK_M2M_CLIENT_ID", "mcp-gateway-m2m")
         m2m_client_secret = os.getenv("KEYCLOAK_M2M_CLIENT_SECRET")

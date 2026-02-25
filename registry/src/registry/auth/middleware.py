@@ -10,17 +10,19 @@ from itsdangerous import BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
-from registry.auth.dependencies import (
+from .dependencies import (
     get_accessible_agents_for_user,
     get_accessible_services_for_user,
     get_ui_permissions_for_user,
     get_user_accessible_servers,
+    map_cognito_groups_to_scopes,
     signer,
     user_can_modify_servers,
     user_has_wildcard_access,
 )
-from registry.core.config import settings
-from registry.core.telemetry_decorators import AuthMetricsContext
+from ..core.config import settings
+from ..core.telemetry_decorators import AuthMetricsContext
+from ..utils.crypto_utils import verify_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -323,10 +325,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.core.config import settings as auth_settings
-                from auth_server.utils.security_mask import map_groups_to_scopes
-
-                scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+                scopes = map_cognito_groups_to_scopes(groups)
                 logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
 
             # Verify we have at least some scopes
@@ -368,8 +367,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return None
 
             # Verify JWT access token
-            from registry.utils.crypto_utils import verify_access_token
-
             claims = verify_access_token(session_cookie)
 
             if not claims:
@@ -389,10 +386,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.core.config import settings as auth_settings
-                from auth_server.utils.security_mask import map_groups_to_scopes
-
-                scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+                scopes = map_cognito_groups_to_scopes(groups)
                 logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
 
             logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")

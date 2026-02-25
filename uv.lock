@@ -2821,7 +2821,6 @@ version = "0.2.0"
 source = { editable = "registry" }
 dependencies = [
     { name = "aiohttp" },
-    { name = "auth-server" },
     { name = "authlib" },
     { name = "awscli" },
     { name = "bandit" },
@@ -2862,7 +2861,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.0" },
-    { name = "auth-server", editable = "auth-server" },
     { name = "authlib", specifier = ">=1.3.0" },
     { name = "awscli", specifier = ">=1.36.0" },
     { name = "bandit", specifier = ">=1.8.3" },
