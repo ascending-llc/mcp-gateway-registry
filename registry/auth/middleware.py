@@ -64,6 +64,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         self.public_paths_compiled = self._compile_patterns(
             [
                 "/",
+                "/login",
                 "/health",
                 "/docs",
                 "/openapi.json",
