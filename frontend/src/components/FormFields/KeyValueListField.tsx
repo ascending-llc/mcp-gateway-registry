@@ -109,7 +109,6 @@ export const KeyValueListField: React.FC<KeyValueListFieldProps> = ({
                           e.stopPropagation();
                           handleCopy(index);
                         }}
-                        disabled={disabled}
                         className='flex items-center gap-1.5 px-2 py-1 rounded bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
                       >
                         <DocumentDuplicateIcon className='w-3.5 h-3.5' />

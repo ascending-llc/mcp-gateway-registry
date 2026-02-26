@@ -187,6 +187,7 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
             const newHeaders = Object.fromEntries(val.map(v => [v.key, v.value]));
             handleUpdateField('headers', newHeaders);
           }}
+          disabled={isReadOnly}
           maxItems={5}
           className='mt-2'
           validateEmpty={!!errors?.headers}
