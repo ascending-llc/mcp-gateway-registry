@@ -31,10 +31,6 @@ RUN pip install --only-binary :all: -r /opt/build/requirements-mcpgw.txt
 # Install own packages from wheels
 RUN pip install --no-deps --no-index --find-links /opt/build/ mcpgw
 
-# Point to the scopes config file
-COPY ./config/scopes.yml /app/config/
-ENV SCOPES_CONFIG_PATH=/app/config/scopes.yml
-
 # Expose port
 EXPOSE 8003
 

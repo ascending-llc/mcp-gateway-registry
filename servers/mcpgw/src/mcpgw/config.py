@@ -64,9 +64,6 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = Field(default="jarvis-registry", description="Expected JWT token audience")
     JWT_SELF_SIGNED_KID: str = Field(default="self-signed-key-v1", description="Key ID for self-signed JWT tokens")
 
-    # Scopes configuration
-    SCOPES_CONFIG_PATH: str = Field(default="", description="Path to scopes.yml configuration file")
-
     # Logging configuration
     log_level: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     log_format: str = Field(
@@ -108,14 +105,6 @@ class Settings(BaseSettings):
             format=self.log_format,
             force=True,  # Override any existing configuration
         )
-
-    @property
-    def scopes_config_path(self) -> Path:
-        """Path to scopes.yml. Set SCOPES_CONFIG_PATH env var to override; falls back to CWD/scopes.yml."""
-        if self.SCOPES_CONFIG_PATH:
-            return Path(self.SCOPES_CONFIG_PATH)
-
-        return Path("config/scopes.yml")
 
     def log_config(self):
         """Log current configuration (hiding sensitive values)."""
