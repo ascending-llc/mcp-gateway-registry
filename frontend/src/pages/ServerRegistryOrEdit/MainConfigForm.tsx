@@ -181,14 +181,10 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
           value={
             formData.headers === null
               ? []
-              : formData.headers.map(h => {
-                  const key = Object.keys(h)[0] || '';
-                  const val = h[key] || '';
-                  return { key, value: String(val) };
-                })
+              : Object.entries(formData.headers).map(([key, val]) => ({ key, value: String(val) }))
           }
           onChange={val => {
-            const newHeaders = val.map(v => ({ [v.key]: v.value }));
+            const newHeaders = Object.fromEntries(val.map(v => [v.key, v.value]));
             handleUpdateField('headers', newHeaders);
           }}
           maxItems={5}

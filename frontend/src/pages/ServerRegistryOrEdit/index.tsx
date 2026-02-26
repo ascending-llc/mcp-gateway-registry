@@ -19,7 +19,7 @@ const INIT_DATA: ServerConfig = {
   description: '',
   path: '',
   url: '',
-  headers: [{ Authorization: '' }, { 'x-jarvis-auth': '' }],
+  headers: { Authorization: '', 'x-jarvis-auth': '' },
   type: 'streamable-http',
   authConfig: DEFAULT_AUTH_CONFIG,
   trustServer: false,
@@ -131,12 +131,10 @@ const ServerRegistryOrEdit: React.FC = () => {
     }
 
     // Headers Validation
-    if (formData.headers && formData.headers.length > 0) {
-      const hasEmptyHeader = formData.headers.some(h => {
-        const key = Object.keys(h)[0] || '';
-        const val = h[key];
-        return !key.trim() || !String(val ?? '').trim();
-      });
+    if (formData.headers && Object.keys(formData.headers).length > 0) {
+      const hasEmptyHeader = Object.entries(formData.headers).some(
+        ([key, val]) => !key.trim() || !String(val ?? '').trim(),
+      );
       if (hasEmptyHeader) {
         newErrors.headers = 'Header name and value cannot be empty';
       }
@@ -210,7 +208,7 @@ const ServerRegistryOrEdit: React.FC = () => {
       url: data.url,
       tags: data.tags,
       type: data.type,
-      headers: data.headers?.length === 0 ? null : data.headers,
+      headers: data.headers && Object.keys(data.headers).length === 0 ? null : data.headers,
     };
     switch (data.authConfig.type) {
       case 'auto':
@@ -296,7 +294,7 @@ const ServerRegistryOrEdit: React.FC = () => {
         }
       }
     } catch (error: any) {
-      showToast(error?.detail?.[0]?.msg || error?.detail || error, 'error');
+      showToast(error?.detail || error, 'error');
     } finally {
       setLoading(false);
     }
