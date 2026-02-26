@@ -52,6 +52,7 @@ from ....services.oauth.connection_status_service import (
 )
 from ....services.oauth.mcp_service import get_mcp_service
 from ....services.server_service import server_service_v1
+from ....utils.error import format_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -442,8 +443,6 @@ async def create_server(
 
         # Business logic errors (e.g., duplicate path, duplicate tags)
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except ValidationError as e:
-        raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating server: {e}", exc_info=True)
         raise HTTPException(

@@ -35,6 +35,7 @@ from registry.auth.middleware import UnifiedAuthMiddleware
 from registry.core.config import settings
 from registry.health.routes import router as health_router
 from registry.health.service import health_service
+from registry.utils.error import register_validation_exception_handler
 
 # Import services for initialization
 from registry.services.agent_service import agent_service
@@ -182,6 +183,8 @@ app = FastAPI(
         },
     ],
 )
+
+register_validation_exception_handler(app)
 
 # Add CORS middleware for React development and Docker deployment
 app.add_middleware(
