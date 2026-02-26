@@ -36,6 +36,9 @@ def load_scopes_config() -> dict:
 def map_groups_to_scopes(groups: list[str]) -> list[str]:
     """Map user groups to OAuth2 scopes based on the scopes configuration.
 
+    Configuration is loaded from the file specified by the SCOPES_CONFIG_PATH
+    environment variable (default: config/scopes.yml).
+
     Args:
         groups: List of group names to map.
 

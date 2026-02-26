@@ -87,9 +87,6 @@ class Settings(BaseSettings):
     )
     log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
 
-    # Scopes configuration
-    SCOPES_CONFIG_PATH: str = "config/scopes.yml"
-
     # Encryption key for sensitive data (client secrets, API keys, etc.)
     # Hex-encoded AES key for encrypting OAuth client secrets and API keys
     CREDS_KEY: str | None = None

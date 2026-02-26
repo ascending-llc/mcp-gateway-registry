@@ -59,32 +59,6 @@ MAX_TOKENS_PER_USER_PER_HOUR = settings.max_tokens_per_user_per_hour
 from .utils.security_mask import hash_username
 
 
-def validate_scope_subset(user_scopes: list[str], requested_scopes: list[str]) -> bool:
-    """
-    Validate that requested scopes are a subset of user's current scopes.
-
-    Args:
-        user_scopes: List of scopes the user currently has
-        requested_scopes: List of scopes being requested for the token
-
-    Returns:
-        True if requested scopes are valid (subset of user scopes), False otherwise
-    """
-    if not requested_scopes:
-        return True  # Empty request is valid
-
-    user_scope_set = set(user_scopes)
-    requested_scope_set = set(requested_scopes)
-
-    is_valid = requested_scope_set.issubset(user_scope_set)
-
-    if not is_valid:
-        invalid_scopes = requested_scope_set - user_scope_set
-        logger.warning(f"Invalid scopes requested: {invalid_scopes}")
-
-    return is_valid
-
-
 def check_rate_limit(username: str) -> bool:
     """
     Check if user has exceeded token generation rate limit.

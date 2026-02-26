@@ -7,7 +7,6 @@ All environment variables are loaded here and accessed through the global `setti
 
 import logging
 import secrets
-from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -52,9 +51,6 @@ class AuthSettings(BaseSettings):
 
     # ==================== CORS Configuration ====================
     cors_origins: str = "*"  # Comma-separated list of allowed origins, or "*" for all
-
-    # ==================== Scopes Configuration ====================
-    scopes_config_path: str | None = None
 
     # ==================== Auth Provider ====================
     auth_provider: str = "keycloak"  # cognito, keycloak, entra
@@ -114,13 +110,6 @@ class AuthSettings(BaseSettings):
     def oauth2_config(self) -> dict:
         """Get the OAuth2 configuration from oauth2_providers.yml file."""
         return get_oauth2_config()
-
-    @property
-    def scopes_file_path(self) -> Path:
-        """Get path to scopes.yml file."""
-        if self.scopes_config_path:
-            return Path(self.scopes_config_path)
-        return Path(__file__).parent.parent / "scopes.yml"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

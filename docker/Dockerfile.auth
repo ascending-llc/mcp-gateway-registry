@@ -22,8 +22,9 @@ WORKDIR /app
 # Copy over config files
 COPY ./config /app/config/
 
-# Point to the OTEL metrics config file
+# Point to shared config files
 ENV OTEL_METRICS_CONFIG_PATH=/app/config/metrics/auth_server.yml
+ENV SCOPES_CONFIG_PATH=/app/config/scopes.yml
 
 # Create logs directory
 RUN mkdir -p /app/logs
