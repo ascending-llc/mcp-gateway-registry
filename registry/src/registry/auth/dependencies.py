@@ -135,7 +135,7 @@ def load_scopes_config() -> dict[str, Any]:
             logger.debug(f"[SCOPES_INIT] Directory exists: {config_dir.exists()}")
             if config_dir.exists():
                 logger.debug(f"[SCOPES_INIT] Directory contents: {list(config_dir.iterdir())}")
-            logger.error(f"Scopes config file not found at {scopes_file}")
+            logger.warning(f"Scopes config file not found at {scopes_file}")
             return {}
 
         with open(scopes_file) as f:
@@ -153,7 +153,7 @@ SCOPES_CONFIG = load_scopes_config()
 
 def map_groups_to_scopes(groups: list[str]) -> list[str]:
     """
-    Map Cognito groups to MCP scopes using the scopes.yml configuration.
+    Map groups to MCP scopes using the scopes.yml configuration.
 
     Args:
         groups: List of Cognito group names
