@@ -35,12 +35,12 @@ from registry.auth.middleware import UnifiedAuthMiddleware
 from registry.core.config import settings
 from registry.health.routes import router as health_router
 from registry.health.service import health_service
-from registry.utils.error import register_validation_exception_handler
 
 # Import services for initialization
 from registry.services.agent_service import agent_service
 from registry.services.federation_service import get_federation_service
 from registry.services.search.service import vector_service
+from registry.utils.error import register_validation_exception_handler
 from registry.version import __version__
 from registry_pkgs.database import close_mongodb, init_mongodb
 from registry_pkgs.database.redis_client import close_redis, init_redis
