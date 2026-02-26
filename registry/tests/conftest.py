@@ -146,13 +146,13 @@ def create_test_jwt_token(
     Returns:
         JWT access token string
     """
-    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    from registry.auth.dependencies import map_groups_to_scopes
     from registry.utils.crypto_utils import generate_access_token
 
     if user_id is None:
         user_id = f"test-{username}-id"
 
-    scopes = map_cognito_groups_to_scopes(groups) or groups
+    scopes = map_groups_to_scopes(groups) or groups
 
     return generate_access_token(
         user_id=user_id,

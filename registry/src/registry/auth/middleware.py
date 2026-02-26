@@ -18,7 +18,7 @@ from .dependencies import (
     get_accessible_services_for_user,
     get_ui_permissions_for_user,
     get_user_accessible_servers,
-    map_cognito_groups_to_scopes,
+    map_groups_to_scopes,
     signer,
     user_can_modify_servers,
     user_has_wildcard_access,
@@ -325,7 +325,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                scopes = map_cognito_groups_to_scopes(groups)
+                scopes = map_groups_to_scopes(groups)
                 logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
 
             # Verify we have at least some scopes
@@ -386,7 +386,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                scopes = map_cognito_groups_to_scopes(groups)
+                scopes = map_groups_to_scopes(groups)
                 logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
 
             logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")

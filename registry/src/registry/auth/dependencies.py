@@ -127,15 +127,15 @@ def load_scopes_config() -> dict[str, Any]:
     try:
         scopes_file = Path(settings.scopes_config_path)
 
-        logger.info(f"[SCOPES_INIT] Looking for scopes config at: {scopes_file}")
-        logger.info(f"[SCOPES_INIT] Scopes file exists: {scopes_file.exists()}")
+        logger.debug(f"[SCOPES_INIT] Looking for scopes config at: {scopes_file}")
+        logger.debug(f"[SCOPES_INIT] Scopes file exists: {scopes_file.exists()}")
 
         if not scopes_file.exists():
             config_dir = scopes_file.parent
-            logger.info(f"[SCOPES_INIT] Directory exists: {config_dir.exists()}")
+            logger.debug(f"[SCOPES_INIT] Directory exists: {config_dir.exists()}")
             if config_dir.exists():
-                logger.info(f"[SCOPES_INIT] Directory contents: {list(config_dir.iterdir())}")
-            logger.warning(f"Scopes config file not found at {scopes_file}")
+                logger.debug(f"[SCOPES_INIT] Directory contents: {list(config_dir.iterdir())}")
+            logger.error(f"Scopes config file not found at {scopes_file}")
             return {}
 
         with open(scopes_file) as f:
@@ -151,7 +151,7 @@ def load_scopes_config() -> dict[str, Any]:
 SCOPES_CONFIG = load_scopes_config()
 
 
-def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:
+def map_groups_to_scopes(groups: list[str]) -> list[str]:
     """
     Map Cognito groups to MCP scopes using the scopes.yml configuration.
 
@@ -435,7 +435,7 @@ def enhanced_auth(
 
     # Map groups to scopes for OAuth2 users
     if auth_method == "oauth2":
-        scopes = map_cognito_groups_to_scopes(groups)
+        scopes = map_groups_to_scopes(groups)
         logger.info(f"OAuth2 user {username} with groups {groups} mapped to scopes: {scopes}")
         # If OAuth2 user has no groups, they should get minimal permissions, not admin
         if not groups:
@@ -447,7 +447,7 @@ def enhanced_auth(
         if not groups:
             groups = ["registry-admins"]
         # Map traditional admin groups to scopes dynamically
-        scopes = map_cognito_groups_to_scopes(groups)
+        scopes = map_groups_to_scopes(groups)
         if not scopes:
             # Fallback for traditional users if no mapping exists
             scopes = ["registry-admins"]

@@ -71,11 +71,11 @@ def mock_enhanced_auth_user():
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    from registry.auth.dependencies import map_groups_to_scopes
     from registry.utils.crypto_utils import generate_access_token
 
     groups = ["registry-admins"]
-    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+    scopes = map_groups_to_scopes(groups) or ["registry-admins"]
 
     return generate_access_token(
         user_id="test-admin-id",
@@ -178,7 +178,7 @@ class TestV0ListServers:
         """Test that regular users see only authorized servers."""
         from fastapi.testclient import TestClient
 
-        from registry.auth.dependencies import map_cognito_groups_to_scopes
+        from registry.auth.dependencies import map_groups_to_scopes
         from registry.utils.crypto_utils import generate_access_token
 
         # Create user context for a regular (non-admin) user
@@ -186,7 +186,7 @@ class TestV0ListServers:
 
         # Create session cookie (JWT access token) for this user
         groups = user_context["groups"]
-        scopes = map_cognito_groups_to_scopes(groups) or []
+        scopes = map_groups_to_scopes(groups) or []
 
         user_session_cookie = generate_access_token(
             user_id="test-user-id",
@@ -394,12 +394,12 @@ class TestV0ListServerVersions:
         """Test that users cannot access servers they don't have permission for."""
         from fastapi.testclient import TestClient
 
-        from registry.auth.dependencies import map_cognito_groups_to_scopes
+        from registry.auth.dependencies import map_groups_to_scopes
         from registry.utils.crypto_utils import generate_access_token
 
         user_context = mock_enhanced_auth_user()
         groups = user_context["groups"]
-        scopes = map_cognito_groups_to_scopes(groups) or []
+        scopes = map_groups_to_scopes(groups) or []
 
         user_session_cookie = generate_access_token(
             user_id="test-user-id",
