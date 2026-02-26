@@ -131,6 +131,9 @@ group_mappings:
   - mcp-registry-admin
   - mcp-servers-unrestricted/read
   - mcp-servers-unrestricted/execute
+  # TODO: 会在新的scope删除，临时测试用
+  jarvis-register-user:
+  - mcp-registry-admin
 
 # ==================== MCP SERVER SCOPES ====================
 # MCP Registry Admin: Full admin access (same as unrestricted/execute)

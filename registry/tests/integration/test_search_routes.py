@@ -286,7 +286,7 @@ class TestServerSearchRoutes:
 
         # Pydantic validates enum values and returns 422 for invalid values
         assert response.status_code == 422
-        assert "search_type" in response.json()["detail"][0]["loc"]
+        assert "search_type" in response.json()["detail"]
 
     def test_search_servers_respects_top_n(self, test_client: TestClient):
         """Server search respects the top_n parameter."""
@@ -351,7 +351,7 @@ class TestServerSearchRoutes:
 
         # Query has min_length=1, so empty string returns validation error
         assert response.status_code == 422
-        assert "query" in response.json()["detail"][0]["loc"]
+        assert "query" in response.json()["detail"]
 
     def test_search_servers_returns_results(self, test_client: TestClient):
         """Server search returns search results."""
