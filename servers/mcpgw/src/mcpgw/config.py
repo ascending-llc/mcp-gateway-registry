@@ -27,20 +27,6 @@ class Settings(BaseSettings):
     # Registry configuration
     REGISTRY_URL: str = Field(default="http://localhost:7860", description="Base URL of the MCP Gateway Registry")
 
-    @property
-    def REGISTRY_BASE_URL(self) -> str:
-        """
-        Backward-compatible alias for REGISTRY_URL.
-
-        Existing code that references settings.REGISTRY_BASE_URL will continue
-        to work, while new code should use settings.REGISTRY_URL.
-        """
-        return self.REGISTRY_URL
-
-    @REGISTRY_BASE_URL.setter
-    def REGISTRY_BASE_URL(self, value: str) -> None:
-        self.REGISTRY_URL = value
-
     # Server configuration
     MCP_TRANSPORT: str = Field(default=Constants.DEFAULT_MCP_TRANSPORT, description="Transport type for the MCP server")
     MCP_SERVER_HOST: str = Field(
