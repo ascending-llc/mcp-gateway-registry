@@ -12,7 +12,6 @@ from typing import Any
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
-from pydantic import ValidationError
 
 from registry_pkgs.database.decorators import use_transaction
 from registry_pkgs.models._generated import PrincipalType, ResourceType
@@ -52,7 +51,6 @@ from ....services.oauth.connection_status_service import (
 )
 from ....services.oauth.mcp_service import get_mcp_service
 from ....services.server_service import server_service_v1
-from ....utils.error import format_validation_error
 
 logger = logging.getLogger(__name__)
 
