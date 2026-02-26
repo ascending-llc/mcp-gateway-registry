@@ -1,6 +1,6 @@
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import FormFields from '@/components/FormFields';
 import { getBasePath } from '@/config';
 import SERVICES from '@/services';
@@ -36,6 +36,12 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
     onChange({ ...config, ...updates });
   };
 
+  useEffect(() => {
+    if (config.type === 'oauth' && mcpUrl && isEditMode) {
+      handleGetDiscover();
+    }
+  }, [mcpUrl, isEditMode]);
+
   const handleGetDiscover = async (baseConfig?: AuthConfigType) => {
     if (!mcpUrl) return;
     setIsDiscoverLoading(true);
@@ -47,11 +53,11 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
         const { authorization_endpoint, token_endpoint, registration_endpoint } = res.metadata;
         const currentConfig = baseConfig || config;
         const useDynamicRegistration = registration_endpoint && !hasOauth;
-        if (useDynamicRegistration) setRegistrationEndpoint(registration_endpoint);
+        if (useDynamicRegistration || isEditMode) setRegistrationEndpoint(registration_endpoint);
         onChange({
           ...currentConfig,
-          client_id: authorization_endpoint || currentConfig.client_id,
-          client_secret: token_endpoint || currentConfig.client_secret,
+          authorization_url: authorization_endpoint || currentConfig.authorization_url,
+          token_url: token_endpoint || currentConfig.token_url,
           use_dynamic_registration: useDynamicRegistration,
         });
       }
@@ -65,7 +71,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   const handleTypeChange = (type: AuthConfigType['type']) => {
     const nextConfig = { ...config, type };
     onChange(nextConfig);
-    if (type === 'oauth' && !isReadOnly && mcpUrl && !config.client_id && !config.client_secret) {
+    if (type === 'oauth' && !isReadOnly && mcpUrl && !config.authorization_url && !config.token_url) {
       handleGetDiscover(nextConfig);
     }
   };
