@@ -199,6 +199,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Mcp-Session-Id"],  # Allow browser-based agents to access Mcp-Session-Id.
 )
 
 app.add_middleware(UnifiedAuthMiddleware)
