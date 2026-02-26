@@ -8,6 +8,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # root must depend on all workspace members, referencing them by distribution names
     "registry-pkgs",
+    "auth-utils",
     "registry",
     "auth-server",
     "mcpgw",
@@ -19,6 +20,7 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "registry-pkgs",
+    "auth-utils",
     "registry",
     "auth-server",
     "servers/mcpgw",
@@ -26,6 +28,7 @@ members = [
 
 [tool.uv.sources]
 registry-pkgs = { workspace = true }
+auth-utils = { workspace = true }
 registry = { workspace = true }
 auth-server = { workspace = true }
 mcpgw = { workspace = true }
@@ -80,8 +83,8 @@ printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyprojec
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
 # Run all tests across all projects
-test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../registry-pkgs && uv run poe test" }
-test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../registry-pkgs && uv run poe test-cov" }
+test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../registry-pkgs && uv run poe test && cd ../auth-utils && uv run poe test" }
+test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../registry-pkgs && uv run poe test-cov && cd ../auth-utils && uv run poe test-cov" }
 
 # registry tests
 test-registry = { shell = "cd registry && uv run poe test" }
@@ -161,7 +164,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # Each value must be the import name of one of our own packages in this workspace.
-known-first-party = ["registry_pkgs", "registry", "auth_server", "mcpgw"]
+known-first-party = ["registry_pkgs", "auth_utils", "registry", "auth_server", "mcpgw"]
 
 [tool.ruff.lint.per-file-ignores]
 # Import order matters some files. Exclude them from automatic import sorting.
