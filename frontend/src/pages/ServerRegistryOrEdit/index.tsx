@@ -89,14 +89,14 @@ const ServerRegistryOrEdit: React.FC = () => {
           custom_header: result.apiKey?.custom_header,
         };
       }
-      if (result?.oauth) {
+      if (result?.oauth || result?.requiresOAuth) {
         formData.authConfig = {
           type: 'oauth',
-          client_id: result.oauth?.client_id,
-          client_secret: result.oauth?.client_secret,
-          authorization_url: result.oauth?.authorization_url,
-          token_url: result.oauth?.token_url,
-          scope: result.oauth?.scope,
+          client_id: result?.oauth?.client_id,
+          client_secret: result?.oauth?.client_secret,
+          authorization_url: result?.oauth?.authorization_url,
+          token_url: result?.oauth?.token_url,
+          scope: result?.oauth?.scope,
         };
       }
       setServerDetail(result);
@@ -150,8 +150,10 @@ const ServerRegistryOrEdit: React.FC = () => {
         newErrors.custom_header = 'Custom Header Name is required';
       }
     } else if (auth.type === 'oauth') {
-      if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
-      if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
+      if (!auth.use_dynamic_registration) {
+        if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
+        if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
+      }
     }
 
     setErrors(newErrors);
@@ -216,6 +218,7 @@ const ServerRegistryOrEdit: React.FC = () => {
           ...baseData,
           apiKey: null,
           oauth: null,
+          requiresOAuth: false,
         };
       case 'apiKey':
         return {
@@ -233,20 +236,24 @@ const ServerRegistryOrEdit: React.FC = () => {
               : {}),
           },
           oauth: null,
+          requiresOAuth: false,
         };
       case 'oauth':
         return {
           ...baseData,
-          oauth: {
-            client_id: data.authConfig.client_id,
-            ...(data.authConfig.client_secret !== originalData?.authConfig?.client_secret
-              ? { client_secret: data.authConfig.client_secret }
-              : {}),
-            authorization_url: data.authConfig.authorization_url,
-            token_url: data.authConfig.token_url,
-            scope: data.authConfig.scope,
-          },
+          oauth: data.authConfig.use_dynamic_registration
+            ? null
+            : {
+                client_id: data.authConfig.client_id,
+                ...(data.authConfig.client_secret !== originalData?.authConfig?.client_secret
+                  ? { client_secret: data.authConfig.client_secret }
+                  : {}),
+                authorization_url: data.authConfig.authorization_url,
+                token_url: data.authConfig.token_url,
+                scope: data.authConfig.scope,
+              },
           apiKey: null,
+          requiresOAuth: true,
         };
       default:
         return {};
@@ -326,6 +333,7 @@ const ServerRegistryOrEdit: React.FC = () => {
           ) : (
             <MainConfigForm
               formData={formData}
+              serverDetail={serverDetail}
               updateField={updateField}
               errors={errors}
               isEditMode={isEditMode}
