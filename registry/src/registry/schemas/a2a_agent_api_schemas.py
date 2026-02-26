@@ -18,9 +18,9 @@ from registry.schemas.acl_schema import ResourcePermissions
 class AgentSkillInput(BaseModel):
     """Input schema for agent skill"""
 
-    id: str = Field(..., description="Unique skill identifier")
-    name: str = Field(..., description="Human-readable skill name")
-    description: str = Field(..., description="Detailed skill description")
+    id: str = Field(description="Unique skill identifier")
+    name: str = Field(description="Human-readable skill name")
+    description: str = Field(description="Detailed skill description")
     tags: list[str] = Field(default_factory=list, description="Skill categorization tags")
     examples: list[str] | None = Field(None, description="Usage examples")
     input_modes: list[str] | None = Field(None, alias="inputModes", description="Skill-specific input MIME types")
@@ -48,8 +48,8 @@ class AgentSkillOutput(BaseModel):
 class AgentProviderInput(BaseModel):
     """Input schema for agent provider"""
 
-    organization: str = Field(..., description="Provider organization name")
-    url: str = Field(..., description="Provider website or documentation URL")
+    organization: str = Field(description="Provider organization name")
+    url: str = Field(description="Provider website or documentation URL")
 
 
 class AgentProviderOutput(BaseModel):
@@ -78,11 +78,11 @@ class WellKnownInfo(BaseModel):
 class AgentCreateRequest(BaseModel):
     """Request schema for creating a new agent"""
 
-    path: str = Field(..., description="Registry path (e.g., /code-reviewer)")
-    name: str = Field(..., description="Agent name")
+    path: str = Field(description="Registry path (e.g., /code-reviewer)")
+    name: str = Field(description="Agent name")
     description: str = Field(default="", description="Agent description")
-    url: HttpUrl | str = Field(..., description="Agent endpoint URL")
-    version: str = Field(..., description="Agent version")
+    url: HttpUrl | str = Field(description="Agent endpoint URL")
+    version: str = Field(description="Agent version")
     protocol_version: str = Field(default="1.0", alias="protocolVersion", description="A2A protocol version")
     capabilities: dict[str, Any] = Field(
         default_factory=dict, description="Feature declarations (e.g., {'streaming': true})"
@@ -133,7 +133,7 @@ class AgentUpdateRequest(BaseModel):
 class AgentToggleRequest(BaseModel):
     """Request schema for toggling agent status"""
 
-    enabled: bool = Field(..., description="New enabled state")
+    enabled: bool = Field(description="New enabled state")
 
 
 # ==================== Response Schemas ====================
@@ -144,8 +144,8 @@ class PaginationMetadata(BaseModel):
 
     total: int
     page: int
-    per_page: int = Field(..., alias="perPage")
-    total_pages: int = Field(..., alias="totalPages")
+    per_page: int = Field(alias="perPage")
+    total_pages: int = Field(alias="totalPages")
 
     class Config:
         populate_by_name = True
@@ -160,15 +160,15 @@ class AgentListItem(BaseModel):
     description: str
     url: str
     version: str
-    protocol_version: str = Field(..., alias="protocolVersion")
+    protocol_version: str = Field(alias="protocolVersion")
     tags: list[str]
-    num_skills: int = Field(..., alias="numSkills")
+    num_skills: int = Field(alias="numSkills")
     enabled: bool
     status: str
     permissions: ResourcePermissions
     author: str
-    created_at: datetime = Field(..., alias="createdAt")
-    updated_at: datetime = Field(..., alias="updatedAt")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
 
     class Config:
         populate_by_name = True
@@ -184,13 +184,13 @@ class AgentListResponse(BaseModel):
 class AgentStatsResponse(BaseModel):
     """Response schema for agent statistics"""
 
-    total_agents: int = Field(..., alias="totalAgents")
-    enabled_agents: int = Field(..., alias="enabledAgents")
-    disabled_agents: int = Field(..., alias="disabledAgents")
-    by_status: dict[str, int] = Field(..., alias="byStatus")
-    by_transport: dict[str, int] = Field(..., alias="byTransport")
-    total_skills: int = Field(..., alias="totalSkills")
-    average_skills_per_agent: float = Field(..., alias="averageSkillsPerAgent")
+    total_agents: int = Field(alias="totalAgents")
+    enabled_agents: int = Field(alias="enabledAgents")
+    disabled_agents: int = Field(alias="disabledAgents")
+    by_status: dict[str, int] = Field(alias="byStatus")
+    by_transport: dict[str, int] = Field(alias="byTransport")
+    total_skills: int = Field(alias="totalSkills")
+    average_skills_per_agent: float = Field(alias="averageSkillsPerAgent")
 
     class Config:
         populate_by_name = True
@@ -205,13 +205,13 @@ class AgentDetailResponse(BaseModel):
     description: str
     url: str
     version: str
-    protocol_version: str = Field(..., alias="protocolVersion")
+    protocol_version: str = Field(alias="protocolVersion")
     capabilities: dict[str, Any]
     skills: list[AgentSkillOutput]
-    security_schemes: dict[str, Any] = Field(..., alias="securitySchemes")
-    preferred_transport: str = Field(..., alias="preferredTransport")
-    default_input_modes: list[str] = Field(..., alias="defaultInputModes")
-    default_output_modes: list[str] = Field(..., alias="defaultOutputModes")
+    security_schemes: dict[str, Any] = Field(alias="securitySchemes")
+    preferred_transport: str = Field(alias="preferredTransport")
+    default_input_modes: list[str] = Field(alias="defaultInputModes")
+    default_output_modes: list[str] = Field(alias="defaultOutputModes")
     provider: AgentProviderOutput | None = None
     tags: list[str]
     status: str
@@ -219,21 +219,8 @@ class AgentDetailResponse(BaseModel):
     permissions: ResourcePermissions
     author: str
     well_known: WellKnownInfo | None = Field(None, alias="wellKnown")
-    created_at: datetime = Field(..., alias="createdAt")
-    updated_at: datetime = Field(..., alias="updatedAt")
-
-    class Config:
-        populate_by_name = True
-
-
-class AgentCreateResponseData(BaseModel):
-    """Agent data in create response"""
-
-    id: str
-    path: str
-    name: str
-    url: str
-    created_at: datetime = Field(..., alias="createdAt")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
 
     class Config:
         populate_by_name = True
@@ -243,53 +230,30 @@ class AgentCreateResponse(BaseModel):
     """Response schema for creating an agent"""
 
     message: str
-    agent: AgentCreateResponseData
-
-
-class AgentUpdateResponseData(BaseModel):
-    """Agent data in update response"""
-
-    id: str
-    path: str
-    name: str
-    updated_at: datetime = Field(..., alias="updatedAt")
-
-    class Config:
-        populate_by_name = True
+    agent: AgentDetailResponse
 
 
 class AgentUpdateResponse(BaseModel):
     """Response schema for updating an agent"""
 
     message: str
-    agent: AgentUpdateResponseData
-
-
-class AgentToggleResponseData(BaseModel):
-    """Agent data in toggle response"""
-
-    id: str
-    path: str
-    enabled: bool
-
-    class Config:
-        populate_by_name = True
+    agent: AgentDetailResponse
 
 
 class AgentToggleResponse(BaseModel):
     """Response schema for toggling agent"""
 
     message: str
-    agent: AgentToggleResponseData
+    agent: AgentDetailResponse
 
 
 class AgentSkillsResponse(BaseModel):
     """Response schema for agent skills"""
 
-    agent_id: str = Field(..., alias="agentId")
-    agent_name: str = Field(..., alias="agentName")
+    agent_id: str = Field(alias="agentId")
+    agent_name: str = Field(alias="agentName")
     skills: list[AgentSkillOutput]
-    total_skills: int = Field(..., alias="totalSkills")
+    total_skills: int = Field(alias="totalSkills")
 
     class Config:
         populate_by_name = True
@@ -299,8 +263,8 @@ class WellKnownSyncResponse(BaseModel):
     """Response schema for well-known sync"""
 
     message: str
-    sync_status: str = Field(..., alias="syncStatus")
-    synced_at: datetime = Field(..., alias="syncedAt")
+    sync_status: str = Field(alias="syncStatus")
+    synced_at: datetime = Field(alias="syncedAt")
     version: str
     changes: list[str]
 
@@ -313,7 +277,7 @@ class WellKnownSyncResponse(BaseModel):
 
 def convert_to_list_item(agent: Any, acl_permission: int | ResourcePermissions) -> AgentListItem:
     """Convert A2AAgent document to list item"""
-    from registry.core.acl_constants import PermissionBits
+    from registry_pkgs.models.enums import PermissionBits
 
     # Handle both int (permission bits) and ResourcePermissions object
     if isinstance(acl_permission, ResourcePermissions):
@@ -329,13 +293,13 @@ def convert_to_list_item(agent: Any, acl_permission: int | ResourcePermissions) 
     return AgentListItem(
         id=str(agent.id),
         path=agent.path,
-        name=agent.name,
-        description=agent.description,
-        url=str(agent.url),
-        version=agent.version,
-        protocolVersion=agent.protocolVersion,
+        name=agent.card.name,
+        description=agent.card.description,
+        url=str(agent.card.url),
+        version=agent.card.version,
+        protocolVersion=agent.card.protocol_version,
         tags=agent.tags,
-        numSkills=len(agent.skills),
+        numSkills=len(agent.card.skills or []),
         enabled=agent.isEnabled,
         status=agent.status,
         permissions=permissions,
@@ -347,7 +311,7 @@ def convert_to_list_item(agent: Any, acl_permission: int | ResourcePermissions) 
 
 def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> AgentDetailResponse:
     """Convert A2AAgent document to detail response"""
-    from registry.core.acl_constants import PermissionBits
+    from registry_pkgs.models.enums import PermissionBits
 
     # Handle both int (permission bits) and ResourcePermissions object
     if isinstance(acl_permission, ResourcePermissions):
@@ -365,16 +329,18 @@ def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> 
             id=skill.id,
             name=skill.name,
             description=skill.description,
-            tags=skill.tags,
-            inputModes=skill.inputModes,
-            outputModes=skill.outputModes,
+            tags=skill.tags or [],
+            inputModes=skill.input_modes if hasattr(skill, "input_modes") else None,
+            outputModes=skill.output_modes if hasattr(skill, "output_modes") else None,
         )
-        for skill in agent.skills
+        for skill in (agent.card.skills or [])
     ]
 
     provider_output = None
-    if agent.provider:
-        provider_output = AgentProviderOutput(organization=agent.provider.organization, url=agent.provider.url)
+    if agent.card.provider:
+        provider_output = AgentProviderOutput(
+            organization=agent.card.provider.organization, url=agent.card.provider.url
+        )
 
     well_known_info = None
     if agent.wellKnown:
@@ -386,20 +352,40 @@ def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> 
             lastSyncVersion=agent.wellKnown.lastSyncVersion,
         )
 
+    # Convert capabilities to dict if it's a Pydantic model
+    capabilities_dict = {}
+    if agent.card.capabilities:
+        if hasattr(agent.card.capabilities, "model_dump"):
+            capabilities_dict = agent.card.capabilities.model_dump(exclude_none=True)
+        elif isinstance(agent.card.capabilities, dict):
+            capabilities_dict = agent.card.capabilities
+        else:
+            capabilities_dict = dict(agent.card.capabilities)
+
+    # Convert security_schemes to dict if needed
+    security_schemes_dict = {}
+    if agent.card.security_schemes:
+        if hasattr(agent.card.security_schemes, "model_dump"):
+            security_schemes_dict = agent.card.security_schemes.model_dump(exclude_none=True)
+        elif isinstance(agent.card.security_schemes, dict):
+            security_schemes_dict = agent.card.security_schemes
+        else:
+            security_schemes_dict = dict(agent.card.security_schemes)
+
     return AgentDetailResponse(
         id=str(agent.id),
         path=agent.path,
-        name=agent.name,
-        description=agent.description,
-        url=str(agent.url),
-        version=agent.version,
-        protocolVersion=agent.protocolVersion,
-        capabilities=agent.capabilities,
+        name=agent.card.name,
+        description=agent.card.description,
+        url=str(agent.card.url),
+        version=agent.card.version,
+        protocolVersion=agent.card.protocol_version,
+        capabilities=capabilities_dict,
         skills=skills_output,
-        securitySchemes=agent.securitySchemes,
-        preferredTransport=agent.preferredTransport,
-        defaultInputModes=agent.defaultInputModes,
-        defaultOutputModes=agent.defaultOutputModes,
+        securitySchemes=security_schemes_dict,
+        preferredTransport=agent.card.preferred_transport,
+        defaultInputModes=agent.card.default_input_modes or [],
+        defaultOutputModes=agent.card.default_output_modes or [],
         provider=provider_output,
         tags=agent.tags,
         status=agent.status,
@@ -412,29 +398,28 @@ def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> 
     )
 
 
-def convert_to_create_response(agent: Any) -> AgentCreateResponse:
-    """Convert A2AAgent document to create response"""
+def convert_to_create_response(agent: Any, acl_permission: int | ResourcePermissions) -> AgentCreateResponse:
+    """Convert A2AAgent document to create response with full details"""
     return AgentCreateResponse(
         message="Agent registered successfully",
-        agent=AgentCreateResponseData(
-            id=str(agent.id), path=agent.path, name=agent.name, url=str(agent.url), createdAt=agent.createdAt
-        ),
+        agent=convert_to_detail(agent, acl_permission),
     )
 
 
-def convert_to_update_response(agent: Any) -> AgentUpdateResponse:
-    """Convert A2AAgent document to update response"""
+def convert_to_update_response(agent: Any, acl_permission: int | ResourcePermissions) -> AgentUpdateResponse:
+    """Convert A2AAgent document to update response with full details"""
     return AgentUpdateResponse(
         message="Agent updated successfully",
-        agent=AgentUpdateResponseData(id=str(agent.id), path=agent.path, name=agent.name, updatedAt=agent.updatedAt),
+        agent=convert_to_detail(agent, acl_permission),
     )
 
 
-def convert_to_toggle_response(agent: Any) -> AgentToggleResponse:
-    """Convert A2AAgent document to toggle response"""
+def convert_to_toggle_response(agent: Any, acl_permission: int | ResourcePermissions) -> AgentToggleResponse:
+    """Convert A2AAgent document to toggle response with full details"""
     message = f"Agent {'enabled' if agent.isEnabled else 'disabled'} successfully"
     return AgentToggleResponse(
-        message=message, agent=AgentToggleResponseData(id=str(agent.id), path=agent.path, enabled=agent.isEnabled)
+        message=message,
+        agent=convert_to_detail(agent, acl_permission),
     )
 
 
@@ -445,13 +430,13 @@ def convert_to_skills_response(agent: Any) -> AgentSkillsResponse:
             id=skill.id,
             name=skill.name,
             description=skill.description,
-            tags=skill.tags,
-            inputModes=skill.inputModes,
-            outputModes=skill.outputModes,
+            tags=skill.tags or [],
+            inputModes=skill.input_modes if hasattr(skill, "input_modes") else None,
+            outputModes=skill.output_modes if hasattr(skill, "output_modes") else None,
         )
-        for skill in agent.skills
+        for skill in (agent.card.skills or [])
     ]
 
     return AgentSkillsResponse(
-        agentId=str(agent.id), agentName=agent.name, skills=skills_output, totalSkills=len(agent.skills)
+        agentId=str(agent.id), agentName=agent.card.name, skills=skills_output, totalSkills=len(agent.card.skills or [])
     )

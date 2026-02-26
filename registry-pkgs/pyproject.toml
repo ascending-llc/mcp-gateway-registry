@@ -9,6 +9,8 @@ dependencies = [
     "pydantic>=2.11.3",
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
+    # A2A Protocol SDK
+    "a2a-sdk>=0.3.24",
     # Database
     "beanie>=2.0.0",
     "pymongo>4.0.0",

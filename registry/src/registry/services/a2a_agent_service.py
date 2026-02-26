@@ -1,17 +1,21 @@
 """
 A2A Agent Service - Business logic for A2A Agent Management API
 
-This service handles all A2A agent-related operations using MongoDB and Beanie ODM.
+This service handles all A2A agent-related operations using MongoDB, Beanie ODM,
+and the official a2a-sdk for protocol compliance.
 """
 
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from a2a.client import A2ACardResolver
+from a2a.types import AgentCard
 from beanie import PydanticObjectId
 
-from registry_pkgs.models.a2a_agent import A2AAgent, AgentSkill
+from registry_pkgs.models.a2a_agent import STATUS_ACTIVE, A2AAgent
 
 from ..schemas.a2a_agent_api_schemas import AgentCreateRequest, AgentUpdateRequest
 
@@ -35,26 +39,19 @@ class A2AAgentService:
         Args:
             query: Free-text search across name, description, tags, skills
             status: Filter by operational state (active, inactive, error)
-            page: Page number (min: 1)
-            per_page: Items per page (min: 1, max: 100)
+            page: Page number (validated by router)
+            per_page: Items per page (validated by router)
             accessible_agent_ids: List of agent ID strings accessible to the user (from ACL)
 
         Returns:
             Tuple of (agents list, total count)
         """
         try:
-            # Validate pagination parameters
-            page = max(1, page)
-            per_page = max(1, min(100, per_page))
-
             # Build query filters
             filters: dict[str, Any] = {}
 
             # Filter by accessible agent IDs (ACL)
-            # If accessible_agent_ids is None, user has 'all' permission - no filtering
-            # If accessible_agent_ids is an empty list, user has no access - will return empty
             if accessible_agent_ids is not None:
-                # Convert string IDs to PydanticObjectId for MongoDB query
                 object_ids = [PydanticObjectId(aid) for aid in accessible_agent_ids]
                 filters["_id"] = {"$in": object_ids}
 
@@ -64,13 +61,15 @@ class A2AAgentService:
 
             # Build text search filter if query provided
             if query:
-                # Search across name, description, tags, and skills
+                # Escape regex special characters to prevent regex injection attacks
+                escaped_query = re.escape(query)
+                # Search across card fields: name, description, skills
                 filters["$or"] = [
-                    {"name": {"$regex": query, "$options": "i"}},
-                    {"description": {"$regex": query, "$options": "i"}},
-                    {"tags": {"$regex": query, "$options": "i"}},
-                    {"skills.name": {"$regex": query, "$options": "i"}},
-                    {"skills.description": {"$regex": query, "$options": "i"}},
+                    {"card.name": {"$regex": escaped_query, "$options": "i"}},
+                    {"card.description": {"$regex": escaped_query, "$options": "i"}},
+                    {"tags": {"$regex": escaped_query, "$options": "i"}},
+                    {"card.skills.name": {"$regex": escaped_query, "$options": "i"}},
+                    {"card.skills.description": {"$regex": escaped_query, "$options": "i"}},
                 ]
 
             # Get total count
@@ -98,7 +97,7 @@ class A2AAgentService:
             # Total counts
             total_agents = await A2AAgent.count()
             enabled_agents = await A2AAgent.find({"isEnabled": True}).count()
-            disabled_agents = total_agents - enabled_agents
+            disabled_agents = await A2AAgent.find({"isEnabled": False}).count()
 
             # Count by status
             status_pipeline = [{"$group": {"_id": "$status", "count": {"$sum": 1}}}]
@@ -106,13 +105,13 @@ class A2AAgentService:
             by_status = {result["_id"]: result["count"] for result in status_results}
 
             # Count by transport
-            transport_pipeline = [{"$group": {"_id": "$preferredTransport", "count": {"$sum": 1}}}]
+            transport_pipeline = [{"$group": {"_id": "$card.preferred_transport", "count": {"$sum": 1}}}]
             transport_results = await A2AAgent.aggregate(transport_pipeline).to_list()
             by_transport = {result["_id"]: result["count"] for result in transport_results}
 
             # Total skills and average
             skills_pipeline = [
-                {"$project": {"num_skills": {"$size": "$skills"}}},
+                {"$project": {"num_skills": {"$size": "$card.skills"}}},
                 {"$group": {"_id": None, "total_skills": {"$sum": "$num_skills"}}},
             ]
             skills_results = await A2AAgent.aggregate(skills_pipeline).to_list()
@@ -136,7 +135,7 @@ class A2AAgentService:
             logger.error(f"Error getting agent stats: {e}", exc_info=True)
             raise
 
-    async def get_agent_by_id(self, agent_id: str) -> A2AAgent | None:
+    async def get_agent_by_id(self, agent_id: str) -> A2AAgent:
         """
         Get agent by ID.
 
@@ -144,20 +143,26 @@ class A2AAgentService:
             agent_id: Agent ID
 
         Returns:
-            Agent document or None if not found
+            Agent document
+
+        Raises:
+            ValueError: If agent not found or retrieval fails
         """
         try:
             agent = await A2AAgent.get(PydanticObjectId(agent_id))
-            if agent:
-                logger.debug(f"Retrieved agent: {agent.name} (ID: {agent_id})")
+            if not agent:
+                raise ValueError(f"Agent not found: {agent_id}")
+            logger.debug(f"Retrieved agent: {agent.card.name} (ID: {agent_id})")
             return agent
+        except ValueError:
+            raise
         except Exception as e:
             logger.error(f"Error getting agent {agent_id}: {e}", exc_info=True)
-            return None
+            raise ValueError(f"Failed to retrieve agent: {str(e)}")
 
     async def create_agent(self, data: AgentCreateRequest, user_id: str) -> A2AAgent:
         """
-        Create a new agent.
+        Create a new agent using SDK for validation.
 
         Args:
             data: Agent creation data
@@ -175,53 +180,49 @@ class A2AAgentService:
             if existing:
                 raise ValueError(f"Agent with path '{data.path}' already exists")
 
-            # Convert skills
-            skills = [
-                AgentSkill(
-                    id=skill.id,
-                    name=skill.name,
-                    description=skill.description,
-                    tags=skill.tags,
-                    examples=skill.examples,
-                    inputModes=skill.input_modes,
-                    outputModes=skill.output_modes,
-                    security=skill.security,
-                )
-                for skill in data.skills
-            ]
+            # Build agent card data for SDK validation (path is NOT part of SDK AgentCard)
+            card_data = {
+                "name": data.name,
+                "description": data.description,
+                "url": str(data.url),
+                "version": data.version,
+                "protocolVersion": data.protocol_version,
+                "capabilities": data.capabilities,
+                "skills": [skill.model_dump(by_alias=True, exclude_none=True) for skill in data.skills],
+                "securitySchemes": data.security_schemes,
+                "preferredTransport": data.preferred_transport,
+                "defaultInputModes": data.default_input_modes,
+                "defaultOutputModes": data.default_output_modes,
+            }
 
-            # Create provider
-            provider = None
+            # Add optional provider
             if data.provider:
-                from registry_pkgs.models.a2a_agent import AgentProvider
+                card_data["provider"] = {
+                    "organization": data.provider.organization,
+                    "url": data.provider.url,
+                }
 
-                provider = AgentProvider(organization=data.provider.organization, url=data.provider.url)
+            # SDK validates the entire card structure
+            try:
+                agent_card = AgentCard(**card_data)
+            except Exception as e:
+                raise ValueError(f"Invalid agent card: {str(e)}")
 
-            # Create agent document
+            # Create agent document (path is registry-specific, not in SDK card)
             agent = A2AAgent(
                 path=data.path,
-                name=data.name,
-                description=data.description,
-                url=data.url,
-                version=data.version,
-                protocolVersion=data.protocol_version,
-                capabilities=data.capabilities,
-                skills=skills,
-                securitySchemes=data.security_schemes,
-                preferredTransport=data.preferred_transport,
-                defaultInputModes=data.default_input_modes,
-                defaultOutputModes=data.default_output_modes,
-                provider=provider,
+                card=agent_card,
                 tags=data.tags,
                 isEnabled=data.enabled,
+                status=STATUS_ACTIVE,
                 author=PydanticObjectId(user_id),
-                registeredBy=None,  # Will be set from user context if needed
+                registeredBy=None,
                 registeredAt=datetime.now(UTC),
             )
 
             # Save to database
             await agent.insert()
-            logger.info(f"Created agent: {agent.name} (ID: {agent.id}, path: {agent.path})")
+            logger.info(f"Created agent: {agent.card.name} (ID: {agent.id}, path: {agent.path})")
             return agent
 
         except ValueError:
@@ -249,58 +250,59 @@ class A2AAgentService:
             if not agent:
                 raise ValueError(f"Agent not found: {agent_id}")
 
-            # Update fields if provided
+            # Get current card as dict
+            card_data = agent.card.model_dump(by_alias=False)
+
+            # Update card fields if provided
             update_data = data.model_dump(exclude_unset=True, by_alias=False)
+
+            # Map request fields to card fields
+            card_field_mapping = {
+                "name": "name",
+                "description": "description",
+                "version": "version",
+                "capabilities": "capabilities",
+                "security_schemes": "securitySchemes",
+                "preferred_transport": "preferredTransport",
+                "default_input_modes": "defaultInputModes",
+                "default_output_modes": "defaultOutputModes",
+            }
+
+            # Update card fields
+            for request_field, card_field in card_field_mapping.items():
+                if request_field in update_data:
+                    card_data[card_field] = update_data[request_field]
 
             # Handle skills update
             if "skills" in update_data and update_data["skills"] is not None:
-                skills = [
-                    AgentSkill(
-                        id=skill.id,
-                        name=skill.name,
-                        description=skill.description,
-                        tags=skill.tags,
-                        examples=skill.examples,
-                        inputModes=skill.input_modes,
-                        outputModes=skill.output_modes,
-                        security=skill.security,
-                    )
-                    for skill in data.skills
-                ]
-                agent.skills = skills
-                del update_data["skills"]
+                card_data["skills"] = [skill.model_dump(by_alias=True, exclude_none=True) for skill in data.skills]
 
             # Handle provider update
             if "provider" in update_data and update_data["provider"] is not None:
-                from registry_pkgs.models.a2a_agent import AgentProvider
+                card_data["provider"] = {
+                    "organization": data.provider.organization,
+                    "url": data.provider.url,
+                }
 
-                agent.provider = AgentProvider(organization=data.provider.organization, url=data.provider.url)
-                del update_data["provider"]
+            # Validate updated card with SDK
+            try:
+                agent.card = AgentCard(**card_data)
+            except Exception as e:
+                raise ValueError(f"Invalid agent card update: {str(e)}")
 
-            # Update other fields
-            for key, value in update_data.items():
-                # Convert camelCase to snake_case for model fields
-                model_key = key
-                if key == "security_schemes":
-                    model_key = "securitySchemes"
-                elif key == "preferred_transport":
-                    model_key = "preferredTransport"
-                elif key == "default_input_modes":
-                    model_key = "defaultInputModes"
-                elif key == "default_output_modes":
-                    model_key = "defaultOutputModes"
-                elif key == "enabled":
-                    model_key = "isEnabled"
+            # Update registry-specific fields
+            if "tags" in update_data:
+                agent.tags = update_data["tags"]
 
-                if hasattr(agent, model_key):
-                    setattr(agent, model_key, value)
+            if "enabled" in update_data:
+                agent.isEnabled = update_data["enabled"]
 
             # Update timestamp
             agent.updatedAt = datetime.now(UTC)
 
             # Save changes
             await agent.save()
-            logger.info(f"Updated agent: {agent.name} (ID: {agent_id})")
+            logger.info(f"Updated agent: {agent.card.name} (ID: {agent_id})")
             return agent
 
         except ValueError:
@@ -328,7 +330,7 @@ class A2AAgentService:
                 raise ValueError(f"Agent not found: {agent_id}")
 
             await agent.delete()
-            logger.info(f"Deleted agent: {agent.name} (ID: {agent_id})")
+            logger.info(f"Deleted agent: {agent.card.name} (ID: {agent_id})")
             return True
 
         except ValueError:
@@ -360,7 +362,7 @@ class A2AAgentService:
             agent.updatedAt = datetime.now(UTC)
             await agent.save()
 
-            logger.info(f"Toggled agent {agent.name} to {'enabled' if enabled else 'disabled'}")
+            logger.info(f"Toggled agent {agent.card.name} to {'enabled' if enabled else 'disabled'}")
             return agent
 
         except ValueError:
@@ -371,7 +373,7 @@ class A2AAgentService:
 
     async def sync_wellknown(self, agent_id: str) -> dict[str, Any]:
         """
-        Sync agent configuration from .well-known/agent-card.json endpoint.
+        Sync agent configuration from .well-known/agent-card.json endpoint using SDK.
 
         Args:
             agent_id: Agent ID
@@ -394,63 +396,46 @@ class A2AAgentService:
             if not agent.wellKnown.url:
                 raise ValueError("Well-known URL is not configured")
 
-            # Fetch agent card from well-known endpoint
-            logger.info(f"Fetching agent card from {agent.wellKnown.url}")
+            # Use SDK to fetch and validate agent card
+            logger.info(f"Fetching agent card from {agent.wellKnown.url} using SDK")
+
             timeout = httpx.Timeout(10.0)
 
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.get(str(agent.wellKnown.url))
-                response.raise_for_status()
-                agent_card = response.json()
+                resolver = A2ACardResolver(
+                    base_url=str(agent.wellKnown.url).rsplit("/.well-known", 1)[0],
+                    httpx_client=client,
+                )
+                # SDK handles fetching, parsing, and validation
+                updated_card = await resolver.get_agent_card()
 
             # Track changes
             changes = []
+            old_card = agent.card
 
-            # Update version if changed
-            old_version = agent.version
-            new_version = agent_card.get("version", agent.version)
-            if old_version != new_version:
-                agent.version = new_version
-                changes.append(f"Updated version from {old_version} to {new_version}")
+            # Compare versions
+            if old_card.version != updated_card.version:
+                changes.append(f"Version: {old_card.version} → {updated_card.version}")
 
-            # Update description if changed
-            old_description = agent.description
-            new_description = agent_card.get("description", agent.description)
-            if old_description != new_description:
-                agent.description = new_description
+            # Compare descriptions
+            if old_card.description != updated_card.description:
                 changes.append("Updated description")
 
-            # Update skills if changed
-            old_skill_count = len(agent.skills)
-            new_skills_data = agent_card.get("skills", [])
-            if new_skills_data:
-                new_skills = [
-                    AgentSkill(
-                        id=skill.get("id"),
-                        name=skill.get("name"),
-                        description=skill.get("description", ""),
-                        tags=skill.get("tags", []),
-                        examples=skill.get("examples"),
-                        inputModes=skill.get("inputModes"),
-                        outputModes=skill.get("outputModes"),
-                        security=skill.get("security"),
-                    )
-                    for skill in new_skills_data
-                ]
-                agent.skills = new_skills
-                if len(new_skills) != old_skill_count:
-                    changes.append(f"Updated skills count from {old_skill_count} to {len(new_skills)}")
+            # Compare skills count
+            if len(old_card.skills or []) != len(updated_card.skills or []):
+                changes.append(f"Skills count: {len(old_card.skills or [])} → {len(updated_card.skills or [])}")
 
-            # Update capabilities if changed
-            new_capabilities = agent_card.get("capabilities", {})
-            if new_capabilities and new_capabilities != agent.capabilities:
-                agent.capabilities = new_capabilities
+            # Compare capabilities
+            if old_card.capabilities != updated_card.capabilities:
                 changes.append("Updated capabilities")
+
+            # Update agent card with SDK-validated card
+            agent.card = updated_card
 
             # Update well-known sync metadata
             agent.wellKnown.lastSyncAt = datetime.now(UTC)
             agent.wellKnown.lastSyncStatus = "success"
-            agent.wellKnown.lastSyncVersion = new_version
+            agent.wellKnown.lastSyncVersion = updated_card.version
             agent.wellKnown.syncError = None
 
             # Update timestamp
@@ -459,17 +444,17 @@ class A2AAgentService:
             # Save changes
             await agent.save()
 
-            logger.info(f"Successfully synced agent {agent.name} from well-known endpoint: {len(changes)} changes")
+            logger.info(f"Successfully synced agent {agent.card.name} from well-known: {len(changes)} changes")
 
             return {
                 "message": "Well-known configuration synced successfully",
                 "sync_status": "success",
                 "synced_at": agent.wellKnown.lastSyncAt,
-                "version": new_version,
+                "version": updated_card.version,
                 "changes": changes if changes else ["No changes detected"],
             }
 
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, httpx.TimeoutException) as e:
             # Update sync error status
             if agent and agent.wellKnown:
                 agent.wellKnown.lastSyncStatus = "failed"

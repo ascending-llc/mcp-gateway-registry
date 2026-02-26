@@ -6,13 +6,13 @@ RESTful API endpoints for managing A2A agents using MongoDB.
 
 import logging
 import math
+from typing import Annotated, Literal
 
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
 
 from registry.auth.dependencies import CurrentUser
-from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
 from registry.core.telemetry_decorators import track_registry_operation
 from registry.schemas.a2a_agent_api_schemas import (
     AgentCreateRequest,
@@ -38,15 +38,12 @@ from registry.schemas.errors import ErrorCode, create_error_detail
 from registry.services.a2a_agent_service import a2a_agent_service
 from registry.services.access_control_service import acl_service
 from registry_pkgs.database.decorators import use_transaction
+from registry_pkgs.models._generated import PrincipalType, ResourceType
+from registry_pkgs.models.enums import RoleBits
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def get_user_context(user_context: CurrentUser):
-    """Extract user context from authentication dependency"""
-    return user_context
 
 
 def check_admin_permission(user_context: dict) -> bool:
@@ -74,11 +71,11 @@ def check_admin_permission(user_context: dict) -> bool:
 )
 @track_registry_operation("list", resource_type="agent")
 async def list_agents(
+    user_context: CurrentUser,
     query: str | None = None,
-    status: str | None = None,
-    page: int = 1,
-    per_page: int = 20,
-    user_context: dict = Depends(get_user_context),
+    status: Annotated[Literal["active", "inactive", "error"] | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     """
     List agents with optional filtering and pagination.
@@ -90,20 +87,11 @@ async def list_agents(
     - per_page: Items per page (default: 20, min: 1, max: 100)
     """
     try:
-        # Validate status if provided
-        if status and status not in ["active", "inactive", "error"]:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail=create_error_detail(
-                    ErrorCode.INVALID_PARAMETER, "Invalid status. Must be one of: active, inactive, error"
-                ),
-            )
-
         # Get accessible agent IDs from ACL
         user_id = user_context.get("user_id")
         accessible_ids = await acl_service.get_accessible_resource_ids(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT.value,
+            resource_type=ResourceType.AGENT.value,
         )
 
         # List agents
@@ -120,7 +108,7 @@ async def list_agents(
         for agent in agents:
             perms = await acl_service.get_user_permissions_for_resource(
                 user_id=PydanticObjectId(user_id),
-                resource_type=ResourceType.A2AAGENT.value,
+                resource_type=ResourceType.AGENT.value,
                 resource_id=agent.id,
             )
             agent_items.append(convert_to_list_item(agent, acl_permission=perms))
@@ -156,7 +144,7 @@ async def list_agents(
 )
 @track_registry_operation("read", resource_type="stats")
 async def get_agent_stats(
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """
     Get system-wide agent statistics.
@@ -210,7 +198,7 @@ async def get_agent_stats(
 @track_registry_operation("read", resource_type="agent")
 async def get_agent(
     agent_id: str,
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """Get detailed information about an agent by ID"""
     try:
@@ -219,22 +207,28 @@ async def get_agent(
         # Check VIEW permission
         permissions = await acl_service.check_user_permission(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT.value,
+            resource_type=ResourceType.AGENT.value,
             resource_id=PydanticObjectId(agent_id),
             required_permission="VIEW",
         )
 
         # Get agent
         agent = await a2a_agent_service.get_agent_by_id(agent_id)
-        if not agent:
-            raise HTTPException(
-                status_code=http_status.HTTP_404_NOT_FOUND,
-                detail=create_error_detail(ErrorCode.RESOURCE_NOT_FOUND, "Agent not found"),
-            )
 
         # Convert to response model
         return convert_to_detail(agent, acl_permission=permissions)
 
+    except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=create_error_detail(ErrorCode.RESOURCE_NOT_FOUND, error_msg),
+            )
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=create_error_detail(ErrorCode.INVALID_REQUEST, error_msg),
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -256,7 +250,7 @@ async def get_agent(
 @use_transaction
 async def create_agent(
     data: AgentCreateRequest,
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """Create a new agent"""
     try:
@@ -273,13 +267,21 @@ async def create_agent(
         await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
             principal_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT,
+            resource_type=ResourceType.AGENT,
             resource_id=agent.id,
             perm_bits=RoleBits.OWNER,
         )
 
         logger.info(f"Granted user {user_id} OWNER permissions for agent {agent.id}")
-        return convert_to_create_response(agent)
+
+        # Get permissions for response
+        permissions = await acl_service.get_user_permissions_for_resource(
+            user_id=PydanticObjectId(user_id),
+            resource_type=ResourceType.AGENT.value,
+            resource_id=agent.id,
+        )
+
+        return convert_to_create_response(agent, acl_permission=permissions)
 
     except ValueError as e:
         error_msg = str(e)
@@ -318,16 +320,16 @@ async def create_agent(
 async def update_agent(
     agent_id: str,
     data: AgentUpdateRequest,
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """Update an agent with partial data"""
     try:
         user_id = user_context.get("user_id")
 
-        # Check EDIT permission
-        await acl_service.check_user_permission(
+        # Check EDIT permission and get permissions for response
+        permissions = await acl_service.check_user_permission(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT.value,
+            resource_type=ResourceType.AGENT.value,
             resource_id=PydanticObjectId(agent_id),
             required_permission="EDIT",
         )
@@ -335,7 +337,7 @@ async def update_agent(
         # Update agent
         agent = await a2a_agent_service.update_agent(agent_id=agent_id, data=data)
 
-        return convert_to_update_response(agent)
+        return convert_to_update_response(agent, acl_permission=permissions)
 
     except ValueError as e:
         error_msg = str(e)
@@ -373,7 +375,7 @@ async def update_agent(
 @use_transaction
 async def delete_agent(
     agent_id: str,
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """Delete an agent"""
     try:
@@ -382,7 +384,7 @@ async def delete_agent(
         # Check DELETE permission
         await acl_service.check_user_permission(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT.value,
+            resource_type=ResourceType.AGENT.value,
             resource_id=PydanticObjectId(agent_id),
             required_permission="DELETE",
         )
@@ -393,7 +395,7 @@ async def delete_agent(
         if successful_delete:
             # Delete all associated ACL permission records
             deleted_count = await acl_service.delete_acl_entries_for_resource(
-                resource_type=ResourceType.A2AAGENT,
+                resource_type=ResourceType.AGENT,
                 resource_id=PydanticObjectId(agent_id),
             )
             logger.info(f"Removed {deleted_count} ACL permissions for agent {agent_id}")
@@ -436,16 +438,16 @@ async def delete_agent(
 async def toggle_agent(
     agent_id: str,
     data: AgentToggleRequest,
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """Toggle agent enabled/disabled status"""
     try:
         user_id = user_context.get("user_id")
 
-        # Check EDIT permission
-        await acl_service.check_user_permission(
+        # Check EDIT permission and get permissions for response
+        permissions = await acl_service.check_user_permission(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT.value,
+            resource_type=ResourceType.AGENT.value,
             resource_id=PydanticObjectId(agent_id),
             required_permission="EDIT",
         )
@@ -453,7 +455,7 @@ async def toggle_agent(
         # Toggle agent status
         agent = await a2a_agent_service.toggle_agent_status(agent_id=agent_id, enabled=data.enabled)
 
-        return convert_to_toggle_response(agent)
+        return convert_to_toggle_response(agent, acl_permission=permissions)
 
     except ValueError as e:
         error_msg = str(e)
@@ -488,7 +490,7 @@ async def toggle_agent(
 @track_registry_operation("read", resource_type="skill")
 async def get_agent_skills(
     agent_id: str,
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """Get agent skills"""
     try:
@@ -497,21 +499,27 @@ async def get_agent_skills(
         # Check VIEW permission
         await acl_service.check_user_permission(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT.value,
+            resource_type=ResourceType.AGENT.value,
             resource_id=PydanticObjectId(agent_id),
             required_permission="VIEW",
         )
 
         # Get agent
         agent = await a2a_agent_service.get_agent_by_id(agent_id)
-        if not agent:
-            raise HTTPException(
-                status_code=http_status.HTTP_404_NOT_FOUND,
-                detail=create_error_detail(ErrorCode.RESOURCE_NOT_FOUND, "Agent not found"),
-            )
 
         return convert_to_skills_response(agent)
 
+    except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=create_error_detail(ErrorCode.RESOURCE_NOT_FOUND, error_msg),
+            )
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=create_error_detail(ErrorCode.INVALID_REQUEST, error_msg),
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -531,7 +539,7 @@ async def get_agent_skills(
 @track_registry_operation("update", resource_type="agent")
 async def sync_wellknown(
     agent_id: str,
-    user_context: dict = Depends(get_user_context),
+    user_context: CurrentUser,
 ):
     """Sync agent configuration from well-known endpoint"""
     try:
@@ -540,7 +548,7 @@ async def sync_wellknown(
         # Check EDIT permission
         await acl_service.check_user_permission(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.A2AAGENT.value,
+            resource_type=ResourceType.AGENT.value,
             resource_id=PydanticObjectId(agent_id),
             required_permission="EDIT",
         )
