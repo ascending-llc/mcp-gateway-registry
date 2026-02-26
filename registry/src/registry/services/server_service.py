@@ -469,6 +469,14 @@ def _update_config_from_request(
                     config["apiKey"] = existing_apikey
                 else:
                     config["apiKey"] = apikey_update
+
+    if "headers" in update_dict:
+        headers_update = update_dict.pop("headers")
+        if headers_update:
+            config["headers"] = headers_update
+        else:
+            config.pop("headers", None)
+
     # Update config with MCP-specific fields only
     mcp_config_fields = [
         "title",
@@ -481,7 +489,6 @@ def _update_config_from_request(
         "requires_oauth",
         "oauth",
         "custom_user_vars",
-        "headers",
         "tool_list",
     ]
     for key, value in update_dict.items():
