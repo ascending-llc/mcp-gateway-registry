@@ -1,6 +1,6 @@
 #!/bin/bash
 # Bootstrap script for setting up LOB users and M2M service accounts
-# # Creates registry-admin, registry-user, and registry-read-only groups
+# # Creates registry-admin, register-user, and register-read-only groups
 # Then creates bot and human users in these groups
 
 set -e
@@ -163,7 +163,7 @@ _create_lob1_users() {
     echo "Creating M2M service account: lob1-bot"
     if "$USER_MGMT_SCRIPT" create-m2m \
         --name "lob1-bot" \
-        --groups "registry-user" \
+        --groups "register-user" \
         --description "M2M service account for LOB1" 2>&1 | tee /tmp/lob1_bot_output.txt; then
         _print_success "Created lob1-bot"
     else
@@ -182,7 +182,7 @@ _create_lob1_users() {
         --email "lob1-user@example.com" \
         --firstname "LOB1" \
         --lastname "User" \
-        --groups "registry-user" \
+        --groups "register-user" \
         --password "$INITIAL_USER_PASSWORD" 2>&1 | tee /tmp/lob1_user_output.txt; then
         _print_success "Created lob1-user"
     else
@@ -202,7 +202,7 @@ _create_lob2_users() {
     echo "Creating M2M service account: lob2-bot"
     if "$USER_MGMT_SCRIPT" create-m2m \
         --name "lob2-bot" \
-        --groups "registry-read-only" \
+        --groups "register-read-only" \
         --description "M2M service account for LOB2" 2>&1 | tee /tmp/lob2_bot_output.txt; then
         _print_success "Created lob2-bot"
     else
@@ -221,7 +221,7 @@ _create_lob2_users() {
         --email "lob2-user@example.com" \
         --firstname "LOB2" \
         --lastname "User" \
-        --groups "registry-read-only" \
+        --groups "register-read-only" \
         --password "$INITIAL_USER_PASSWORD" 2>&1 | tee /tmp/lob2_user_output.txt; then
         _print_success "Created lob2-user"
     else
@@ -322,8 +322,8 @@ _print_summary() {
 
     echo ""
     _print_info "Created Groups:"
-    echo "  - registry-user"
-    echo "  - registry-read-only"
+    echo "  - register-user"
+    echo "  - register-read-only"
     echo "  - registry-admin"
 
     echo ""
@@ -369,8 +369,8 @@ main() {
 
     # Create groups
     _print_section "Creating Keycloak Groups"
-    _create_group "registry-user"
-    _create_group "registry-read-only"
+    _create_group "register-user"
+    _create_group "register-read-only"
     _create_group "registry-admin"
 
     # Create LOB1 users

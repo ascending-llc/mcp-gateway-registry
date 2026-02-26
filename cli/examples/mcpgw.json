@@ -273,7 +273,7 @@
             "type": "string"
           },
           "group_names": {
-            "description": "List of scopes group names to add the server to (e.g., ['registry-admin', 'registry-power-user', 'registry-user', 'registry-read-only']).",
+            "description": "List of scopes group names to add the server to (e.g., ['registry-admin', 'registry-power-user', 'register-user', 'register-read-only']).",
             "items": {"type": "string"},
             "title": "Group Names",
             "type": "array"
@@ -299,7 +299,7 @@
             "type": "string"
           },
           "group_names": {
-            "description": "List of scopes group names to remove the server from (e.g., ['registry-admin', 'registry-power-user', 'registry-user', 'registry-read-only']).",
+            "description": "List of scopes group names to remove the server from (e.g., ['registry-admin', 'registry-power-user', 'register-user', 'register-read-only']).",
             "items": {"type": "string"},
             "title": "Group Names",
             "type": "array"

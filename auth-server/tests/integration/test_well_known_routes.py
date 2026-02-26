@@ -200,8 +200,8 @@ class TestWellKnownRoutes:
         expected_scopes = {
             "registry-admin",
             "registry-power-user",
-            "registry-user",
-            "registry-read-only",
+            "register-user",
+            "register-read-only",
         }
 
         assert expected_scopes.issubset(set(scopes))

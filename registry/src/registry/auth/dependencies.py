@@ -561,10 +561,10 @@ def nginx_proxied_auth(
                 groups = ["registry-admin"]
             elif "registry-power-user" in scopes:
                 groups = ["registry-power-user"]
-            elif "registry-user" in scopes:
-                groups = ["registry-user"]
-            elif "registry-read-only" in scopes:
-                groups = ["registry-read-only"]
+            elif "register-user" in scopes:
+                groups = ["register-user"]
+            elif "register-read-only" in scopes:
+                groups = ["register-read-only"]
             else:
                 groups = []
 

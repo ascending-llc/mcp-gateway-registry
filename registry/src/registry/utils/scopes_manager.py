@@ -166,8 +166,8 @@ async def remove_server_from_scopes(server_path: str) -> bool:
         sections = [
             "registry-admin",
             "registry-power-user",
-            "registry-user",
-            "registry-read-only",
+            "register-user",
+            "register-read-only",
         ]
 
         modified = False

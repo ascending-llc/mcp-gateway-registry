@@ -970,8 +970,8 @@ show_usage() {
     echo "  $0 scan https://mcp.deepwki.com/mcp yara '' '{\"X-Authorization\": \"token\"}' # Scan with custom headers"
     echo ""
     echo "  # Server-to-group operations"
-    echo "  $0 add-to-groups example-server 'registry-admin,registry-power-user,registry-user,registry-read-only'"
-    echo "  $0 remove-from-groups example-server 'registry-admin,registry-power-user,registry-user,registry-read-only'"
+    echo "  $0 add-to-groups example-server 'registry-admin,registry-power-user,register-user,register-read-only'"
+    echo "  $0 remove-from-groups example-server 'registry-admin,registry-power-user,register-user,register-read-only'"
     echo ""
     echo "  # Group management operations"
     echo "  $0 create-group mcp-servers-finance/read 'Finance team read access'"
@@ -985,7 +985,7 @@ add_to_groups() {
 
     if [ -z "$server_name" ] || [ -z "$groups" ]; then
         print_error "Usage: $0 add-to-groups <server-name> <groups>"
-        print_error "Example: $0 add-to-groups example-server 'registry-admin,registry-power-user,registry-user,registry-read-only'"
+        print_error "Example: $0 add-to-groups example-server 'registry-admin,registry-power-user,register-user,register-read-only'"
         exit 1
     fi
 
@@ -1044,7 +1044,7 @@ remove_from_groups() {
 
     if [ -z "$server_name" ] || [ -z "$groups" ]; then
         print_error "Usage: $0 remove-from-groups <server-name> <groups>"
-        print_error "Example: $0 remove-from-groups example-server 'registry-admin,registry-power-user,registry-user,registry-read-only'"
+        print_error "Example: $0 remove-from-groups example-server 'registry-admin,registry-power-user,register-user,register-read-only'"
         exit 1
     fi
 

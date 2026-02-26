@@ -174,7 +174,7 @@ create_groups() {
 
     echo "Creating user groups..."
 
-    local groups=("registry-admin" "registry-power-user" "registry-user" "registry-read-only" "a2a-agent-admin" "a2a-agent-publisher" "a2a-agent-user")
+    local groups=("registry-admin" "registry-power-user" "register-user" "register-read-only" "a2a-agent-admin" "a2a-agent-publisher" "a2a-agent-user")
 
     for group in "${groups[@]}"; do
         local group_json='{
@@ -199,7 +199,7 @@ create_scopes() {
 
     echo "Creating custom MCP scopes..."
 
-    local scopes=("registry-admin" "registry-power-user" "registry-user" "registry-read-only")
+    local scopes=("registry-admin" "registry-power-user" "register-user" "register-read-only")
 
     for scope in "${scopes[@]}"; do
         local scope_json='{
@@ -243,7 +243,7 @@ setup_m2m_scopes() {
     fi
 
     # Get all available client scopes
-    local scopes=("registry-admin" "registry-power-user" "registry-user" "registry-read-only")
+    local scopes=("registry-admin" "registry-power-user" "register-user" "register-read-only")
 
     for scope in "${scopes[@]}"; do
         # Get scope ID
@@ -431,7 +431,7 @@ create_users() {
 
     local user_group_id=$(curl -s -H "Authorization: Bearer ${token}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM}/groups" | \
-        jq -r '.[] | select(.name=="registry-user") | .id')
+        jq -r '.[] | select(.name=="register-user") | .id')
 
     local power_user_group_id=$(curl -s -H "Authorization: Bearer ${token}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM}/groups" | \
@@ -439,7 +439,7 @@ create_users() {
 
     local read_only_group_id=$(curl -s -H "Authorization: Bearer ${token}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM}/groups" | \
-        jq -r '.[] | select(.name=="registry-read-only") | .id')
+        jq -r '.[] | select(.name=="register-read-only") | .id')
 
     # Define usernames for consistent logging
     local admin_username="admin"
@@ -456,7 +456,7 @@ create_users() {
     if [ ! -z "$test_user_id" ]; then
         # Arrays of group IDs and names for loop processing
         local group_ids=("$user_group_id" "$power_user_group_id" "$read_only_group_id")
-        local group_names=("registry-user" "registry-power-user" "registry-read-only")
+        local group_names=("register-user" "registry-power-user" "register-read-only")
 
         # Loop through groups and assign test user to each
         for i in "${!group_ids[@]}"; do
