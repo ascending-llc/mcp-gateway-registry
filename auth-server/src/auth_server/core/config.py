@@ -9,30 +9,12 @@ import logging
 import secrets
 from pathlib import Path
 
-import yaml
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from auth_utils.scopes import load_scopes_config
+
 from ..utils.config_loader import get_oauth2_config
-
-
-def load_scopes_config() -> dict:
-    """Load the scopes configuration from the configured scopes.yml file.
-
-    Returns:
-        Parsed YAML as dict, or empty dict on error.
-    """
-    try:
-        scopes_file = settings.scopes_file_path
-        with open(scopes_file) as f:
-            config = yaml.safe_load(f)
-            # Ensure at least an empty mapping structure
-            if not isinstance(config, dict):
-                return {}
-            return config
-    except Exception:
-        # Logging is not directly available here; re-raise or return empty
-        return {}
 
 
 class AuthSettings(BaseSettings):

@@ -10,7 +10,8 @@ from fastapi import APIRouter, Cookie, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import URLSafeTimedSerializer
 
-from ..auth.dependencies import map_groups_to_scopes
+from auth_utils.scopes import map_groups_to_scopes
+
 from ..core.config import settings
 from ..services.user_service import user_service
 from ..utils.crypto_utils import generate_access_token, generate_token_pair, verify_refresh_token

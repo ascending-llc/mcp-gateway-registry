@@ -14,7 +14,9 @@ import jwt
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from ..core.config import load_scopes_config, settings
+from auth_utils.scopes import load_scopes_config
+
+from ..core.config import settings
 from ..models import GenerateTokenRequest, GenerateTokenResponse
 from ..utils.security_mask import hash_username
 

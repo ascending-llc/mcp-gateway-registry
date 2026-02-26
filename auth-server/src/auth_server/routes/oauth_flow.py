@@ -19,6 +19,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
 
+from auth_utils.scopes import map_groups_to_scopes
+
 from ..core.config import settings
 from ..models.device_flow import DeviceApprovalRequest, DeviceCodeResponse, DeviceTokenResponse
 from ..providers.factory import get_auth_provider
@@ -27,7 +29,6 @@ from ..services.user_service import user_service
 from ..utils.security_mask import (
     anonymize_ip,
     hash_username,
-    map_groups_to_scopes,
     mask_headers,
     mask_sensitive_id,
     parse_server_and_tool_from_url,
@@ -341,9 +342,7 @@ async def device_token(
         user_info = auth_code_data["user_info"]
         audience = auth_code_data.get("resource") or JWT_AUDIENCE
         user_groups = user_info.get("groups", [])
-        user_scopes = (
-            map_groups_to_scopes(user_groups, settings.scopes_config) if user_groups else user_info.get("scopes", [])
-        )
+        user_scopes = map_groups_to_scopes(user_groups) if user_groups else user_info.get("scopes", [])
 
         # Resolve user_id from MongoDB
         user_id = await user_service.resolve_user_id(user_info)
@@ -1030,7 +1029,7 @@ async def validate_request(request: Request):
         auth_method = validation_result.get("method", "")
         if user_groups and auth_method in ["keycloak", "entra", "cognito"]:
             # Map IdP groups to scopes using the group mappings
-            user_scopes = map_groups_to_scopes(user_groups, settings.scopes_config)
+            user_scopes = map_groups_to_scopes(user_groups)
             logger.info(f"Mapped {auth_method} groups {user_groups} to scopes: {user_scopes}")
         else:
             user_scopes = validation_result.get("scopes", [])
@@ -1292,7 +1291,7 @@ def validate_session_cookie(cookie_value: str) -> dict[str, any]:
         groups = data.get("groups", [])
 
         # Map groups to scopes using global settings.scopes_config
-        scopes = map_groups_to_scopes(groups, settings.scopes_config)
+        scopes = map_groups_to_scopes(groups)
 
         logger.info(f"Session cookie validated for user: {hash_username(username)}")
 

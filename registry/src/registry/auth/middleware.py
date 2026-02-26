@@ -10,6 +10,8 @@ from itsdangerous import BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
+from auth_utils.scopes import map_groups_to_scopes
+
 from ..core.config import settings
 from ..core.telemetry_decorators import AuthMetricsContext
 from ..utils.crypto_utils import verify_access_token
@@ -18,7 +20,6 @@ from .dependencies import (
     get_accessible_services_for_user,
     get_ui_permissions_for_user,
     get_user_accessible_servers,
-    map_groups_to_scopes,
     signer,
     user_can_modify_servers,
     user_has_wildcard_access,

@@ -1,10 +1,10 @@
 import logging
-from pathlib import Path
 from typing import Annotated, Any
 
-import yaml
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+from auth_utils.scopes import load_scopes_config, map_groups_to_scopes
 
 from ..core.config import settings
 
@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize session signer
 signer = URLSafeTimedSerializer(settings.secret_key)
+
+# Global scopes configuration
+SCOPES_CONFIG = load_scopes_config()
 
 
 def get_current_user_by_mid(request: Request) -> dict[str, Any]:
@@ -120,68 +123,6 @@ def get_user_session_data(
     except Exception as e:
         logger.error(f"Session data extraction error: {e}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
-
-
-def load_scopes_config() -> dict[str, Any]:
-    """Load scopes configuration from the path defined in settings."""
-    try:
-        scopes_file = Path(settings.scopes_config_path)
-
-        logger.debug(f"[SCOPES_INIT] Looking for scopes config at: {scopes_file}")
-        logger.debug(f"[SCOPES_INIT] Scopes file exists: {scopes_file.exists()}")
-
-        if not scopes_file.exists():
-            config_dir = scopes_file.parent
-            logger.debug(f"[SCOPES_INIT] Directory exists: {config_dir.exists()}")
-            if config_dir.exists():
-                logger.debug(f"[SCOPES_INIT] Directory contents: {list(config_dir.iterdir())}")
-            logger.warning(f"Scopes config file not found at {scopes_file}")
-            return {}
-
-        with open(scopes_file) as f:
-            config = yaml.safe_load(f)
-            logger.info(f"Loaded scopes configuration with {len(config.get('group_mappings', {}))} group mappings")
-            return config
-    except Exception as e:
-        logger.error(f"Failed to load scopes configuration: {e}", exc_info=True)
-        return {}
-
-
-# Global scopes configuration
-SCOPES_CONFIG = load_scopes_config()
-
-
-def map_groups_to_scopes(groups: list[str]) -> list[str]:
-    """
-    Map groups to MCP scopes using the scopes.yml configuration.
-
-    Args:
-        groups: List of Cognito group names
-
-    Returns:
-        List of MCP scopes
-    """
-    scopes = []
-    group_mappings = SCOPES_CONFIG.get("group_mappings", {})
-
-    for group in groups:
-        if group in group_mappings:
-            group_scopes = group_mappings[group]
-            scopes.extend(group_scopes)
-            logger.debug(f"Mapped group '{group}' to scopes: {group_scopes}")
-        else:
-            logger.debug(f"No scope mapping found for group: {group}")
-
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_scopes = []
-    for scope in scopes:
-        if scope not in seen:
-            seen.add(scope)
-            unique_scopes.append(scope)
-
-    logger.info(f"Final mapped scopes: {unique_scopes}")
-    return unique_scopes
 
 
 def get_ui_permissions_for_user(user_scopes: list[str]) -> dict[str, list[str]]:

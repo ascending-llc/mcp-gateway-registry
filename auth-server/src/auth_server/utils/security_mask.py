@@ -64,43 +64,6 @@ def mask_headers(headers: dict) -> dict:
     return masked
 
 
-def map_groups_to_scopes(groups: list[str], scopes_config: dict | None = None) -> list[str]:
-    """
-    Map identity provider groups to MCP scopes using the provided scopes_config.
-
-    Args:
-        groups: List of group names from identity provider (Cognito, Keycloak, etc.)
-        scopes_config: Optional dict of group_mappings; if None returns empty mapping
-
-    Returns:
-        List of MCP scopes
-    """
-    scopes: list[str] = []
-    if not scopes_config:
-        logger.debug("No scopes_config provided to map_groups_to_scopes; returning empty list")
-        return []
-
-    group_mappings = scopes_config.get("group_mappings", {})
-
-    for group in groups:
-        if group in group_mappings:
-            group_scopes = group_mappings[group]
-            scopes.extend(group_scopes)
-            logger.debug(f"Mapped group '{group}' to scopes: {group_scopes}")
-        else:
-            logger.debug(f"No scope mapping found for group: {group}")
-
-    seen = set()
-    unique_scopes: list[str] = []
-    for scope in scopes:
-        if scope not in seen:
-            seen.add(scope)
-            unique_scopes.append(scope)
-
-    logger.info(f"Final mapped scopes: {unique_scopes}")
-    return unique_scopes
-
-
 def parse_server_and_tool_from_url(original_url: str) -> tuple[str | None, str | None]:
     """
     Parse server name and tool name from the original URL and request payload.
