@@ -15,36 +15,37 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
 
-from registry.api.agent_routes import router as agent_router
-from registry.api.management_routes import router as management_router
-from registry.api.proxy_routes import router as proxy_router
-from registry.api.proxy_routes import shutdown_proxy_client
-from registry.api.redirect_routes import router as auth_provider_router
-from registry.api.v1.acl_routes import router as acl_router
-from registry.api.v1.mcp.connection_router import router as connection_router
-from registry.api.v1.mcp.oauth_router import router as oauth_router
-
-# Import domain routers
-from registry.api.v1.meta_routes import router as meta_router
-from registry.api.v1.search_routes import router as search_router
-from registry.api.v1.server.server_routes import router as servers_router_v1
-from registry.api.v1.token_routes import router as token_router
-from registry.api.wellknown_routes import router as wellknown_router
-from registry.auth.dependencies import CurrentUser
-from registry.auth.middleware import UnifiedAuthMiddleware
-from registry.core.config import settings
-from registry.health.routes import router as health_router
-from registry.health.service import health_service
-
-# Import services for initialization
-from registry.services.agent_service import agent_service
-from registry.services.federation_service import get_federation_service
-from registry.services.search.service import vector_service
-from registry.utils.error import register_validation_exception_handler
-from registry.version import __version__
 from registry_pkgs.database import close_mongodb, init_mongodb
 from registry_pkgs.database.redis_client import close_redis, init_redis
 from registry_pkgs.telemetry import setup_metrics
+
+from .api.agent_routes import router as agent_router
+from .api.management_routes import router as management_router
+from .api.proxy_routes import router as proxy_router
+from .api.proxy_routes import shutdown_proxy_client
+from .api.redirect_routes import router as auth_provider_router
+from .api.v1.acl_routes import router as acl_router
+from .api.v1.mcp.connection_router import router as connection_router
+from .api.v1.mcp.oauth_router import router as oauth_router
+
+# Import domain routers
+from .api.v1.meta_routes import router as meta_router
+from .api.v1.search_routes import router as search_router
+from .api.v1.server.server_routes import router as servers_router_v1
+from .api.v1.token_routes import router as token_router
+from .api.wellknown_routes import router as wellknown_router
+from .auth.dependencies import CurrentUser
+from .auth.middleware import UnifiedAuthMiddleware
+from .core.config import settings
+from .core.exception_handler import register_validation_exception_handler
+from .health.routes import router as health_router
+from .health.service import health_service
+
+# Import services for initialization
+from .services.agent_service import agent_service
+from .services.federation_service import get_federation_service
+from .services.search.service import vector_service
+from .version import __version__
 
 logger = logging.getLogger(__name__)
 
