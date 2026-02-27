@@ -5,6 +5,9 @@ description = "MCP server to interact with the MCP Gateway Registry API"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    # workspace packages
+    "auth-utils",
+
     # MCP framework
     "mcp>=1.9.3",
     "fastmcp>=2.14.5",
@@ -18,9 +21,10 @@ dependencies = [
     "websockets>=15.0.1",
     "pyyaml>=6.0.2",
 
-    # Auth
-    "pyjwt>=2.10.0",
 ]
+
+[tool.uv.sources]
+auth-utils = { workspace = true }
 
 [build-system]
 requires = ["setuptools>=67", "wheel"]

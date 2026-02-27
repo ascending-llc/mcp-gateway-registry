@@ -12,9 +12,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-import jwt
 from fastmcp import Context
 from fastmcp.server.dependencies import get_http_request
+
+from auth_utils.jwt_utils import encode_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ def _generate_service_jwt(user_context: dict[str, Any]) -> str:
         logger.error(f"WARNING: Generating JWT without user_id! User context keys: {list(user_context.keys())}")
 
     # Sign with the same secret key used by registry
-    token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256", headers={"kid": settings.JWT_SELF_SIGNED_KID})
+    token = encode_jwt(payload, settings.SECRET_KEY, kid=settings.JWT_SELF_SIGNED_KID)
 
     return f"Bearer {token}"
 
