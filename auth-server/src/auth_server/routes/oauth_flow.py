@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
 
+from auth_utils.jwt_utils import build_jwt_payload, encode_jwt, get_token_kid
 from auth_utils.scopes import map_groups_to_scopes
 
 from ..core.config import settings
@@ -273,18 +274,19 @@ async def approve_device(request: DeviceApprovalRequest):
 
     # Generate token
     audience = device_data.get("resource") or JWT_AUDIENCE
-    token_payload = {
-        "iss": JWT_ISSUER,
-        "aud": audience,
-        "sub": "device_user",
-        "client_id": device_data["client_id"],
-        "scope": device_data["scope"],
-        "exp": current_time + 3600,
-        "iat": current_time,
-        "token_use": "access",
-    }
-    headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-    access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+    token_payload = build_jwt_payload(
+        subject="device_user",
+        issuer=JWT_ISSUER,
+        audience=audience,
+        expires_in_seconds=3600,
+        iat=current_time,
+        extra_claims={
+            "client_id": device_data["client_id"],
+            "scope": device_data["scope"],
+            "token_use": "access",
+        },
+    )
+    access_token = encode_jwt(token_payload, SECRET_KEY, kid=JWT_SELF_SIGNED_KID)
     device_data["status"] = "approved"
     device_data["token"] = access_token
     device_data["approved_at"] = current_time
@@ -347,22 +349,23 @@ async def device_token(
         # Resolve user_id from MongoDB
         user_id = await user_service.resolve_user_id(user_info)
 
-        token_payload = {
-            "name": user_info.get("name"),
-            "idp_id": user_info.get("idp_id"),
-            "user_id": user_id,
-            "iss": JWT_ISSUER,
-            "aud": audience,
-            "sub": user_info["username"],
-            "client_id": client_id,
-            "scope": " ".join(user_scopes) if isinstance(user_scopes, list) else user_scopes,
-            "groups": user_info.get("groups", []),
-            "exp": current_time + 3600,
-            "iat": current_time,
-            "token_use": "access",
-        }
-        headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-        access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+        token_payload = build_jwt_payload(
+            subject=user_info["username"],
+            issuer=JWT_ISSUER,
+            audience=audience,
+            expires_in_seconds=3600,
+            iat=current_time,
+            extra_claims={
+                "name": user_info.get("name"),
+                "idp_id": user_info.get("idp_id"),
+                "user_id": user_id,
+                "client_id": client_id,
+                "scope": " ".join(user_scopes) if isinstance(user_scopes, list) else user_scopes,
+                "groups": user_info.get("groups", []),
+                "token_use": "access",
+            },
+        )
+        access_token = encode_jwt(token_payload, SECRET_KEY, kid=JWT_SELF_SIGNED_KID)
 
         rt = secrets.token_urlsafe(32)
         refresh_expires_at = current_time + 1209600
@@ -425,21 +428,22 @@ async def device_token(
             # Resolve user_id from MongoDB
             user_id = await user_service.resolve_user_id(user_info)
 
-            token_payload = {
-                "user_id": user_id,
-                "iss": JWT_ISSUER,
-                "aud": audience,
-                "sub": user_info["username"],
-                "client_id": client_id,
-                "scope": rt_data.get("scope", ""),
-                "groups": user_info.get("groups", []),
-                "exp": now + 3600,
-                "iat": now,
-                "token_use": "access",
-            }
+            token_payload = build_jwt_payload(
+                subject=user_info["username"],
+                issuer=JWT_ISSUER,
+                audience=audience,
+                expires_in_seconds=3600,
+                iat=now,
+                extra_claims={
+                    "user_id": user_id,
+                    "client_id": client_id,
+                    "scope": rt_data.get("scope", ""),
+                    "groups": user_info.get("groups", []),
+                    "token_use": "access",
+                },
+            )
 
-            headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-            access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+            access_token = encode_jwt(token_payload, SECRET_KEY, kid=JWT_SELF_SIGNED_KID)
             return DeviceTokenResponse(
                 access_token=access_token,
                 token_type="Bearer",
@@ -923,8 +927,7 @@ async def validate_request(request: Request):
             validation_result = None
             try:
                 # Try to get the kid from header
-                unverified_header = jwt.get_unverified_header(access_token)
-                header_kid = unverified_header.get("kid")
+                header_kid = get_token_kid(access_token)
 
                 # If kid is our self-signed token identifier, validate as self-signed immediately
                 if header_kid == JWT_SELF_SIGNED_KID:

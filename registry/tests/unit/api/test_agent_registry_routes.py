@@ -20,49 +20,6 @@ from registry.services.agent_service import agent_service
 
 
 @pytest.fixture
-def mock_nginx_proxied_auth_admin():
-    """Mock nginx_proxied_auth for admin user."""
-
-    def _mock_auth(session=None):
-        return {
-            "username": "testadmin",
-            "groups": ["a2a-registry-admin"],
-            "scopes": [
-                "a2a-registry-admin",
-                "a2a-agents-unrestricted/read",
-            ],
-            "auth_method": "traditional",
-            "provider": "local",
-            "accessible_agents": [],
-            "accessible_services": ["all"],
-            "can_modify_agents": True,
-            "is_admin": True,
-        }
-
-    return _mock_auth
-
-
-@pytest.fixture
-def mock_nginx_proxied_auth_user():
-    """Mock nginx_proxied_auth for regular user with limited access."""
-
-    def _mock_auth(session=None):
-        return {
-            "username": "testuser",
-            "groups": ["a2a-registry-user"],
-            "scopes": ["a2a-agents-restricted/read"],
-            "auth_method": "oauth2",
-            "provider": "cognito",
-            "accessible_agents": ["code-reviewer"],
-            "accessible_services": ["restricted"],
-            "can_modify_agents": False,
-            "is_admin": False,
-        }
-
-    return _mock_auth
-
-
-@pytest.fixture
 def sample_agent_card() -> dict[str, Any]:
     """Create a sample agent card for testing."""
     return {
@@ -724,56 +681,33 @@ class TestErrorHandling:
 
     def test_error_invalid_agent_name_format(
         self,
-        mock_nginx_proxied_auth_admin: Any,
         authenticated_client,
     ) -> None:
         """Test invalid agent name format returns 404."""
-        from registry.auth.dependencies import nginx_proxied_auth
-
-        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
-
         response = authenticated_client.get(
             f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents/invalid-format/versions"
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-        app.dependency_overrides.clear()
-
     def test_error_missing_auth(
         self,
         agents_list: list[dict[str, Any]],
     ) -> None:
-        """Test missing auth returns 401 or similar error."""
-        from fastapi import HTTPException
-
-        from registry.auth.dependencies import nginx_proxied_auth
-
-        def _mock_no_auth(session=None):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-
-        app.dependency_overrides[nginx_proxied_auth] = _mock_no_auth
-
-        # Use TestClient without auth cookie to test missing auth
+        """Test missing auth returns 401 when no credentials provided."""
+        # Use TestClient without mock_auth_middleware to test missing auth
         client = TestClient(app)
         response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents")
 
-        # Should fail due to auth dependency
+        # Should fail due to missing auth
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-        app.dependency_overrides.clear()
 
     def test_error_disabled_agent(
         self,
-        mock_nginx_proxied_auth_admin: Any,
         sample_agent_card: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test disabled agent returns 404."""
-        from registry.auth.dependencies import nginx_proxied_auth
-
-        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
-
         with (
             patch.object(
                 agent_service,
@@ -791,8 +725,6 @@ class TestErrorHandling:
             )
 
             assert response.status_code == status.HTTP_404_NOT_FOUND
-
-        app.dependency_overrides.clear()
 
     # def test_error_invalid_limit(
     #     self,

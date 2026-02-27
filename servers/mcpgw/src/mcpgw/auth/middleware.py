@@ -1,10 +1,12 @@
 import logging
 from datetime import datetime
 
-import jwt
 from fastapi import HTTPException
 from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware, MiddlewareContext
+from jwt import DecodeError, ExpiredSignatureError, InvalidIssuerError, InvalidSignatureError
+
+from auth_utils.jwt_utils import decode_jwt
 
 from ..config import settings
 
@@ -163,22 +165,12 @@ class AuthMiddleware(Middleware):
             return None
 
         try:
-            # Decode and verify JWT token
-            decode_options = {
-                "verify_signature": True,
-                "verify_exp": True,
-                "verify_iss": True,
-                "verify_aud": False,  # Skip audience validation for self-signed tokens
-                "require": ["exp", "iss", "sub"],
-            }
+            # No audience — mcpgw skips aud validation for self-signed tokens.
+            claims = decode_jwt(token, settings.SECRET_KEY, settings.JWT_ISSUER)
 
-            claims = jwt.decode(
-                token,
-                settings.SECRET_KEY,
-                algorithms=["HS256"],
-                issuer=settings.JWT_ISSUER,
-                options=decode_options,
-            )
+            if not claims.get("sub"):
+                logger.warning("JWT missing required 'sub' claim")
+                return None
 
             # Extract user information
             user_context = dict(claims)
@@ -214,16 +206,16 @@ class AuthMiddleware(Middleware):
 
             return user_context
 
-        except jwt.ExpiredSignatureError:
+        except ExpiredSignatureError:
             logger.warning("JWT token has expired")
             return None
-        except jwt.InvalidIssuerError:
+        except InvalidIssuerError:
             logger.warning(f"Invalid token issuer. Expected: {settings.JWT_ISSUER}")
             return None
-        except jwt.InvalidSignatureError:
+        except InvalidSignatureError:
             logger.warning("Invalid JWT signature")
             return None
-        except jwt.DecodeError as e:
+        except DecodeError as e:
             logger.error(f"Failed to decode JWT token: {e}")
             return None
         except Exception as e:

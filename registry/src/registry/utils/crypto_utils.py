@@ -13,14 +13,21 @@ TypeScript equivalent:
 
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
-import jwt
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from jwt import ExpiredSignatureError, InvalidTokenError
 
-from registry.core.config import settings
+from auth_utils.jwt_utils import (
+    build_jwt_payload,
+    decode_jwt,
+    encode_jwt,
+    get_token_kid,
+)
+
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -80,28 +87,32 @@ def generate_service_jwt(user_id: str, username: str | None = None, scopes: list
     Returns:
         JWT token string (without Bearer prefix)
     """
-    from registry.core.config import settings
+    now = int(datetime.now(UTC).timestamp())
 
-    now = datetime.now(UTC)
-
-    # Build JWT payload with user context
-    payload = {
+    # Build extra claims
+    extra_claims = {
         "user_id": user_id,
-        "sub": username or user_id,
-        "iss": settings.JWT_ISSUER,
-        "iat": now,
-        "exp": now + timedelta(minutes=5),  # Short-lived for service-to-service
-        "jti": f"registry-{now.timestamp()}",
+        "jti": f"registry-{now}",
         "client_id": settings.registry_app_name,
         "token_type": "service",
     }
 
-    # Add optional fields
+    # Add optional scopes
     if scopes:
-        payload["scopes"] = scopes
+        extra_claims["scopes"] = scopes
+
+    # Build JWT payload using centralized helper
+    payload = build_jwt_payload(
+        subject=username or user_id,
+        issuer=settings.JWT_ISSUER,
+        audience=settings.JWT_AUDIENCE,
+        expires_in_seconds=300,  # 5 minutes - short-lived for service-to-service
+        iat=now,
+        extra_claims=extra_claims,
+    )
 
     # Sign with registry secret
-    token = jwt.encode(payload, settings.secret_key, algorithm="HS256")
+    token = encode_jwt(payload, settings.secret_key)
 
     return token
 
@@ -406,21 +417,15 @@ def generate_access_token(
     Returns:
         JWT token string
     """
-    # Use provided iat/exp if available (from OAuth), otherwise generate new
-    if iat is None or exp is None:
-        now = datetime.utcnow()
-        iat = int(now.timestamp())
-        exp = int((now + timedelta(hours=expires_hours)).timestamp())
+    # If both iat and exp are provided (from OAuth), compute expires_in_seconds
+    if iat is not None and exp is not None:
+        expires_in_seconds = exp - iat
+    else:
+        expires_in_seconds = expires_hours * 3600
+        iat = None  # Let build_jwt_payload generate iat
 
-    # Build JWT payload
-    payload = {
-        # Standard JWT claims
-        "sub": username,
-        "iss": settings.JWT_ISSUER,
-        "aud": settings.JWT_AUDIENCE,
-        "iat": iat,
-        "exp": exp,
-        # Custom claims
+    # Build extra claims
+    extra_claims = {
         "user_id": user_id,
         "email": email,
         "groups": groups,
@@ -428,18 +433,25 @@ def generate_access_token(
         "role": role,
         "auth_method": auth_method,
         "provider": provider,
-        "token_type": "access_token",
     }
 
     # Add optional claims
     if idp_id:
-        payload["idp_id"] = idp_id
+        extra_claims["idp_id"] = idp_id
 
-    # JWT header
-    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
+    # Build JWT payload using centralized helper
+    payload = build_jwt_payload(
+        subject=username,
+        issuer=settings.JWT_ISSUER,
+        audience=settings.JWT_AUDIENCE,
+        expires_in_seconds=expires_in_seconds,
+        token_type="access_token",
+        iat=iat,
+        extra_claims=extra_claims,
+    )
 
     # Generate JWT
-    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
+    token = encode_jwt(payload, settings.secret_key, kid=settings.JWT_SELF_SIGNED_KID)
 
     logger.debug(f"Generated access token for user {username}, expires in {expires_hours}h")
     return token
@@ -476,17 +488,10 @@ def generate_refresh_token(
     Returns:
         JWT token string
     """
-    now = datetime.now(UTC)
-    exp = now + timedelta(days=expires_days)
+    expires_in_seconds = expires_days * 86400  # Convert days to seconds
 
-    payload = {
-        # Standard JWT claims
-        "sub": username,
-        "iss": settings.JWT_ISSUER,
-        "aud": settings.JWT_AUDIENCE,
-        "iat": int(now.timestamp()),
-        "exp": int(exp.timestamp()),
-        # Custom claims - include groups/scopes for token refresh
+    # Build extra claims - include groups/scopes for token refresh
+    extra_claims = {
         "user_id": user_id,
         "auth_method": auth_method,
         "provider": provider,
@@ -494,12 +499,19 @@ def generate_refresh_token(
         "scope": " ".join(scopes) if isinstance(scopes, list) else scopes,
         "role": role,
         "email": email,
-        "token_type": "refresh_token",
     }
 
-    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
+    # Build JWT payload using centralized helper
+    payload = build_jwt_payload(
+        subject=username,
+        issuer=settings.JWT_ISSUER,
+        audience=settings.JWT_AUDIENCE,
+        expires_in_seconds=expires_in_seconds,
+        token_type="refresh_token",
+        extra_claims=extra_claims,
+    )
 
-    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
+    token = encode_jwt(payload, settings.secret_key, kid=settings.JWT_SELF_SIGNED_KID)
 
     logger.debug(f"Generated refresh token for user {username}, expires in {expires_days} days")
     return token
@@ -517,22 +529,19 @@ def verify_access_token(token: str) -> dict[str, Any] | None:
     """
     try:
         # Verify kid in header
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
+        kid = get_token_kid(token)
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in token: {kid}")
             return None
 
         # Decode and verify token
-        claims = jwt.decode(
+        claims = decode_jwt(
             token,
             settings.secret_key,
-            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
-            options={"verify_exp": True, "verify_iat": True, "verify_iss": True, "verify_aud": True},
-            leeway=30,  # 30 second leeway for clock skew
+            leeway=30,
         )
 
         # Verify token type
@@ -543,10 +552,10 @@ def verify_access_token(token: str) -> dict[str, Any] | None:
         logger.debug(f"Access token verified for user: {claims.get('sub')}")
         return claims
 
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         logger.debug("Access token expired")
         return None
-    except jwt.InvalidTokenError as e:
+    except InvalidTokenError as e:
         logger.debug(f"Invalid access token: {e}")
         return None
     except Exception as e:
@@ -566,21 +575,19 @@ def verify_refresh_token(token: str) -> dict[str, Any] | None:
     """
     try:
         # Verify kid in header
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
+        kid = get_token_kid(token)
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in refresh token: {kid}")
             return None
 
         # Decode and verify token
-        claims = jwt.decode(
+        claims = decode_jwt(
             token,
             settings.secret_key,
-            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
-            options={"verify_exp": True, "verify_iat": True, "verify_iss": True, "verify_aud": True},
+            leeway=30,
         )
 
         # Verify token type
@@ -591,10 +598,10 @@ def verify_refresh_token(token: str) -> dict[str, Any] | None:
         logger.debug(f"Refresh token verified for user: {claims.get('sub')}")
         return claims
 
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         logger.debug("Refresh token expired")
         return None
-    except jwt.InvalidTokenError as e:
+    except InvalidTokenError as e:
         logger.debug(f"Invalid refresh token: {e}")
         return None
     except Exception as e:

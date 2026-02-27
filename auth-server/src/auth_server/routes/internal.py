@@ -10,10 +10,10 @@ import time
 import uuid
 from datetime import datetime
 
-import jwt
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from auth_utils.jwt_utils import build_jwt_payload, encode_jwt
 from auth_utils.scopes import load_scopes_config
 
 from ..core.config import settings
@@ -54,12 +54,7 @@ def check_rate_limit(username: str) -> bool:
 
 
 def _create_self_signed_jwt(access_payload: dict) -> str:
-    headers = {
-        "kid": settings.jwt_self_signed_kid,
-        "typ": "JWT",
-        "alg": "HS256",
-    }
-    return jwt.encode(access_payload, settings.secret_key, algorithm="HS256", headers=headers)
+    return encode_jwt(access_payload, settings.secret_key, kid=settings.jwt_self_signed_kid)
 
 
 @router.post("/internal/tokens", response_model=GenerateTokenResponse)
@@ -95,17 +90,12 @@ async def generate_user_token(request: GenerateTokenRequest):
             )
 
         current_time = int(time.time())
-        expires_at = current_time + (expires_in_hours * 3600)
+        expires_in_seconds = expires_in_hours * 3600
 
-        access_payload = {
-            "iss": settings.jwt_issuer,
-            "aud": settings.jwt_audience,
-            "sub": username,
+        extra_claims = {
             "user_id": user_id,
             "scope": " ".join(requested_scopes),
             "groups": user_groups,
-            "exp": expires_at,
-            "iat": current_time,
             "jti": str(uuid.uuid4()),
             "token_use": "access",
             "client_id": "user-generated",
@@ -113,7 +103,16 @@ async def generate_user_token(request: GenerateTokenRequest):
         }
 
         if request.description:
-            access_payload["description"] = request.description
+            extra_claims["description"] = request.description
+
+        access_payload = build_jwt_payload(
+            subject=username,
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            expires_in_seconds=expires_in_seconds,
+            iat=current_time,
+            extra_claims=extra_claims,
+        )
 
         access_token = _create_self_signed_jwt(access_payload)
 

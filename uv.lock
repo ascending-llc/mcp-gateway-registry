@@ -205,6 +205,7 @@ source = { editable = "auth-utils" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pyjwt" },
     { name = "pyyaml" },
 ]
 
@@ -212,6 +213,7 @@ dependencies = [
 requires-dist = [
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "pyjwt", specifier = ">=2.6.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
 ]
 
@@ -1874,13 +1876,13 @@ name = "mcpgw"
 version = "0.2.0"
 source = { editable = "servers/mcpgw" }
 dependencies = [
+    { name = "auth-utils" },
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "mcp" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "pyjwt" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "websockets" },
@@ -1888,13 +1890,13 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "auth-utils", editable = "auth-utils" },
     { name = "fastapi", specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=2.14.5" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mcp", specifier = ">=1.9.3" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "pyjwt", specifier = ">=2.10.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "websockets", specifier = ">=15.0.1" },

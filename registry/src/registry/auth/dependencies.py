@@ -1,10 +1,11 @@
 import logging
-from typing import Annotated, Any
+from typing import Annotated
 
-from fastapi import Cookie, Depends, Header, HTTPException, Request, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from auth_utils.scopes import load_scopes_config, map_groups_to_scopes
+from auth_utils.models import UserContextDict
+from auth_utils.scopes import load_scopes_config
 
 from ..core.config import settings
 
@@ -17,11 +18,9 @@ signer = URLSafeTimedSerializer(settings.secret_key)
 SCOPES_CONFIG = load_scopes_config()
 
 
-def get_current_user_by_mid(request: Request) -> dict[str, Any]:
+def get_current_user_by_mid(request: Request) -> UserContextDict:
     """
-        Get current authenticated user from request state
-        This function replaces the need for Depends(enhanced_auth) or
-    Depends(nginx_proxied_auth) in route handlers.
+    Get current authenticated user from request state.
 
     Args:
         request: FastAPI request object
@@ -38,9 +37,9 @@ def get_current_user_by_mid(request: Request) -> dict[str, Any]:
 
 
 # Use this type to annotate a parameter of a path operation function or its dependency function so that
-# FastAPI extracts the `user` attribute (typed as dict[str, Any]) of the current request and pass it to the parameter.
+# FastAPI extracts the `user` attribute (typed as UserContextDict) of the current request and pass it to the parameter.
 # Since it's Python 3.12, we use the new type statement instead of typing.TypeAlias
-type CurrentUser = Annotated[dict[str, Any], Depends(get_current_user_by_mid)]
+type CurrentUser = Annotated[UserContextDict, Depends(get_current_user_by_mid)]
 
 
 def get_current_user(
@@ -78,50 +77,6 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
     except Exception as e:
         logger.error(f"Session validation error: {e}")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
-
-
-# @DeprecationWarning
-def get_user_session_data(
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
-) -> dict[str, Any]:
-    """
-    Get the full session data for the authenticated user.
-
-    Returns:
-        Dict containing username, groups, auth_method, provider, etc.
-
-    Raises:
-        HTTPException: If user is not authenticated
-    """
-    if not session:
-        logger.warning("No session cookie provided for session data extraction")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-
-    try:
-        data = signer.loads(session, max_age=settings.session_max_age_seconds)
-
-        if not data.get("username"):
-            logger.warning("No username found in session data")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session data")
-
-        # Set defaults for traditional auth users
-        if data.get("auth_method") != "oauth2":
-            # Traditional users get admin privileges via registry-admins group
-            data.setdefault("groups", ["registry-admins"])
-            data.setdefault("scopes", ["registry-admins"])
-
-        logger.debug(f"Session data extracted for user: {data.get('username')}")
-        return data
-
-    except SignatureExpired:
-        logger.warning("Session cookie has expired")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has expired")
-    except BadSignature:
-        logger.warning("Invalid session cookie signature")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-    except Exception as e:
-        logger.error(f"Session data extraction error: {e}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
 
 
@@ -358,169 +313,6 @@ def web_auth(
     return get_current_user(session)
 
 
-# @DeprecationWarning
-def enhanced_auth(
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
-) -> dict[str, Any]:
-    """
-    Enhanced authentication dependency that returns full user context.
-    Returns username, groups, scopes, and permission flags.
-    """
-    session_data = get_user_session_data(session)
-
-    username = session_data["username"]
-    groups = session_data.get("groups", [])
-    auth_method = session_data.get("auth_method", "traditional")
-
-    logger.info(f"Enhanced auth debug for {username}: groups={groups}, auth_method={auth_method}")
-
-    # Map groups to scopes for OAuth2 users
-    if auth_method == "oauth2":
-        scopes = map_groups_to_scopes(groups)
-        logger.info(f"OAuth2 user {username} with groups {groups} mapped to scopes: {scopes}")
-        # If OAuth2 user has no groups, they should get minimal permissions, not admin
-        if not groups:
-            logger.warning(
-                f"OAuth2 user {username} has no groups! This user may not have proper group assignments in Cognito."
-            )
-    else:
-        # Traditional users dynamically map to admin via registry-admins group
-        if not groups:
-            groups = ["registry-admins"]
-        # Map traditional admin groups to scopes dynamically
-        scopes = map_groups_to_scopes(groups)
-        if not scopes:
-            # Fallback for traditional users if no mapping exists
-            scopes = ["registry-admins"]
-        logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
-
-    # Get UI permissions
-    ui_permissions = get_ui_permissions_for_user(scopes)
-
-    # Get accessible servers (from server scopes)
-    accessible_servers = get_user_accessible_servers(scopes)
-
-    # Get accessible services (from UI permissions)
-    accessible_services = get_accessible_services_for_user(ui_permissions)
-
-    # Get accessible agents (from UI permissions)
-    accessible_agents = get_accessible_agents_for_user(ui_permissions)
-
-    # Check modification permissions
-    can_modify = user_can_modify_servers(groups, scopes)
-
-    user_context = {
-        "username": username,
-        "groups": groups,
-        "scopes": scopes,
-        "auth_method": auth_method,
-        "provider": session_data.get("provider", "local"),
-        "accessible_servers": accessible_servers,
-        "accessible_services": accessible_services,
-        "accessible_agents": accessible_agents,
-        "ui_permissions": ui_permissions,
-        "can_modify_servers": can_modify,
-        "is_admin": user_has_wildcard_access(scopes),
-    }
-
-    logger.debug(f"Enhanced auth context for {username}: {user_context}")
-    return user_context
-
-
-# @DeprecationWarning
-def nginx_proxied_auth(
-    request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name, include_in_schema=False)] = None,
-    x_user: Annotated[str | None, Header(alias="X-User", include_in_schema=False)] = None,
-    x_username: Annotated[str | None, Header(alias="X-Username", include_in_schema=False)] = None,
-    x_scopes: Annotated[str | None, Header(alias="X-Scopes", include_in_schema=False)] = None,
-    x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method", include_in_schema=False)] = None,
-) -> dict[str, Any]:
-    """
-    Authentication dependency that works with both nginx-proxied requests and direct requests.
-
-    For nginx-proxied requests: Reads user context from headers set by nginx after auth validation
-    For direct requests: Falls back to session cookie authentication
-
-    This allows Anthropic Registry API endpoints to work both when accessed through nginx (with JWT tokens)
-    and when accessed directly (with session cookies).
-
-    Returns:
-        Dict containing username, groups, scopes, and permission flags
-    """
-    # CRITICAL DIAGNOSTIC: Log ALL incoming headers and auth parameters
-    logger.debug(f"[NGINX_AUTH_DEBUG] Request path: {request.url.path}")
-    logger.debug(f"[NGINX_AUTH_DEBUG] Request method: {request.method}")
-    logger.debug(f"[NGINX_AUTH_DEBUG] X-User header: '{x_user}' (type: {type(x_user).__name__})")
-    logger.debug(f"[NGINX_AUTH_DEBUG] X-Username header: '{x_username}' (type: {type(x_username).__name__})")
-    logger.debug(f"[NGINX_AUTH_DEBUG] X-Scopes header: '{x_scopes}' (type: {type(x_scopes).__name__})")
-    logger.debug(f"[NGINX_AUTH_DEBUG] X-Auth-Method header: '{x_auth_method}' (type: {type(x_auth_method).__name__})")
-    logger.debug(f"[NGINX_AUTH_DEBUG] Session cookie present: {session is not None}")
-    logger.debug(
-        f"[NGINX_AUTH_DEBUG] Authorization header: {request.headers.get('authorization', 'NOT PRESENT')[:50] if request.headers.get('authorization') else 'NOT PRESENT'}"
-    )
-
-    # Log ALL headers for complete diagnostic
-    all_headers = dict(request.headers)
-    logger.debug(f"[NGINX_AUTH_DEBUG] ALL REQUEST HEADERS: {all_headers}")
-
-    # First, try to get user context from nginx headers (JWT Bearer token flow)
-    if x_user or x_username:
-        username = x_username or x_user
-
-        # Parse scopes from space-separated header
-        scopes = x_scopes.split() if x_scopes else []
-
-        # Map scopes to get groups based on auth method
-        groups = []
-        if x_auth_method in ["keycloak", "entra", "cognito"]:
-            # User authenticated via OAuth2 JWT (Keycloak, Entra ID, or Cognito)
-            # Scopes already contain mapped permissions
-            # Check if user has admin scopes
-            if "mcp-servers-unrestricted/read" in scopes and "mcp-servers-unrestricted/execute" in scopes:
-                groups = ["mcp-registry-admin"]
-            else:
-                groups = ["mcp-registry-user"]
-
-        logger.info(f"nginx-proxied auth for user: {username}, method: {x_auth_method}, scopes: {scopes}")
-
-        # Get accessible servers based on scopes
-        accessible_servers = get_user_accessible_servers(scopes)
-
-        # Get UI permissions
-        ui_permissions = get_ui_permissions_for_user(scopes)
-
-        # Get accessible services
-        accessible_services = get_accessible_services_for_user(ui_permissions)
-
-        # Get accessible agents
-        accessible_agents = get_accessible_agents_for_user(ui_permissions)
-
-        # Check modification permissions
-        can_modify = user_can_modify_servers(groups, scopes)
-
-        user_context = {
-            "username": username,
-            "groups": groups,
-            "scopes": scopes,
-            "auth_method": x_auth_method or "keycloak",
-            "provider": x_auth_method or "keycloak",  # Use actual auth method as provider
-            "accessible_servers": accessible_servers,
-            "accessible_services": accessible_services,
-            "accessible_agents": accessible_agents,
-            "ui_permissions": ui_permissions,
-            "can_modify_servers": can_modify,
-            "is_admin": user_has_wildcard_access(scopes),
-        }
-
-        logger.debug(f"nginx-proxied auth context for {username}: {user_context}")
-        return user_context
-
-    # Fallback to session cookie authentication
-    logger.debug("No nginx auth headers found, falling back to session cookie auth")
-    return enhanced_auth(session)
-
-
 def create_session_cookie(
     username: str, auth_method: str = "traditional", provider: str = "local", groups: list[str] = None
 ) -> str:
@@ -580,7 +372,7 @@ def ui_permission_required(permission: str, service_name: str = None):
         Dependency function that checks the permission
     """
 
-    def check_permission(user_context: CurrentUser) -> dict[str, Any]:
+    def check_permission(user_context: CurrentUser) -> UserContextDict:
         ui_permissions = user_context.get("ui_permissions", {})
 
         if service_name:

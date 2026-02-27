@@ -117,27 +117,9 @@ class TestWellKnownRoutes:
         assert "keys" in data
         assert isinstance(data["keys"], list)
 
-        # Without proper provider config, returns empty keys (fallback for self-signed tokens)
-        # This is expected behavior when provider is not fully configured
+        # Auth-server issues only HS256 self-signed tokens; symmetric keys are never
+        # publicly exposed, so this endpoint always returns an empty key set.
         assert data["keys"] == []
-
-    def test_jwks_endpoint_fallback(self, test_client: TestClient):
-        """Test JWKS endpoint fallback when provider fails."""
-        # Patch provider to raise exception
-        from unittest.mock import patch
-
-        with patch("auth_server.providers.factory.get_auth_provider") as mock_get_provider:
-            mock_provider = mock_get_provider.return_value
-            mock_provider.get_jwks.side_effect = Exception("Provider error")
-
-            response = test_client.get("/.well-known/jwks.json")
-
-            assert response.status_code == 200
-            data = response.json()
-
-            # Should return empty key set for self-signed tokens
-            assert "keys" in data
-            assert data["keys"] == []
 
     def test_discovery_endpoints_consistency(self, test_client: TestClient):
         """Test that both discovery endpoints return consistent issuer and endpoint URLs."""
@@ -219,7 +201,7 @@ class TestWellKnownRoutes:
         # Both should return the same data
         assert response1.json() == response2.json()
 
-        # Should return empty keys (fallback) when provider not configured
+        # Should return empty keys (HS256 symmetric key is never publicly exposed)
         assert response1.json()["keys"] == []
         assert response2.json()["keys"] == []
 
