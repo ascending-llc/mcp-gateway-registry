@@ -129,9 +129,9 @@ server-write:
 servers-share:
   - action: share_service
     method: PUT
-    endpoint: /permissions/mcpserver/{resource_id}
+    endpoint: /permissions/mcpServer/{resource_id}
 
 agents-share:
   - action: share_agent
     method: PUT
-    endpoint: /permissions/a2aagent/{resource_id}
+    endpoint: /permissions/agent/{resource_id}

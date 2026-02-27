@@ -200,7 +200,7 @@ def mock_auth_middleware():
         return test_user_context
 
     # Import the actual middleware class
-    from registry.auth.middleware import UnifiedAuthMiddleware
+    from registry.middleware.auth import UnifiedAuthMiddleware
 
     # Patch the instance method on the middleware class
     with patch.object(UnifiedAuthMiddleware, "_authenticate", mock_authenticate):
