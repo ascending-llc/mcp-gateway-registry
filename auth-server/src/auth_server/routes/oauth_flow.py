@@ -13,6 +13,7 @@ import urllib.parse
 from typing import Any
 
 import jwt
+from auth_utils.jwt_utils import encode_jwt, get_token_kid
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from fastapi import APIRouter, Cookie, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -283,8 +284,7 @@ async def approve_device(request: DeviceApprovalRequest):
         "iat": current_time,
         "token_use": "access",
     }
-    headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-    access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+    access_token = encode_jwt(token_payload, SECRET_KEY, kid=JWT_SELF_SIGNED_KID)
     device_data["status"] = "approved"
     device_data["token"] = access_token
     device_data["approved_at"] = current_time
@@ -361,8 +361,7 @@ async def device_token(
             "iat": current_time,
             "token_use": "access",
         }
-        headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-        access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+        access_token = encode_jwt(token_payload, SECRET_KEY, kid=JWT_SELF_SIGNED_KID)
 
         rt = secrets.token_urlsafe(32)
         refresh_expires_at = current_time + 1209600
@@ -438,8 +437,7 @@ async def device_token(
                 "token_use": "access",
             }
 
-            headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-            access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+            access_token = encode_jwt(token_payload, SECRET_KEY, kid=JWT_SELF_SIGNED_KID)
             return DeviceTokenResponse(
                 access_token=access_token,
                 token_type="Bearer",
@@ -615,6 +613,8 @@ async def oauth2_callback(
         try:
             if provider in ["cognito", "keycloak"]:
                 if "id_token" in token_data:
+                    # The token's authenticity was established by the OAuth handshake with the IdP.
+                    # We only need claims to build user context.
                     id_claims = jwt.decode(token_data["id_token"], options={"verify_signature": False})
                     mapped_user = {
                         "username": id_claims.get("preferred_username") or id_claims.get("sub"),
@@ -624,7 +624,9 @@ async def oauth2_callback(
                         "groups": id_claims.get("groups", []),
                     }
                 else:
-                    # Try to decode access_token without verification to extract claims
+                    # Fallback: read claims from access_token for user mapping only.
+                    # Same rationale: IdP signing key is unavailable; OAuth handshake
+                    # already validated the token upstream.
                     try:
                         access_claims = jwt.decode(token_data.get("access_token"), options={"verify_signature": False})
                         mapped_user = {
@@ -923,8 +925,7 @@ async def validate_request(request: Request):
             validation_result = None
             try:
                 # Try to get the kid from header
-                unverified_header = jwt.get_unverified_header(access_token)
-                header_kid = unverified_header.get("kid")
+                header_kid = get_token_kid(access_token)
 
                 # If kid is our self-signed token identifier, validate as self-signed immediately
                 if header_kid == JWT_SELF_SIGNED_KID:

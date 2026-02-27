@@ -10,8 +10,9 @@ import time
 import uuid
 from datetime import datetime
 
-import jwt
 from fastapi import APIRouter, Header, HTTPException, Request
+
+from auth_utils.jwt_utils import encode_jwt
 from fastapi.responses import JSONResponse
 
 from auth_utils.scopes import load_scopes_config
@@ -54,12 +55,7 @@ def check_rate_limit(username: str) -> bool:
 
 
 def _create_self_signed_jwt(access_payload: dict) -> str:
-    headers = {
-        "kid": settings.jwt_self_signed_kid,
-        "typ": "JWT",
-        "alg": "HS256",
-    }
-    return jwt.encode(access_payload, settings.secret_key, algorithm="HS256", headers=headers)
+    return encode_jwt(access_payload, settings.secret_key, kid=settings.jwt_self_signed_kid)
 
 
 @router.post("/internal/tokens", response_model=GenerateTokenResponse)
