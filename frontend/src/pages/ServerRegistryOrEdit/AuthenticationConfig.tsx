@@ -1,9 +1,10 @@
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import FormFields from '@/components/FormFields';
 import { getBasePath } from '@/config';
 import SERVICES from '@/services';
+import Request from '@/services/request';
 import type { AuthenticationConfig as AuthConfigType } from './types';
 
 interface AuthenticationConfigProps {
@@ -16,6 +17,8 @@ interface AuthenticationConfigProps {
   isReadOnly?: boolean;
   hasOauth?: boolean;
 }
+
+const DISCOVER_CANCEL_KEY = 'discoverOAuthEndpoints';
 
 const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   config,
@@ -32,6 +35,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   const [isDiscoverLoading, setIsDiscoverLoading] = useState(false);
   const [registrationEndpoint, setRegistrationEndpoint] = useState<string | null>(null);
 
+  const configRef = useRef(config);
+  configRef.current = config;
+
   const updateConfig = (updates: Partial<AuthConfigType>) => {
     onChange({ ...config, ...updates });
   };
@@ -40,18 +46,31 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
     if (config.type === 'oauth' && mcpUrl && isEditMode) {
       handleGetDiscover();
     }
+    return () => {
+      const cancel = Request.cancels[DISCOVER_CANCEL_KEY];
+      if (cancel) {
+        cancel();
+        delete Request.cancels[DISCOVER_CANCEL_KEY];
+      }
+    };
   }, [mcpUrl, isEditMode]);
 
   const handleGetDiscover = async (baseConfig?: AuthConfigType) => {
     if (!mcpUrl) return;
+    const existingCancel = Request.cancels[DISCOVER_CANCEL_KEY];
+    if (existingCancel) {
+      existingCancel();
+      delete Request.cancels[DISCOVER_CANCEL_KEY];
+    }
     setIsDiscoverLoading(true);
     setRegistrationEndpoint(null);
-    onChange({ ...(baseConfig || config), use_dynamic_registration: false });
+    onChange({ ...(baseConfig || configRef.current), use_dynamic_registration: false });
     try {
-      const res = await SERVICES.MCP.getDiscover(mcpUrl);
+      const res = await SERVICES.MCP.getDiscover(mcpUrl, { cancelTokenKey: DISCOVER_CANCEL_KEY });
+      if (res?.Code === -200) return;
       if (res?.metadata) {
         const { authorization_endpoint, token_endpoint, registration_endpoint } = res.metadata;
-        const currentConfig = baseConfig || config;
+        const currentConfig = baseConfig || configRef.current;
         const useDynamicRegistration = registration_endpoint && !hasOauth;
         if (useDynamicRegistration || isEditMode) setRegistrationEndpoint(registration_endpoint);
         onChange({

@@ -97,6 +97,7 @@ const ServerRegistryOrEdit: React.FC = () => {
           authorization_url: result?.oauth?.authorization_url,
           token_url: result?.oauth?.token_url,
           scope: result?.oauth?.scope,
+          use_dynamic_registration: result?.requiresOAuth && !result?.oauth,
         };
       }
       setServerDetail(result);

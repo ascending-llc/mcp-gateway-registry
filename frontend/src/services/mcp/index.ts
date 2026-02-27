@@ -21,7 +21,8 @@ const cancelAuth: (id: string) => Promise<TYPE.CANCEL_AUTH_RESPONSE> = async id 
 const revokeAuth: (id: string) => Promise<TYPE.CANCEL_AUTH_RESPONSE> = async id =>
   await Request.delete(API.revokeAuth(id));
 
-const getDiscover: (url: string) => Promise<any> = async url => await Request.get(API.getDiscover, { url });
+const getDiscover: (url: string, config?: object) => Promise<any> = async (url, config) =>
+  await Request.get(API.getDiscover, { url }, config);
 
 export default {
   getServerStatus,
