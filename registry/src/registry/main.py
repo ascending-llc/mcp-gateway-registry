@@ -24,7 +24,7 @@ from .api.management_routes import router as management_router
 from .api.proxy_routes import router as proxy_router
 from .api.proxy_routes import shutdown_proxy_client
 from .api.redirect_routes import router as auth_provider_router
-from registry.api.v1.a2a.agent_routes import router as a2a_agent_router
+from .api.v1.a2a.agent_routes import router as a2a_agent_router
 from .api.v1.acl_routes import router as acl_router
 from .api.v1.mcp.connection_router import router as connection_router
 from .api.v1.mcp.oauth_router import router as oauth_router

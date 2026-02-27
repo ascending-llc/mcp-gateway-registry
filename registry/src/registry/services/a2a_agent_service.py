@@ -151,6 +151,7 @@ class A2AAgentService:
         try:
             agent = await A2AAgent.get(PydanticObjectId(agent_id))
             if not agent:
+                logger.error(f"Agent not found: {agent_id}")
                 raise ValueError(f"Agent not found: {agent_id}")
             logger.debug(f"Retrieved agent: {agent.card.name} (ID: {agent_id})")
             return agent
@@ -158,7 +159,7 @@ class A2AAgentService:
             raise
         except Exception as e:
             logger.error(f"Error getting agent {agent_id}: {e}", exc_info=True)
-            raise ValueError(f"Failed to retrieve agent: {str(e)}")
+            raise
 
     async def create_agent(self, data: AgentCreateRequest, user_id: str) -> A2AAgent:
         """

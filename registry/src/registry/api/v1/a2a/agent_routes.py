@@ -127,6 +127,7 @@ async def list_agents(
         )
 
     except HTTPException:
+        logger.exception("HTTPException in list_agents")
         raise
     except Exception as e:
         logger.error(f"Error listing agents: {e}", exc_info=True)
@@ -180,6 +181,7 @@ async def get_agent_stats(
         )
 
     except HTTPException:
+        logger.exception("HTTPException in get_agent_stats")
         raise
     except Exception as e:
         logger.error(f"Error getting agent statistics: {e}", exc_info=True)
@@ -230,6 +232,7 @@ async def get_agent(
             detail=create_error_detail(ErrorCode.INVALID_REQUEST, error_msg),
         )
     except HTTPException:
+        logger.exception("HTTPException in get_agent")
         raise
     except Exception as e:
         logger.error(f"Error getting agent {agent_id}: {e}", exc_info=True)
@@ -300,6 +303,7 @@ async def create_agent(
         )
 
     except HTTPException:
+        logger.exception("HTTPException in create_agent")
         raise
     except Exception as e:
         logger.error(f"Error creating agent: {e}", exc_info=True)
@@ -356,6 +360,7 @@ async def update_agent(
         )
 
     except HTTPException:
+        logger.exception("HTTPException in update_agent")
         raise
     except Exception as e:
         logger.error(f"Error updating agent {agent_id}: {e}", exc_info=True)
@@ -419,6 +424,7 @@ async def delete_agent(
         )
 
     except HTTPException:
+        logger.exception("HTTPException in delete_agent")
         raise
     except Exception as e:
         logger.error(f"Error deleting agent {agent_id}: {e}", exc_info=True)
@@ -472,6 +478,7 @@ async def toggle_agent(
         )
 
     except HTTPException:
+        logger.exception("HTTPException in toggle_agent")
         raise
     except Exception as e:
         logger.error(f"Error toggling agent {agent_id}: {e}", exc_info=True)
@@ -521,6 +528,7 @@ async def get_agent_skills(
             detail=create_error_detail(ErrorCode.INVALID_REQUEST, error_msg),
         )
     except HTTPException:
+        logger.exception("HTTPException in get_agent_skills")
         raise
     except Exception as e:
         logger.error(f"Error getting skills for agent {agent_id}: {e}", exc_info=True)
@@ -587,6 +595,7 @@ async def sync_wellknown(
         )
 
     except HTTPException:
+        logger.exception("HTTPException in sync_wellknown")
         raise
     except Exception as e:
         logger.error(f"Error syncing well-known for agent {agent_id}: {e}", exc_info=True)
