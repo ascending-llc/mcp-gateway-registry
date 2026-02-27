@@ -1,29 +1,28 @@
 """User context model for MCP Gateway Registry authentication."""
 
-from typing import Any
-
-from pydantic import BaseModel, Field
+from typing import Any, TypedDict
 
 
-class UserContext(BaseModel):
-    """Authenticated user context populated by auth middlewares.
+class UserContextDict(TypedDict, total=False):
+    """Type hint for user context dictionaries.
 
-    Constructed by _build_user_context() in UnifiedAuthMiddleware and stored
-    on request.state.user (as a plain dict via model_dump()) for downstream handlers.
+    Authenticated user context populated by auth middlewares and stored
+    on request.state.user (as a plain dict) for downstream handlers.
+
+    All fields except 'username', 'auth_method', 'provider', and 'auth_source'
+    are optional to support various auth scenarios (e.g., basic auth without user_id).
     """
 
-    user_id: str | None = (
-        None  # internal admin endpoints (_try_basic_auth) use environment credentials and thus have no user_id
-    )
+    user_id: str | None
     username: str
-    groups: list[str] = Field(default_factory=list)
-    scopes: list[str] = Field(default_factory=list)
+    groups: list[str]
+    scopes: list[str]
     auth_method: str
     provider: str
-    accessible_servers: list[str] = Field(default_factory=list)
-    accessible_services: list[str] = Field(default_factory=list)
-    accessible_agents: list[str] = Field(default_factory=list)
-    ui_permissions: dict[str, Any] = Field(default_factory=dict)
-    can_modify_servers: bool = False
-    is_admin: bool = False
+    accessible_servers: list[str]
+    accessible_services: list[str]
+    accessible_agents: list[str]
+    ui_permissions: dict[str, Any]
+    can_modify_servers: bool
+    is_admin: bool
     auth_source: str

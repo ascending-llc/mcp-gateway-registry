@@ -1,9 +1,10 @@
 import logging
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
+from auth_utils.models import UserContextDict
 from auth_utils.scopes import load_scopes_config
 
 from ..core.config import settings
@@ -17,7 +18,7 @@ signer = URLSafeTimedSerializer(settings.secret_key)
 SCOPES_CONFIG = load_scopes_config()
 
 
-def get_current_user_by_mid(request: Request) -> dict[str, Any]:
+def get_current_user_by_mid(request: Request) -> UserContextDict:
     """
     Get current authenticated user from request state.
 
@@ -36,9 +37,9 @@ def get_current_user_by_mid(request: Request) -> dict[str, Any]:
 
 
 # Use this type to annotate a parameter of a path operation function or its dependency function so that
-# FastAPI extracts the `user` attribute (typed as dict[str, Any]) of the current request and pass it to the parameter.
+# FastAPI extracts the `user` attribute (typed as UserContextDict) of the current request and pass it to the parameter.
 # Since it's Python 3.12, we use the new type statement instead of typing.TypeAlias
-type CurrentUser = Annotated[dict[str, Any], Depends(get_current_user_by_mid)]
+type CurrentUser = Annotated[UserContextDict, Depends(get_current_user_by_mid)]
 
 
 def get_current_user(
@@ -371,7 +372,7 @@ def ui_permission_required(permission: str, service_name: str = None):
         Dependency function that checks the permission
     """
 
-    def check_permission(user_context: CurrentUser) -> dict[str, Any]:
+    def check_permission(user_context: CurrentUser) -> UserContextDict:
         ui_permissions = user_context.get("ui_permissions", {})
 
         if service_name:

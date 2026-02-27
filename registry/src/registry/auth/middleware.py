@@ -1,7 +1,6 @@
 import base64
 import logging
 import os
-from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -10,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
 from auth_utils.jwt_utils import decode_jwt, get_token_kid
-from auth_utils.models import UserContext
+from auth_utils.models import UserContextDict
 from auth_utils.scopes import map_groups_to_scopes
 
 from ..core.config import settings
@@ -174,7 +173,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return True
         return False
 
-    async def _authenticate(self, request: Request) -> dict[str, Any]:
+    async def _authenticate(self, request: Request) -> UserContextDict:
         """
         Unified authentication logic (simple and efficient)
 
@@ -198,7 +197,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return user_context
         raise AuthenticationError("JWT or session authentication required")
 
-    def _try_basic_auth(self, request: Request) -> dict[str, Any] | None:
+    def _try_basic_auth(self, request: Request) -> UserContextDict | None:
         """Basic authentication for internal endpoints"""
         try:
             # Get Authorization header
@@ -240,7 +239,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Basic auth failed: {e}")
             return None
 
-    def _try_jwt_auth(self, request: Request) -> dict[str, Any] | None:
+    def _try_jwt_auth(self, request: Request) -> UserContextDict | None:
         """JWT token authentication for /api/servers endpoints"""
         try:
             # Get Authorization header
@@ -342,7 +341,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"JWT auth failed: {e}")
             return None
 
-    async def _try_session_auth(self, request: Request) -> dict[str, Any] | None:
+    async def _try_session_auth(self, request: Request) -> UserContextDict | None:
         """JWT-based session authentication from httpOnly cookie"""
         try:
             session_cookie = request.cookies.get(settings.session_cookie_name)
@@ -397,7 +396,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         provider: str,
         auth_source: str,
         user_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> UserContextDict:
         """
         Construct the complete user context (from the original enhanced_auth logic).
         """
@@ -407,23 +406,23 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         accessible_agents = get_accessible_agents_for_user(ui_permissions)
         can_modify = user_can_modify_servers(groups, scopes)
 
-        ctx = UserContext(
-            user_id=user_id,
-            username=username,
-            groups=groups,
-            scopes=scopes,
-            auth_method=auth_method,
-            provider=provider,
-            accessible_servers=accessible_servers,
-            accessible_services=accessible_services,
-            accessible_agents=accessible_agents,
-            ui_permissions=ui_permissions,
-            can_modify_servers=can_modify,
-            is_admin=user_has_wildcard_access(scopes),
-            auth_source=auth_source,
-        )
-        logger.debug(f"User context for {username}: {ctx.model_dump()}")
-        return ctx.model_dump()
+        ctx: UserContextDict = {
+            "user_id": user_id,
+            "username": username,
+            "groups": groups,
+            "scopes": scopes,
+            "auth_method": auth_method,
+            "provider": provider,
+            "accessible_servers": accessible_servers,
+            "accessible_services": accessible_services,
+            "accessible_agents": accessible_agents,
+            "ui_permissions": ui_permissions,
+            "can_modify_servers": can_modify,
+            "is_admin": user_has_wildcard_access(scopes),
+            "auth_source": auth_source,
+        }
+        logger.debug(f"User context for {username}: {ctx}")
+        return ctx
 
 
 class AuthenticationError(Exception):

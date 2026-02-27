@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from jwt import ExpiredSignatureError, InvalidTokenError
 
 from auth_utils.jwt_utils import (
+    build_jwt_payload,
     decode_jwt,
     encode_jwt,
     get_token_kid,
@@ -411,21 +412,15 @@ def generate_access_token(
     Returns:
         JWT token string
     """
-    # Use provided iat/exp if available (from OAuth), otherwise generate new
-    if iat is None or exp is None:
-        now = datetime.utcnow()
-        iat = int(now.timestamp())
-        exp = int((now + timedelta(hours=expires_hours)).timestamp())
+    # If both iat and exp are provided (from OAuth), compute expires_in_seconds
+    if iat is not None and exp is not None:
+        expires_in_seconds = exp - iat
+    else:
+        expires_in_seconds = expires_hours * 3600
+        iat = None  # Let build_jwt_payload generate iat
 
-    # Build JWT payload
-    payload = {
-        # Standard JWT claims
-        "sub": username,
-        "iss": settings.JWT_ISSUER,
-        "aud": settings.JWT_AUDIENCE,
-        "iat": iat,
-        "exp": exp,
-        # Custom claims
+    # Build extra claims
+    extra_claims = {
         "user_id": user_id,
         "email": email,
         "groups": groups,
@@ -433,12 +428,22 @@ def generate_access_token(
         "role": role,
         "auth_method": auth_method,
         "provider": provider,
-        "token_type": "access_token",
     }
 
     # Add optional claims
     if idp_id:
-        payload["idp_id"] = idp_id
+        extra_claims["idp_id"] = idp_id
+
+    # Build JWT payload using centralized helper
+    payload = build_jwt_payload(
+        subject=username,
+        issuer=settings.JWT_ISSUER,
+        audience=settings.JWT_AUDIENCE,
+        expires_in_seconds=expires_in_seconds,
+        token_type="access_token",
+        iat=iat,
+        extra_claims=extra_claims,
+    )
 
     # Generate JWT
     token = encode_jwt(payload, settings.secret_key, kid=settings.JWT_SELF_SIGNED_KID)
@@ -478,17 +483,10 @@ def generate_refresh_token(
     Returns:
         JWT token string
     """
-    now = datetime.now(UTC)
-    exp = now + timedelta(days=expires_days)
+    expires_in_seconds = expires_days * 86400  # Convert days to seconds
 
-    payload = {
-        # Standard JWT claims
-        "sub": username,
-        "iss": settings.JWT_ISSUER,
-        "aud": settings.JWT_AUDIENCE,
-        "iat": int(now.timestamp()),
-        "exp": int(exp.timestamp()),
-        # Custom claims - include groups/scopes for token refresh
+    # Build extra claims - include groups/scopes for token refresh
+    extra_claims = {
         "user_id": user_id,
         "auth_method": auth_method,
         "provider": provider,
@@ -496,8 +494,17 @@ def generate_refresh_token(
         "scope": " ".join(scopes) if isinstance(scopes, list) else scopes,
         "role": role,
         "email": email,
-        "token_type": "refresh_token",
     }
+
+    # Build JWT payload using centralized helper
+    payload = build_jwt_payload(
+        subject=username,
+        issuer=settings.JWT_ISSUER,
+        audience=settings.JWT_AUDIENCE,
+        expires_in_seconds=expires_in_seconds,
+        token_type="refresh_token",
+        extra_claims=extra_claims,
+    )
 
     token = encode_jwt(payload, settings.secret_key, kid=settings.JWT_SELF_SIGNED_KID)
 

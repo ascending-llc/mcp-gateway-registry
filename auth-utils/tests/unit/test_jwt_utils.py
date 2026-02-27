@@ -10,7 +10,6 @@ from auth_utils.jwt_utils import (
     decode_jwt,
     encode_jwt,
     get_token_kid,
-    is_self_signed,
 )
 
 _SECRET = "test-secret-key"
@@ -163,22 +162,3 @@ class TestGetTokenKid:
         """Raises DecodeError for a string that is not a valid JWT."""
         with pytest.raises(jwt.DecodeError):
             get_token_kid("not.a.jwt")
-
-
-class TestIsSelfSigned:
-    """Tests for is_self_signed."""
-
-    def test_returns_true_when_kid_matches(self):
-        """Returns True when the token's kid equals self_signed_kid."""
-        token = encode_jwt(_make_payload(), _SECRET, kid=_KID)
-        assert is_self_signed(token, _KID) is True
-
-    def test_returns_false_when_kid_differs(self):
-        """Returns False when the token's kid does not match self_signed_kid."""
-        token = encode_jwt(_make_payload(), _SECRET, kid="other-kid")
-        assert is_self_signed(token, _KID) is False
-
-    def test_returns_false_when_kid_absent(self):
-        """Returns False when the token has no kid header."""
-        token = encode_jwt(_make_payload(), _SECRET)
-        assert is_self_signed(token, _KID) is False
