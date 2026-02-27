@@ -129,7 +129,7 @@ async def jwks_endpoint():
     """
     JSON Web Key Set (JWKS) endpoint.
 
-    This auth-server issues only HS256 self-signed tokens, which use a symmetric secret key. 
+    This auth-server issues only HS256 self-signed tokens, which use a symmetric secret key.
     Symmetric keys are not be publicly exposed, so it returns an empty key set.
     """
     return {"keys": []}

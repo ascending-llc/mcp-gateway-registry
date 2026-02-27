@@ -13,13 +13,13 @@ import urllib.parse
 from typing import Any
 
 import jwt
-from auth_utils.jwt_utils import encode_jwt, get_token_kid
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from fastapi import APIRouter, Cookie, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
 
+from auth_utils.jwt_utils import encode_jwt, get_token_kid
 from auth_utils.scopes import map_groups_to_scopes
 
 from ..core.config import settings

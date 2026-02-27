@@ -9,10 +9,10 @@ import time
 from contextlib import asynccontextmanager
 
 import uvicorn
-
-from auth_utils.jwt_utils import encode_jwt
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from auth_utils.jwt_utils import encode_jwt
 
 # Import database utilities
 from registry_pkgs.database import close_mongodb, init_mongodb

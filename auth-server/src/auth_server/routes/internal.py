@@ -11,10 +11,9 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Header, HTTPException, Request
-
-from auth_utils.jwt_utils import encode_jwt
 from fastapi.responses import JSONResponse
 
+from auth_utils.jwt_utils import encode_jwt
 from auth_utils.scopes import load_scopes_config
 
 from ..core.config import settings
