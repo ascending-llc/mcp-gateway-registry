@@ -1,11 +1,10 @@
 import asyncio
 import logging
-import os
 import secrets
 import time
 from typing import Any
 
-from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
+from registry.auth.oauth.oauth_utils import get_default_redirect_uri, parse_scope, scope_to_string
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.models.oauth_models import (
     MCPOAuthFlowMetadata,
@@ -339,10 +338,8 @@ class FlowStateManager:
         """
         redirect_uri = oauth_config.get("redirect_uri")
         if not redirect_uri:
-            base_url = os.environ.get("REGISTRY_URL", "http://127.0.0.1:3080")
-            # Ensure server_path starts with / for proper URL construction
-            normalized_path = server_path if server_path.startswith("/") else f"/{server_path}"
-            redirect_uri = f"{base_url}/api/v1/mcp{normalized_path}/oauth/callback"
+            # Use shared utility for consistent redirect_uri generation
+            redirect_uri = get_default_redirect_uri(path=server_path)
 
         redirect_uris = [redirect_uri] if redirect_uri else []
 

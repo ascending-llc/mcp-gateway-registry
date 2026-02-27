@@ -1,3 +1,29 @@
+from registry.core.config import settings
+
+
+def get_default_redirect_uri(path: str) -> str:
+    """
+    Get default redirect URI for OAuth callback.
+
+    Constructs redirect URI using registry_url from settings and the provided MCP server path.
+    Automatically prepends /api/v1/mcp to the path.
+
+    Args:
+        path: The MCP server path (e.g., "/notion", "/brave")
+
+    Returns:
+        Redirect URI string with /oauth/callback appended
+
+    Examples:
+        get_default_redirect_uri("/notion") → http://localhost:7860/api/v1/mcp/notion/oauth/callback
+        get_default_redirect_uri("brave")   → http://localhost:7860/api/v1/mcp/brave/oauth/callback
+    """
+    base_url = settings.registry_client_url
+    # Ensure path starts with / and doesn't end with /
+    normalized_path = path.strip("/")
+    return f"{base_url}/api/v1/mcp/{normalized_path}/oauth/callback"
+
+
 def parse_scope(scope: str | list[str] | None, default: list[str] = None) -> list[str]:
     """
     Parse OAuth scope field into a list of scopes.
