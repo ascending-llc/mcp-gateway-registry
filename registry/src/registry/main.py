@@ -24,6 +24,7 @@ from .api.management_routes import router as management_router
 from .api.proxy_routes import router as proxy_router
 from .api.proxy_routes import shutdown_proxy_client
 from .api.redirect_routes import router as auth_provider_router
+from .api.v1.a2a.agent_routes import router as a2a_agent_router
 from .api.v1.acl_routes import router as acl_router
 from .api.v1.mcp.connection_router import router as connection_router
 from .api.v1.mcp.oauth_router import router as oauth_router
@@ -166,8 +167,12 @@ app = FastAPI(
             "description": "MCP server registration and management. Requires JWT Bearer token authentication.",
         },
         {
+            "name": "A2A Agent Management V1",
+            "description": "A2A agent registration and management API v1. Requires JWT Bearer token authentication.",
+        },
+        {
             "name": "Agent Management",
-            "description": "A2A agent registration and management. Requires JWT Bearer token authentication.",
+            "description": "Legacy A2A agent management. Requires JWT Bearer token authentication.",
         },
         {
             "name": "Management API",
@@ -208,6 +213,7 @@ else:
 app.include_router(meta_router, prefix="/api/auth", tags=["Authentication metadata"])
 app.include_router(token_router, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management"])
 app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
+app.include_router(a2a_agent_router, prefix=f"/api/{settings.API_VERSION}", tags=["A2A Agent Management V1"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["Semantic Search"])
