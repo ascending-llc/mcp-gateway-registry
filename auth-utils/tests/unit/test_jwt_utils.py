@@ -7,6 +7,7 @@ import jwt
 import pytest
 
 from auth_utils.jwt_utils import (
+    build_jwt_payload,
     decode_jwt,
     encode_jwt,
     get_token_kid,
@@ -63,12 +64,6 @@ class TestEncodeJwt:
         header = jwt.get_unverified_header(token)
         assert header["alg"] == "HS256"
 
-    def test_pyjwt_adds_typ_automatically(self):
-        """PyJWT sets typ=JWT even when not specified in headers arg."""
-        token = encode_jwt(_make_payload(), _SECRET, kid=_KID)
-        header = jwt.get_unverified_header(token)
-        assert header["typ"] == "JWT"
-
     def test_explicit_kid_typ_alg_produce_same_token(self):
         """encode_jwt(kid=k) produces the same token as jwt.encode with explicit typ/alg headers."""
         payload = _make_payload()
@@ -118,7 +113,7 @@ class TestDecodeJwt:
             decode_jwt(token, _SECRET, issuer=_ISSUER, leeway=0)
 
     def test_leeway_allows_slightly_expired_token(self):
-        """A token expired 10 s ago passes when leeway=30."""
+        """A token expired 10s ago passes when leeway=30."""
         expired_payload = _make_payload(offset_seconds=-10)
         token = encode_jwt(expired_payload, _SECRET)
         # leeway=30 should tolerate 10 s of expiry
@@ -126,7 +121,7 @@ class TestDecodeJwt:
         assert claims["sub"] == "user-1"
 
     def test_leeway_zero_rejects_slightly_expired_token(self):
-        """A token expired 10 s ago fails when leeway=0."""
+        """A token expired 10s ago fails when leeway=0."""
         expired_payload = _make_payload(offset_seconds=-10)
         token = encode_jwt(expired_payload, _SECRET)
         with pytest.raises(jwt.ExpiredSignatureError):
@@ -162,3 +157,122 @@ class TestGetTokenKid:
         """Raises DecodeError for a string that is not a valid JWT."""
         with pytest.raises(jwt.DecodeError):
             get_token_kid("not.a.jwt")
+
+
+class TestBuildJwtPayload:
+    """Tests for build_jwt_payload."""
+
+    def test_includes_standard_claims(self):
+        """Payload includes sub, iss, aud, iat, exp claims."""
+        payload = build_jwt_payload(
+            subject="user@example.com",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+        )
+        assert payload["sub"] == "user@example.com"
+        assert payload["iss"] == _ISSUER
+        assert payload["aud"] == _AUDIENCE
+        assert "iat" in payload
+        assert "exp" in payload
+
+    def test_expiration_calculated_correctly(self):
+        """exp is iat + expires_in_seconds."""
+        payload = build_jwt_payload(
+            subject="user",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=7200,
+        )
+        assert payload["exp"] == payload["iat"] + 7200
+
+    def test_custom_iat_used_when_provided(self):
+        """When iat is provided, it overrides auto-generated timestamp."""
+        custom_iat = 1234567890
+        payload = build_jwt_payload(
+            subject="user",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+            iat=custom_iat,
+        )
+        assert payload["iat"] == custom_iat
+        assert payload["exp"] == custom_iat + 3600
+
+    def test_token_type_included_when_provided(self):
+        """token_type is added to payload when specified."""
+        payload = build_jwt_payload(
+            subject="user",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+            token_type="access_token",
+        )
+        assert payload["token_type"] == "access_token"
+
+    def test_token_type_omitted_when_none(self):
+        """token_type is not in payload when None."""
+        payload = build_jwt_payload(
+            subject="user",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+            token_type=None,
+        )
+        assert "token_type" not in payload
+
+    def test_extra_claims_merged_into_payload(self):
+        """extra_claims dict is merged into the payload."""
+        payload = build_jwt_payload(
+            subject="user",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+            extra_claims={"groups": ["admin"], "scope": "read write", "custom_field": 123},
+        )
+        assert payload["groups"] == ["admin"]
+        assert payload["scope"] == "read write"
+        assert payload["custom_field"] == 123
+
+    def test_extra_claims_can_override_standard_claims(self):
+        """extra_claims can override standard claims if needed."""
+        payload = build_jwt_payload(
+            subject="user",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+            extra_claims={"sub": "overridden-user", "custom": "value"},
+        )
+        # extra_claims overwrites standard claims
+        assert payload["sub"] == "overridden-user"
+        assert payload["custom"] == "value"
+
+    def test_empty_extra_claims_dict_works(self):
+        """Passing empty dict for extra_claims doesn't break anything."""
+        payload = build_jwt_payload(
+            subject="user",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+            extra_claims={},
+        )
+        # Should only have standard claims
+        assert "sub" in payload
+        assert "iss" in payload
+        assert len([k for k in payload if k not in ["sub", "iss", "aud", "iat", "exp"]]) == 0
+
+    def test_payload_compatible_with_encode_jwt(self):
+        """Payload from build_jwt_payload can be encoded and decoded."""
+        payload = build_jwt_payload(
+            subject="testuser",
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            expires_in_seconds=3600,
+            token_type="access_token",
+            extra_claims={"groups": ["admin"]},
+        )
+        token = encode_jwt(payload, _SECRET, kid=_KID)
+        decoded = decode_jwt(token, _SECRET, issuer=_ISSUER, audience=_AUDIENCE)
+        assert decoded["sub"] == "testuser"
+        assert decoded["token_type"] == "access_token"
+        assert decoded["groups"] == ["admin"]

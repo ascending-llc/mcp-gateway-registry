@@ -13,7 +13,7 @@ TypeScript equivalent:
 
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from cryptography.hazmat.backends import default_backend
@@ -26,7 +26,8 @@ from auth_utils.jwt_utils import (
     encode_jwt,
     get_token_kid,
 )
-from registry.core.config import settings
+
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -86,25 +87,29 @@ def generate_service_jwt(user_id: str, username: str | None = None, scopes: list
     Returns:
         JWT token string (without Bearer prefix)
     """
-    from registry.core.config import settings
+    now = int(datetime.now(UTC).timestamp())
 
-    now = datetime.now(UTC)
-
-    # Build JWT payload with user context
-    payload = {
+    # Build extra claims
+    extra_claims = {
         "user_id": user_id,
-        "sub": username or user_id,
-        "iss": settings.JWT_ISSUER,
-        "iat": now,
-        "exp": now + timedelta(minutes=5),  # Short-lived for service-to-service
-        "jti": f"registry-{now.timestamp()}",
+        "jti": f"registry-{now}",
         "client_id": settings.registry_app_name,
         "token_type": "service",
     }
 
-    # Add optional fields
+    # Add optional scopes
     if scopes:
-        payload["scopes"] = scopes
+        extra_claims["scopes"] = scopes
+
+    # Build JWT payload using centralized helper
+    payload = build_jwt_payload(
+        subject=username or user_id,
+        issuer=settings.JWT_ISSUER,
+        audience=settings.JWT_AUDIENCE,
+        expires_in_seconds=300,  # 5 minutes - short-lived for service-to-service
+        iat=now,
+        extra_claims=extra_claims,
+    )
 
     # Sign with registry secret
     token = encode_jwt(payload, settings.secret_key)

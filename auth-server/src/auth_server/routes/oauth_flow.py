@@ -619,8 +619,6 @@ async def oauth2_callback(
         try:
             if provider in ["cognito", "keycloak"]:
                 if "id_token" in token_data:
-                    # The token's authenticity was established by the OAuth handshake with the IdP.
-                    # We only need claims to build user context.
                     id_claims = jwt.decode(token_data["id_token"], options={"verify_signature": False})
                     mapped_user = {
                         "username": id_claims.get("preferred_username") or id_claims.get("sub"),
@@ -630,9 +628,7 @@ async def oauth2_callback(
                         "groups": id_claims.get("groups", []),
                     }
                 else:
-                    # Fallback: read claims from access_token for user mapping only.
-                    # Same rationale: IdP signing key is unavailable; OAuth handshake
-                    # already validated the token upstream.
+                    # Try to decode access_token without verification to extract claims
                     try:
                         access_claims = jwt.decode(token_data.get("access_token"), options={"verify_signature": False})
                         mapped_user = {

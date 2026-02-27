@@ -168,8 +168,6 @@ class AuthMiddleware(Middleware):
             # No audience — mcpgw skips aud validation for self-signed tokens.
             claims = decode_jwt(token, settings.SECRET_KEY, settings.JWT_ISSUER)
 
-            # exp and iss are verified by decode_jwt; sub is checked post-decode
-            # (replacing the original require=["exp","iss","sub"] option).
             if not claims.get("sub"):
                 logger.warning("JWT missing required 'sub' claim")
                 return None

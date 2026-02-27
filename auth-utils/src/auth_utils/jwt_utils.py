@@ -1,8 +1,4 @@
-"""JWT encoding and decoding utilities for MCP Gateway Registry.
-
-Thin wrappers around PyJWT that standardise the HS256 algorithm,
-header construction, and decode options used across all services.
-"""
+"""JWT encoding and decoding utilities for MCP Gateway Registry."""
 
 import logging
 from datetime import UTC, datetime
@@ -70,10 +66,6 @@ def encode_jwt(
 ) -> str:
     """Encode a JWT using HS256.
 
-    PyJWT automatically adds ``typ: JWT`` and ``alg: HS256`` to the header.
-    Explicitly passing those fields in headers is therefore redundant; only
-    ``kid`` is forwarded when provided.
-
     Args:
         payload: Claims to encode.
         secret_key: HMAC secret key.
@@ -94,8 +86,6 @@ def decode_jwt(
     leeway: int = _DEFAULT_LEEWAY,
 ) -> dict[str, Any]:
     """Decode and verify a JWT.
-
-    Audience is verified when ``audience`` is provided; skipped otherwise.
 
     Args:
         token: JWT token string.
@@ -131,7 +121,7 @@ def decode_jwt(
 
 
 def get_token_kid(token: str) -> str | None:
-    """Return the ``kid`` from the unverified JWT header.
+    """Return the kid from the unverified JWT header.
 
     Args:
         token: JWT token string.
