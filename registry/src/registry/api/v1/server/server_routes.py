@@ -12,7 +12,6 @@ from typing import Any
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
-from pydantic import ValidationError
 
 from registry_pkgs.database.decorators import use_transaction
 from registry_pkgs.models._generated import PrincipalType, ResourceType
@@ -442,8 +441,6 @@ async def create_server(
 
         # Business logic errors (e.g., duplicate path, duplicate tags)
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except ValidationError as e:
-        raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating server: {e}", exc_info=True)
         raise HTTPException(

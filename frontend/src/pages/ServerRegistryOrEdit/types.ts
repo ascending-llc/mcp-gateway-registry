@@ -24,6 +24,7 @@ export interface ServerConfig {
   path: string;
   url: string;
   type: ServerType;
+  headers: Record<string, string> | null;
   authConfig: AuthenticationConfig;
   trustServer: boolean;
   tags?: string[];
