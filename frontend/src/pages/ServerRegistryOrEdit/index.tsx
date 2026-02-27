@@ -14,6 +14,85 @@ import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './typ
 
 const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', authorization_type: 'bearer' };
 
+const AUTH_ERROR_KEYS = ['key', 'custom_header', 'authorization_url', 'token_url'] as const;
+
+const parseAuthConfig = (result: GET_SERVERS_DETAIL_RESPONSE): AuthConfigType => {
+  if (result.apiKey) {
+    return {
+      type: 'apiKey',
+      source: result.apiKey.source,
+      authorization_type: result.apiKey.authorization_type,
+      key: result.apiKey.key,
+      custom_header: result.apiKey.custom_header,
+    };
+  }
+  if (result.oauth || result.requiresOAuth) {
+    return {
+      type: 'oauth',
+      client_id: result.oauth?.client_id,
+      client_secret: result.oauth?.client_secret,
+      authorization_url: result.oauth?.authorization_url,
+      token_url: result.oauth?.token_url,
+      scope: result.oauth?.scope,
+      use_dynamic_registration: result.requiresOAuth && !result.oauth,
+    };
+  }
+  return { ...DEFAULT_AUTH_CONFIG };
+};
+
+const processDataByAuthType = (data: ServerConfig, originalData: ServerConfig | null): Record<string, unknown> => {
+  const baseData: Partial<Server> = {
+    title: data.title,
+    description: data.description,
+    path: data.path,
+    url: data.url,
+    tags: data.tags,
+    type: data.type,
+    headers: data.headers && Object.keys(data.headers).length === 0 ? null : data.headers,
+  };
+  switch (data.authConfig.type) {
+    case 'auto':
+      return { ...baseData, apiKey: null, oauth: null, requiresOAuth: false };
+    case 'apiKey':
+      return {
+        ...baseData,
+        apiKey: {
+          source: data.authConfig.source,
+          authorization_type: data.authConfig.authorization_type,
+          ...(data.authConfig.source !== 'user' &&
+          data.authConfig.key &&
+          data.authConfig.key !== originalData?.authConfig?.key
+            ? { key: data.authConfig.key }
+            : {}),
+          ...(data.authConfig.authorization_type === 'custom' && data.authConfig.custom_header
+            ? { custom_header: data.authConfig.custom_header }
+            : {}),
+        },
+        oauth: null,
+        requiresOAuth: false,
+      };
+    case 'oauth':
+      return {
+        ...baseData,
+        oauth: data.authConfig.use_dynamic_registration
+          ? null
+          : {
+              client_id: data.authConfig.client_id,
+              ...(data.authConfig.client_secret !== originalData?.authConfig?.client_secret
+                ? { client_secret: data.authConfig.client_secret }
+                : {}),
+              authorization_url: data.authConfig.authorization_url,
+              token_url: data.authConfig.token_url,
+              scope: data.authConfig.scope,
+            },
+        apiKey: null,
+        requiresOAuth: true,
+      };
+    default:
+      return {};
+  }
+};
+
 const INIT_DATA: ServerConfig = {
   title: '',
   description: '',
@@ -68,40 +147,20 @@ const ServerRegistryOrEdit: React.FC = () => {
     setLoadingDetail(true);
     try {
       const result = await SERVICES.SERVER.getServerDetail(id);
-
-      const formData: ServerConfig = {
+      const data: ServerConfig = {
         title: result.title,
         description: result.description,
         path: result.path,
         url: result.url || '',
         type: result.type,
         headers: result.headers || null,
-        authConfig: { type: 'auto', source: 'admin', authorization_type: 'bearer' },
+        authConfig: parseAuthConfig(result),
         trustServer: true,
         tags: result.tags || [],
       };
-      if (result?.apiKey) {
-        formData.authConfig = {
-          type: 'apiKey',
-          source: result.apiKey?.source,
-          authorization_type: result.apiKey?.authorization_type,
-          key: result.apiKey?.key,
-          custom_header: result.apiKey?.custom_header,
-        };
-      }
-      if (result?.oauth) {
-        formData.authConfig = {
-          type: 'oauth',
-          client_id: result.oauth?.client_id,
-          client_secret: result.oauth?.client_secret,
-          authorization_url: result.oauth?.authorization_url,
-          token_url: result.oauth?.token_url,
-          scope: result.oauth?.scope,
-        };
-      }
       setServerDetail(result);
-      setFormData(formData);
-      setOriginalData(formData);
+      setFormData(data);
+      setOriginalData(data);
     } catch (_error) {
       showToast('Failed to fetch server details', 'error');
     } finally {
@@ -150,8 +209,10 @@ const ServerRegistryOrEdit: React.FC = () => {
         newErrors.custom_header = 'Custom Header Name is required';
       }
     } else if (auth.type === 'oauth') {
-      if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
-      if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
+      if (!auth.use_dynamic_registration) {
+        if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
+        if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
+      }
     }
 
     setErrors(newErrors);
@@ -162,94 +223,22 @@ const ServerRegistryOrEdit: React.FC = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
 
     if (field === 'authConfig') {
-      const newConfig = value;
       setErrors(prev => {
-        const nextErrors = { ...prev };
-        let hasChanges = false;
-
-        if (nextErrors.key && newConfig.key?.trim()) {
-          nextErrors.key = undefined;
-          hasChanges = true;
+        const next = { ...prev };
+        let changed = false;
+        for (const k of AUTH_ERROR_KEYS) {
+          if (next[k] && (value as AuthConfigType)[k]?.toString().trim()) {
+            next[k] = undefined;
+            changed = true;
+          }
         }
-        if (nextErrors.custom_header && newConfig.custom_header?.trim()) {
-          nextErrors.custom_header = undefined;
-          hasChanges = true;
-        }
-
-        if (nextErrors.authorization_url && newConfig.authorization_url?.trim()) {
-          nextErrors.authorization_url = undefined;
-          hasChanges = true;
-        }
-        if (nextErrors.token_url && newConfig.token_url?.trim()) {
-          nextErrors.token_url = undefined;
-          hasChanges = true;
-        }
-        return hasChanges ? nextErrors : prev;
+        return changed ? next : prev;
       });
     } else if (field === 'path') {
-      const pathValue = value as string;
-      if (pathValue && !/^\//.test(pathValue)) {
-        setErrors(prev => ({ ...prev, path: 'Path must start with /' }));
-      } else {
-        setErrors(prev => ({ ...prev, path: undefined }));
-      }
-    } else {
-      if (errors[field as string]) {
-        setErrors(prev => ({ ...prev, [field as string]: undefined }));
-      }
-    }
-  };
-
-  const processDataByAuthType = (data: ServerConfig) => {
-    const baseData: Partial<Server> = {
-      title: data.title,
-      description: data.description,
-      path: data.path,
-      url: data.url,
-      tags: data.tags,
-      type: data.type,
-      headers: data.headers && Object.keys(data.headers).length === 0 ? null : data.headers,
-    };
-    switch (data.authConfig.type) {
-      case 'auto':
-        return {
-          ...baseData,
-          apiKey: null,
-          oauth: null,
-        };
-      case 'apiKey':
-        return {
-          ...baseData,
-          apiKey: {
-            source: data.authConfig.source,
-            authorization_type: data.authConfig.authorization_type,
-            ...(data.authConfig.source !== 'user' &&
-            data.authConfig.key &&
-            data.authConfig.key !== originalData?.authConfig?.key
-              ? { key: data.authConfig.key }
-              : {}),
-            ...(data.authConfig.authorization_type === 'custom' && data.authConfig.custom_header
-              ? { custom_header: data.authConfig.custom_header }
-              : {}),
-          },
-          oauth: null,
-        };
-      case 'oauth':
-        return {
-          ...baseData,
-          oauth: {
-            client_id: data.authConfig.client_id,
-            ...(data.authConfig.client_secret !== originalData?.authConfig?.client_secret
-              ? { client_secret: data.authConfig.client_secret }
-              : {}),
-            authorization_url: data.authConfig.authorization_url,
-            token_url: data.authConfig.token_url,
-            scope: data.authConfig.scope,
-          },
-          apiKey: null,
-        };
-      default:
-        return {};
+      const isInvalid = value && !/^\//.test(value as string);
+      setErrors(prev => ({ ...prev, path: isInvalid ? 'Path must start with /' : undefined }));
+    } else if (errors[field as string]) {
+      setErrors(prev => ({ ...prev, [field as string]: undefined }));
     }
   };
 
@@ -269,7 +258,7 @@ const ServerRegistryOrEdit: React.FC = () => {
     if (!validate()) return;
 
     setLoading(true);
-    const data: any = processDataByAuthType(formData);
+    const data: any = processDataByAuthType(formData, originalData);
     try {
       if (isEditMode) {
         const result = await SERVICES.SERVER.updateServer(id, data);
@@ -287,7 +276,7 @@ const ServerRegistryOrEdit: React.FC = () => {
         const result = await SERVICES.SERVER.createServer(data);
         setServerData(result);
         refreshServerData(true);
-        if (data?.oauth) {
+        if (data?.requiresOAuth) {
           setShowSuccessDialog(true);
         } else {
           goBack();
@@ -326,6 +315,7 @@ const ServerRegistryOrEdit: React.FC = () => {
           ) : (
             <MainConfigForm
               formData={formData}
+              serverDetail={serverDetail}
               updateField={updateField}
               errors={errors}
               isEditMode={isEditMode}

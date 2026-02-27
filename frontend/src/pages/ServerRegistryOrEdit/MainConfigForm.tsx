@@ -4,6 +4,7 @@ import FormFields from '@/components/FormFields';
 import { useGlobal } from '@/contexts/GlobalContext';
 import SERVICES from '@/services';
 import Request from '@/services/request';
+import type { GET_SERVERS_DETAIL_RESPONSE } from '@/services/server/type';
 import AuthenticationConfig from './AuthenticationConfig';
 import type { ServerConfig } from './types';
 
@@ -11,13 +12,21 @@ const TEST_URL_CANCEL_KEY = 'testServerUrl';
 
 interface MainConfigFormProps {
   formData: ServerConfig;
+  serverDetail: GET_SERVERS_DETAIL_RESPONSE | null;
   isEditMode?: boolean;
   updateField: (field: keyof ServerConfig, value: any) => void;
   errors?: Record<string, string | undefined>;
   isReadOnly?: boolean;
 }
 
-const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, updateField, errors, isReadOnly }) => {
+const MainConfigForm: React.FC<MainConfigFormProps> = ({
+  formData,
+  serverDetail,
+  isEditMode,
+  updateField,
+  errors,
+  isReadOnly,
+}) => {
   const { showToast } = useGlobal();
   const [testingUrl, setTestingUrl] = useState(false);
   const [urlTestPassed, setUrlTestPassed] = useState(false);
@@ -197,12 +206,13 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
       {/* Section Authentication */}
       <AuthenticationConfig
         config={formData.authConfig}
-        isEditMode={isEditMode}
         onChange={handleAuthChange}
         errors={errors}
-        isReadOnly={isReadOnly}
         path={formData.path}
         mcpUrl={formData.url}
+        isEditMode={isEditMode}
+        isReadOnly={isReadOnly}
+        hasOauth={!!serverDetail?.oauth}
       />
 
       {/* Section Metadata */}

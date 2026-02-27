@@ -16,6 +16,7 @@ export interface AuthenticationConfig {
   authorization_url?: string;
   token_url?: string;
   scope?: string;
+  use_dynamic_registration?: boolean;
 }
 
 export interface ServerConfig {
