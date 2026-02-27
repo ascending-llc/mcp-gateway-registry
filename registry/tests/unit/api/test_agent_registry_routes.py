@@ -94,11 +94,11 @@ def sample_agent_card() -> dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    from auth_utils.scopes import map_groups_to_scopes
     from registry.utils.crypto_utils import generate_access_token
 
     groups = ["registry-admins"]
-    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+    scopes = map_groups_to_scopes(groups) or ["registry-admins"]
 
     return generate_access_token(
         user_id="test-admin-id",

@@ -29,10 +29,12 @@ dependencies = [
 
     # workspace packages
     "registry-pkgs",
+    "auth-utils",
 ]
 
 [tool.uv.sources]
 registry-pkgs = { workspace = true }
+auth-utils = { workspace = true }
 
 [build-system]
 requires = ["setuptools>=67", "wheel"]

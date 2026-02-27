@@ -10,12 +10,11 @@ from fastapi import APIRouter, Cookie, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import URLSafeTimedSerializer
 
-from auth_server.core.config import settings as auth_settings
-from registry.services.user_service import user_service
-from registry.utils.crypto_utils import generate_access_token, verify_refresh_token
+from auth_utils.scopes import map_groups_to_scopes
 
 from ..core.config import settings
-from ..utils.crypto_utils import generate_token_pair
+from ..services.user_service import user_service
+from ..utils.crypto_utils import generate_access_token, generate_token_pair, verify_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -179,10 +178,9 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
         response = RedirectResponse(url=settings.registry_client_url.rstrip("/"), status_code=302)
 
         # Determine cookie security settings
-        cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
         x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
         is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
-        cookie_secure = cookie_secure_config and is_https
+        cookie_secure = settings.session_cookie_secure and is_https
 
         # Set access token cookie (1 day)
         response.set_cookie(
@@ -325,9 +323,7 @@ async def refresh_token(
 
         # If no scopes but has groups, map groups to scopes
         if not scopes and groups:
-            from auth_server.utils.security_mask import map_groups_to_scopes
-
-            scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+            scopes = map_groups_to_scopes(groups)
             logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
 
         role = refresh_claims.get("role", "user")
@@ -361,10 +357,9 @@ async def refresh_token(
             )
 
             # Determine cookie security settings
-            cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
             x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
             is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
-            cookie_secure = cookie_secure_config and is_https
+            cookie_secure = settings.session_cookie_secure and is_https
 
             # Create response with new access token
             response = JSONResponse(status_code=200, content={"detail": "Token refreshed successfully"})

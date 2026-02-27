@@ -8,6 +8,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # root must depend on all workspace members, referencing them by distribution names
     "registry-pkgs",
+    "auth-utils",
     "registry",
     "auth-server",
     "mcpgw",
@@ -19,6 +20,7 @@ dependencies = [
 [tool.uv.workspace]
 members = [
     "registry-pkgs",
+    "auth-utils",
     "registry",
     "auth-server",
     "servers/mcpgw",
@@ -26,6 +28,7 @@ members = [
 
 [tool.uv.sources]
 registry-pkgs = { workspace = true }
+auth-utils = { workspace = true }
 registry = { workspace = true }
 auth-server = { workspace = true }
 mcpgw = { workspace = true }
@@ -74,14 +77,15 @@ version = { shell = """
 printf "\n📦 Workspace versions:\n" && \
 printf '   Root          → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
 printf '   registry-pkgs → %s\n' $(grep -m1 '^version = ' registry-pkgs/pyproject.toml | cut -d'\"' -f2) && \
+printf '   auth-utils    → %s\n' $(grep -m1 '^version = ' auth-utils/pyproject.toml | cut -d'\"' -f2) && \
 printf '   registry      → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
 printf '   auth-server   → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
 printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2)""", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
 # Run all tests across all projects
-test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../registry-pkgs && uv run poe test" }
-test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../registry-pkgs && uv run poe test-cov" }
+test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../registry-pkgs && uv run poe test && cd ../auth-utils && uv run poe test" }
+test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../registry-pkgs && uv run poe test-cov && cd ../auth-utils && uv run poe test-cov" }
 
 # registry tests
 test-registry = { shell = "cd registry && uv run poe test" }
@@ -94,6 +98,10 @@ test-auth-server-cov = { shell = "cd auth-server && uv run poe test-cov" }
 # registry-pkgs tests
 test-registry-pkgs = { shell = "cd registry-pkgs && uv run poe test" }
 test-registry-pkgs-cov = { shell = "cd registry-pkgs && uv run poe test-cov" }
+
+# auth-utils tests
+test-auth-utils = { shell = "cd auth-utils && uv run poe test" }
+test-auth-utils-cov = { shell = "cd auth-utils && uv run poe test-cov" }
 
 # Linting and formatting
 lint = { shell = "uv run ruff check .", help = "Run ruff linter" }
@@ -111,12 +119,13 @@ hooks-run = { shell = "uv run pre-commit run --all-files", help = "Run pre-commi
 build-artifacts = { shell = """
 xargs -I % sh -c 'uv build --package % --wheel --no-build-logs --out-dir build-artifacts' <<EOF
 registry-pkgs
+auth-utils
 registry
 auth-server
 mcpgw
 EOF
-uv export --package registry --package registry-pkgs --package auth-server --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-registry.txt
-uv export --package auth-server --package registry-pkgs --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-auth-server.txt
+uv export --package registry --package registry-pkgs --package auth-utils --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-registry.txt
+uv export --package auth-server --package registry-pkgs --package auth-utils --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-auth-server.txt
 uv export --package mcpgw --no-hashes --no-annotate --no-emit-workspace --quiet -o build-artifacts/requirements-mcpgw.txt
 """, help = "Generate artifacts for Docker build and put them in the build-artifacts/ folder." }
 
@@ -161,7 +170,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # Each value must be the import name of one of our own packages in this workspace.
-known-first-party = ["registry_pkgs", "registry", "auth_server", "mcpgw"]
+known-first-party = ["registry_pkgs", "auth_utils", "registry", "auth_server", "mcpgw"]
 
 [tool.ruff.lint.per-file-ignores]
 # Import order matters some files. Exclude them from automatic import sorting.

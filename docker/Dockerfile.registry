@@ -31,8 +31,9 @@ WORKDIR /app
 # Copy over config files
 COPY ./config /app/config/
 
-# Point to the OTEL metrics config file
+# Point to shared config files
 ENV OTEL_METRICS_CONFIG_PATH=/app/config/metrics/registry.yml
+ENV SCOPES_CONFIG_PATH=/app/config/scopes.yml
 
 # Create logs directory
 RUN mkdir -p /app/logs
@@ -43,8 +44,8 @@ COPY ./build-artifacts /opt/build/
 # Install all 3rd party dependencies with the exact versions locked by uv
 RUN pip install --only-binary :all: -r /opt/build/requirements-registry.txt
 
-# Install own packages from wheels - registry depends on registry-pkgs and auth-server
-RUN pip install --no-deps --no-index --find-links /opt/build/ registry registry-pkgs auth-server
+# Install own packages from wheels - registry depends on registry-pkgs and auth-utils
+RUN pip install --no-deps --no-index --find-links /opt/build/ registry registry-pkgs auth-utils
 
 # Expose port for the registry service
 EXPOSE 7860

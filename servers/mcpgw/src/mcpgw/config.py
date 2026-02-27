@@ -1,6 +1,5 @@
 import argparse
 import logging
-from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,20 +26,6 @@ class Settings(BaseSettings):
 
     # Registry configuration
     REGISTRY_URL: str = Field(default="http://localhost:7860", description="Base URL of the MCP Gateway Registry")
-
-    @property
-    def REGISTRY_BASE_URL(self) -> str:
-        """
-        Backward-compatible alias for REGISTRY_URL.
-
-        Existing code that references settings.REGISTRY_BASE_URL will continue
-        to work, while new code should use settings.REGISTRY_URL.
-        """
-        return self.REGISTRY_URL
-
-    @REGISTRY_BASE_URL.setter
-    def REGISTRY_BASE_URL(self, value: str) -> None:
-        self.REGISTRY_URL = value
 
     # Server configuration
     MCP_TRANSPORT: str = Field(default=Constants.DEFAULT_MCP_TRANSPORT, description="Transport type for the MCP server")
@@ -105,34 +90,6 @@ class Settings(BaseSettings):
             format=self.log_format,
             force=True,  # Override any existing configuration
         )
-
-    # IMPORTANT, TODO: The way the following method gets the scopes information is not optimal,
-    # but since it currently has no reference at all, we keep it here for now.
-    # There is a ticket about refactoring how registry gets scope info without importing auth_server directly.
-    # This method should probably be taken into consideration when working on that ticket.
-    # If we decide to use a YAML file to convey scopes info, the better way for mcpgw to get this file is:
-    # - Get a file path from a specific env var, which is loaded via the unified settings object.
-    # - If env var isn't defined, try a default path _relative_ to the current working directory.
-    @property
-    def scopes_config_path(self) -> Path:
-        """
-        Determine the path to scopes.yml configuration file.
-
-        Returns:
-            Path: Path to scopes.yml file
-        """
-        # Try Docker container path first
-        docker_path = Path("/app/auth_server/scopes.yml")
-        if docker_path.exists():
-            return docker_path
-
-        # Try local development path
-        local_path = Path(__file__).parent.parent.parent / "auth_server" / "scopes.yml"
-        if local_path.exists():
-            return local_path
-
-        logger.warning("Scopes configuration file not found at expected locations")
-        return Path("scopes.yml")
 
     def log_config(self):
         """Log current configuration (hiding sensitive values)."""
