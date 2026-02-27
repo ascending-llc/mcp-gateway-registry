@@ -3,13 +3,14 @@ import logging
 import os
 from typing import Any
 
-import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from itsdangerous import BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
+from auth_utils.jwt_utils import decode_jwt, get_token_kid
+from auth_utils.models import UserContext
 from auth_utils.scopes import map_groups_to_scopes
 
 from ..core.config import settings
@@ -20,7 +21,6 @@ from .dependencies import (
     get_accessible_services_for_user,
     get_ui_permissions_for_user,
     get_user_accessible_servers,
-    signer,
     user_can_modify_servers,
     user_has_wildcard_access,
 )
@@ -254,19 +254,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 logger.debug("Empty JWT token after split")
                 return None
 
-            # JWT validation parameters from auth_server/server.py
             # Extract kid from header first
-            kid = None
             try:
-                unverified_header = jwt.get_unverified_header(access_token)
-                kid = unverified_header.get("kid")
-
-                # Check if this is our self-signed token
-                if kid and kid != settings.JWT_SELF_SIGNED_KID:
-                    logger.debug(f"JWT token has wrong kid: {kid}, expected: {settings.JWT_SELF_SIGNED_KID}")
-                    return None
+                kid = get_token_kid(access_token)
             except Exception as e:
                 logger.debug(f"Failed to decode JWT header: {e}")
+                return None
+
+            # Check if this is our self-signed token; reject tokens with an unrecognised explicit kid
+            if kid and kid != settings.JWT_SELF_SIGNED_KID:
+                logger.debug(f"JWT token has wrong kid: {kid}, expected: {settings.JWT_SELF_SIGNED_KID}")
                 return None
 
             # Validate and decode token
@@ -274,41 +271,26 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 # For self-signed tokens (kid='mcp-self-signed'), skip audience validation
                 # because the audience is now the resource URL (RFC 8707 Resource Indicators)
                 # which varies per endpoint (/proxy/mcpgw, /proxy/server2, etc.)
-                # Issuer validation provides sufficient security for self-signed tokens
-                is_self_signed = kid == settings.JWT_SELF_SIGNED_KID
+                # Issuer validation provides sufficient security for self-signed tokens.
+                is_self_signed_token = kid == settings.JWT_SELF_SIGNED_KID
 
-                decode_options = {
-                    "verify_exp": True,
-                    "verify_iat": True,
-                    "verify_iss": True,
-                    "verify_aud": not is_self_signed,  # Skip aud check for self-signed tokens
-                }
-
-                decode_kwargs = {
-                    "algorithms": ["HS256"],
-                    "issuer": settings.JWT_ISSUER,
-                    "options": decode_options,
-                    "leeway": 30,  # 30 second leeway for clock skew
-                }
-
-                # Only validate audience for provider tokens (not self-signed)
-                if not is_self_signed:
-                    decode_kwargs["audience"] = settings.JWT_AUDIENCE
-                else:
+                if is_self_signed_token:
                     logger.info("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
 
-                claims = jwt.decode(access_token, settings.secret_key, **decode_kwargs)
+                claims = decode_jwt(
+                    access_token,
+                    settings.secret_key,
+                    issuer=settings.JWT_ISSUER,
+                    audience=None if is_self_signed_token else settings.JWT_AUDIENCE,
+                )
                 logger.info(
                     f"JWT claims validated: sub={claims.get('sub')}, aud={claims.get('aud')}, scope={claims.get('scope')}"
                 )
-            except jwt.ExpiredSignatureError:
+            except ExpiredSignatureError:
                 logger.debug("JWT token has expired")
                 return None
-            except jwt.InvalidTokenError as e:
+            except InvalidTokenError as e:
                 logger.debug(f"Invalid JWT token: {e}")
-                return None
-            except Exception as e:
-                logger.debug(f"JWT validation error: {e}")
                 return None
 
             # Extract user information from claims
@@ -406,27 +388,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"JWT session auth failed: {e}")
             return None
 
-    def _parse_session_data(self, session_cookie: str) -> dict[str, Any] | None:
-        try:
-            data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
-            if not data.get("username"):
-                return None
-            # Sets the default value for traditionally authenticated users (from the original get_user_session_data).
-            if data.get("auth_method") != "oauth2":
-                data.setdefault("groups", ["mcp-registry-admin"])
-                data.setdefault("scopes", ["mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"])
-            return data
-
-        except SignatureExpired as e:
-            logger.warning(f"Session cookie expired: {e}")
-            return None
-        except BadSignature as e:
-            logger.warning(f"Session cookie has invalid signature (likely from different server): {e}")
-            return None
-        except Exception as e:
-            logger.warning(f"Session cookie parse error: {e}")
-            return None
-
     def _build_user_context(
         self,
         username: str,
@@ -434,8 +395,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         scopes: list,
         auth_method: str,
         provider: str,
-        auth_source: str = None,
-        user_id: str = None,
+        auth_source: str,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Construct the complete user context (from the original enhanced_auth logic).
@@ -446,23 +407,23 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         accessible_agents = get_accessible_agents_for_user(ui_permissions)
         can_modify = user_can_modify_servers(groups, scopes)
 
-        user_context = {
-            "user_id": user_id,
-            "username": username,
-            "groups": groups,
-            "scopes": scopes,
-            "auth_method": auth_method,
-            "provider": provider,
-            "accessible_servers": accessible_servers,
-            "accessible_services": accessible_services,
-            "accessible_agents": accessible_agents,
-            "ui_permissions": ui_permissions,
-            "can_modify_servers": can_modify,
-            "is_admin": user_has_wildcard_access(scopes),
-            "auth_source": auth_source,
-        }
-        logger.debug(f"User context for {username}: {user_context}")
-        return user_context
+        ctx = UserContext(
+            user_id=user_id,
+            username=username,
+            groups=groups,
+            scopes=scopes,
+            auth_method=auth_method,
+            provider=provider,
+            accessible_servers=accessible_servers,
+            accessible_services=accessible_services,
+            accessible_agents=accessible_agents,
+            ui_permissions=ui_permissions,
+            can_modify_servers=can_modify,
+            is_admin=user_has_wildcard_access(scopes),
+            auth_source=auth_source,
+        )
+        logger.debug(f"User context for {username}: {ctx.model_dump()}")
+        return ctx.model_dump()
 
 
 class AuthenticationError(Exception):

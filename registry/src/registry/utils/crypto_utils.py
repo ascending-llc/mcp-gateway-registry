@@ -16,10 +16,15 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from auth_utils.jwt_utils import (
+    decode_jwt,
+    encode_jwt,
+    get_token_kid,
+)
 from registry.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -101,7 +106,7 @@ def generate_service_jwt(user_id: str, username: str | None = None, scopes: list
         payload["scopes"] = scopes
 
     # Sign with registry secret
-    token = jwt.encode(payload, settings.secret_key, algorithm="HS256")
+    token = encode_jwt(payload, settings.secret_key)
 
     return token
 
@@ -435,11 +440,8 @@ def generate_access_token(
     if idp_id:
         payload["idp_id"] = idp_id
 
-    # JWT header
-    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-
     # Generate JWT
-    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
+    token = encode_jwt(payload, settings.secret_key, kid=settings.JWT_SELF_SIGNED_KID)
 
     logger.debug(f"Generated access token for user {username}, expires in {expires_hours}h")
     return token
@@ -497,9 +499,7 @@ def generate_refresh_token(
         "token_type": "refresh_token",
     }
 
-    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
-
-    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
+    token = encode_jwt(payload, settings.secret_key, kid=settings.JWT_SELF_SIGNED_KID)
 
     logger.debug(f"Generated refresh token for user {username}, expires in {expires_days} days")
     return token
@@ -517,22 +517,19 @@ def verify_access_token(token: str) -> dict[str, Any] | None:
     """
     try:
         # Verify kid in header
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
+        kid = get_token_kid(token)
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in token: {kid}")
             return None
 
         # Decode and verify token
-        claims = jwt.decode(
+        claims = decode_jwt(
             token,
             settings.secret_key,
-            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
-            options={"verify_exp": True, "verify_iat": True, "verify_iss": True, "verify_aud": True},
-            leeway=30,  # 30 second leeway for clock skew
+            leeway=30,
         )
 
         # Verify token type
@@ -543,10 +540,10 @@ def verify_access_token(token: str) -> dict[str, Any] | None:
         logger.debug(f"Access token verified for user: {claims.get('sub')}")
         return claims
 
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         logger.debug("Access token expired")
         return None
-    except jwt.InvalidTokenError as e:
+    except InvalidTokenError as e:
         logger.debug(f"Invalid access token: {e}")
         return None
     except Exception as e:
@@ -566,21 +563,19 @@ def verify_refresh_token(token: str) -> dict[str, Any] | None:
     """
     try:
         # Verify kid in header
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
+        kid = get_token_kid(token)
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in refresh token: {kid}")
             return None
 
         # Decode and verify token
-        claims = jwt.decode(
+        claims = decode_jwt(
             token,
             settings.secret_key,
-            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
-            options={"verify_exp": True, "verify_iat": True, "verify_iss": True, "verify_aud": True},
+            leeway=30,
         )
 
         # Verify token type
@@ -591,10 +586,10 @@ def verify_refresh_token(token: str) -> dict[str, Any] | None:
         logger.debug(f"Refresh token verified for user: {claims.get('sub')}")
         return claims
 
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         logger.debug("Refresh token expired")
         return None
-    except jwt.InvalidTokenError as e:
+    except InvalidTokenError as e:
         logger.debug(f"Invalid refresh token: {e}")
         return None
     except Exception as e:
