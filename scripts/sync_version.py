@@ -30,6 +30,7 @@ def find_pyproject_files() -> list[Path]:
     return [
         root / "pyproject.toml",
         root / "registry-pkgs" / "pyproject.toml",
+        root / "auth-utils" / "pyproject.toml",
         root / "registry" / "pyproject.toml",
         root / "auth-server" / "pyproject.toml",
         root / "servers" / "mcpgw" / "pyproject.toml",
