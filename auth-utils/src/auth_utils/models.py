@@ -1,4 +1,4 @@
-"""Structured user context model for MCP Gateway Registry authentication."""
+"""User context model for MCP Gateway Registry authentication."""
 
 from typing import Any
 
@@ -12,11 +12,9 @@ class UserContext(BaseModel):
     on request.state.user (as a plain dict via model_dump()) for downstream handlers.
     """
 
-    # None when authenticated via _try_basic_auth (internal admin endpoints).
-    # Basic auth uses environment credentials with no corresponding DB record,
-    # so no user_id exists. User-facing routes that pass this to DB operations
-    # must guard against None explicitly (see proxy_routes._build_authenticated_headers).
-    user_id: str | None = None
+    user_id: str | None = (
+        None  # internal admin endpoints (_try_basic_auth) use environment credentials and thus have no user_id
+    )
     username: str
     groups: list[str] = Field(default_factory=list)
     scopes: list[str] = Field(default_factory=list)

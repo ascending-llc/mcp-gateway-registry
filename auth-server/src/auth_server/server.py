@@ -12,8 +12,6 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from auth_utils.jwt_utils import encode_jwt
-
 # Import database utilities
 from registry_pkgs.database import close_mongodb, init_mongodb
 from registry_pkgs.telemetry import setup_metrics
@@ -94,14 +92,6 @@ def check_rate_limit(username: str) -> bool:
     # Increment counter
     user_token_generation_counts[rate_key] = current_count + 1
     return True
-
-
-def _create_self_signed_jwt(access_payload: dict) -> str:
-    try:
-        return encode_jwt(access_payload, settings.secret_key, kid=JWT_SELF_SIGNED_KID)
-    except Exception as e:
-        logger.error(f"Failed to create self-signed JWT: {e}")
-        raise ValueError(f"Failed to create self-signed JWT: {e}")
 
 
 @asynccontextmanager
