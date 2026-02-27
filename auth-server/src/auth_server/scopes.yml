@@ -7,160 +7,131 @@
 # - register-user: create servers and agents, cannot share
 # - register-read-only: read-only access to servers and agents
 
-UI-Scopes:
-  registry-admin:
-    list_agents:
-      - all
-    get_agent:
-      - all
-    publish_agent:
-      - all
-    modify_agent:
-      - all
-    delete_agent:
-      - all
-    list_service:
-      - all
-    register_service:
-      - all
-    health_check_service:
-      - all
-    toggle_service:
-      - all
-    modify_service:
-      - all
-    delete_service:
-      - all
-    share_service:
-      - all
-
-  registry-power-user:
-    list_agents:
-      - all
-    get_agent:
-      - all
-    list_service:
-      - all
-    register_service:
-      - all
-    delete_service:
-      - all
-    share_service:
-      - all
-
-  register-user:
-    list_agents:
-      - all
-    get_agent:
-      - all
-    publish_agent:
-      - all
-    list_service:
-      - all
-    register_service:
-      - all
-
-  register-read-only:
-    list_agents:
-      - all
-    get_agent:
-      - all
-    list_service:
-      - all
-
+## server:
+#  /servers (GET)
+#  /servers/{server_id} (GET)
+#  /servers/stats (GET)
+#  /servers/connection (POST)
+#  /servers/{server_id}/tools (GET)
+#  /servers/{server_id}/refresh (POST)
+#  /servers (POST)
+#  /servers/{server_id} (PATCH)
+#  /servers/{server_id} (DELETE)
+#  /servers/{server_id}/toggle (POST)
+#
+## agent:
+#  /agents (GET)
+#  /agents/{path} (GET)
+#  /agents/{path}/rating (GET)
+#  /agents/discover (POST)
+#  /agents/discover/semantic (POST)
+#  /agents/{path}/health (POST)
+#  /agents/register (POST)
+#  /agents/{path} (PUT)
+#  /agents/{path} (DELETE)
+#  /agents/{path}/toggle (POST)
+#  /agents/{path}/rate (POST)
 group_mappings:
   jarvis-registry-admin:
-    - servers-read-only
-    - agents-read-only
-    - agents-read-write
-    - server-read-write
+    - servers-read
+    - agents-read
+    - agents-write
+    - server-write
     - servers-share
     - agents-share
   jarvis-registry-power-user:
-    - servers-read-only
-    - agents-read-only
-    - agents-read-write
-    - server-read-write
+    - servers-read
+    - agents-read
+    - agents-write
+    - server-write
     - servers-share
     - agents-share
   jarvis-register-user:
-    - servers-read-only
-    - agents-read-only
-    - agents-read-write
-    - server-read-write
+    - servers-read
+    - agents-read
+    - agents-write
+    - server-write
   jarvis-register-read-only:
-    - servers-read-only
-    - agents-read-only
+    - servers-read
+    - agents-read
 
-registry-admin:
-  - server: '*'
-    methods:
-      - all
-    tools:
-      - all
-  - agents:
-      actions:
-        - action: list_agents
-          resources:
-            - all
-        - action: get_agent
-          resources:
-            - all
-        - action: publish_agent
-          resources:
-            - all
-        - action: modify_agent
-          resources:
-            - all
-        - action: delete_agent
-          resources:
-            - all
+servers-read:
+  - action: list_servers # name
+    method: GET  # GET,POST or *
+    endpoint: /servers # *  求交集
+  - action: get_server
+    method: GET
+    endpoint: /servers/{server_id}
+  - action: servers_stats
+    method: GET
+    endpoint: /servers/stats
+  - action: servers_connection
+    method: POST
+    endpoint: /servers/connection
+  - action: get_server_tools
+    method: GET
+    endpoint: /servers/{server_id}/tools
+  - action: refresh_server_health
+    method: POST
+    endpoint: /servers/{server_id}/refresh
 
-registry-power-user:
-  - server: api
-    methods:
-      - initialize
-      - GET
-      - POST
-      - PUT
-      - DELETE
-  - agents:
-      actions:
-        - action: list_agents
-          resources:
-            - all
-        - action: get_agent
-          resources:
-            - all
+agents-read:
+  - action: list_agents
+    method: GET
+    endpoint: /agents
+  - action: get_agent
+    method: GET
+    endpoint: /agents/{path}
+  - action: get_agent_rating
+    method: GET
+    endpoint: /agents/{path}/rating
+  - action: discover_agents
+    method: POST
+    endpoint: /agents/discover
+  - action: discover_agents_semantic
+    method: POST
+    endpoint: /agents/discover/semantic
+  - action: check_agent_health
+    method: POST
+    endpoint: /agents/{path}/health
 
-register-user:
-  - server: api
-    methods:
-      - initialize
-      - GET
-      - POST
-  - agents:
-      actions:
-        - action: list_agents
-          resources:
-            - all
-        - action: get_agent
-          resources:
-            - all
-        - action: publish_agent
-          resources:
-            - all
+agents-write:
+  - action: publish_agent
+    method: POST
+    endpoint: /agents/register
+  - action: modify_agent
+    method: PUT
+    endpoint: /agents/{path}
+  - action: delete_agent
+    method: DELETE
+    endpoint: /agents/{path}
+  - action: toggle_agent
+    method: POST
+    endpoint: /agents/{path}/toggle
+  - action: rate_agent
+    method: POST
+    endpoint: /agents/{path}/rate
 
-register-read-only:
-  - server: api
-    methods:
-      - initialize
-      - GET
-  - agents:
-      actions:
-        - action: list_agents
-          resources:
-            - all
-        - action: get_agent
-          resources:
-            - all
+server-write:
+  - action: register_service
+    method: POST
+    endpoint: /servers
+  - action: modify_service
+    method: PATCH
+    endpoint: /servers/{server_id}
+  - action: delete_service
+    method: DELETE
+    endpoint: /servers/{server_id}
+  - action: toggle_service
+    method: POST
+    endpoint: /servers/{server_id}/toggle
+
+servers-share:
+  - action: share_service
+    method: PUT
+    endpoint: /permissions/mcpserver/{resource_id}
+
+agents-share:
+  - action: share_agent
+    method: PUT
+    endpoint: /permissions/a2aagent/{resource_id}

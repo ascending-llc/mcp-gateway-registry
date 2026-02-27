@@ -270,8 +270,6 @@ async def get_current_user(user_context: CurrentUser):
         "provider": user_context.get("provider"),
         "scopes": user_context.get("scopes", []),
         "groups": user_context.get("groups", []),
-        "can_modify_servers": user_context.get("can_modify_servers", False),
-        "is_admin": user_context.get("is_admin", False),
         "user_id": user_context.get("user_id"),
     }
 

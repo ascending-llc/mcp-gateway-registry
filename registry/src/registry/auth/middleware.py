@@ -10,15 +10,7 @@ from itsdangerous import BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
-from registry.auth.dependencies import (
-    get_accessible_agents_for_user,
-    get_accessible_services_for_user,
-    get_ui_permissions_for_user,
-    get_user_accessible_servers,
-    signer,
-    user_can_modify_servers,
-    user_has_wildcard_access,
-)
+from registry.auth.dependencies import signer
 from registry.core.config import settings
 from registry.core.telemetry_decorators import AuthMetricsContext
 
@@ -446,12 +438,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         """
         Construct the complete user context (from the original enhanced_auth logic).
         """
-        ui_permissions = get_ui_permissions_for_user(scopes)
-        accessible_servers = get_user_accessible_servers(scopes)
-        accessible_services = get_accessible_services_for_user(ui_permissions)
-        accessible_agents = get_accessible_agents_for_user(ui_permissions)
-        can_modify = user_can_modify_servers(groups, scopes)
-
         user_context = {
             "user_id": user_id,
             "username": username,
@@ -459,12 +445,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "scopes": scopes,
             "auth_method": auth_method,
             "provider": provider,
-            "accessible_servers": accessible_servers,
-            "accessible_services": accessible_services,
-            "accessible_agents": accessible_agents,
-            "ui_permissions": ui_permissions,
-            "can_modify_servers": can_modify,
-            "is_admin": user_has_wildcard_access(scopes),
             "auth_source": auth_source,
         }
         logger.debug(f"User context for {username}: {user_context}")
