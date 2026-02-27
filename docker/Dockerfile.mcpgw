@@ -29,7 +29,7 @@ COPY ./build-artifacts /opt/build/
 RUN pip install --only-binary :all: -r /opt/build/requirements-mcpgw.txt
 
 # Install own packages from wheels
-RUN pip install --no-deps --no-index --find-links /opt/build/ mcpgw
+RUN pip install --no-deps --no-index --find-links /opt/build/ mcpgw auth-utils
 
 # Expose port
 EXPOSE 8003
