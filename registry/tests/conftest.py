@@ -262,7 +262,7 @@ def mock_authenticated_user():
     """Mock an authenticated user for testing protected routes."""
     from fastapi import Request
 
-    from registry.auth.dependencies import get_current_user_by_mid
+    from registry.auth.dependencies import get_current_user
 
     # Create admin user context
     user_context = {
@@ -292,7 +292,7 @@ def mock_authenticated_user():
         return user_context
 
     # Override the CurrentUser dependency
-    app.dependency_overrides[get_current_user_by_mid] = _mock_get_user
+    app.dependency_overrides[get_current_user] = _mock_get_user
 
     yield user_context
 

@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from fastapi import status
+from fastapi import Request, status
 from fastapi.testclient import TestClient
 
 from registry.core.config import settings
@@ -119,12 +119,12 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test successfully rating an agent."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with (
             patch.object(
@@ -155,12 +155,12 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating a non-existent agent returns 404."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with patch.object(
             agent_service,
@@ -183,26 +183,23 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating an agent without access returns 403."""
-        from fastapi import Request
-
-        from registry.auth.dependencies import get_current_user_by_mid
+        from registry.auth.dependencies import get_current_user
 
         # User with restricted access - accessible_agents doesn't include /test-agent
         restricted_context = {
             "username": "restricted_user",
-            "groups": [],
+            "groups": ["other-group"],
             "is_admin": False,
             "ui_permissions": {},
-            "accessible_agents": ["/other-agent"],  # Not the test agent (/test-agent)
         }
 
         def _mock_get_user(request: Request):
-            # Set request.state.user to restricted context
-            request.state.user = restricted_context
-            request.state.is_authenticated = True
             return restricted_context
 
-        app.dependency_overrides[get_current_user_by_mid] = _mock_get_user
+        app.dependency_overrides[get_current_user] = _mock_get_user
+
+        sample_agent_card.visibility = "group-restricted"
+        sample_agent_card.allowed_groups = ["allowed-group"]
 
         with patch.object(
             agent_service,
@@ -226,12 +223,12 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating with invalid type returns validation error."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with patch.object(
             agent_service,
@@ -254,12 +251,12 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating without rating field returns validation error."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with patch.object(
             agent_service,
@@ -282,12 +279,12 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test handling when update_rating fails."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with (
             patch.object(
@@ -319,12 +316,12 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating an agent with different valid rating values."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         for rating_value in [1, 2, 3, 4, 5]:
             with (
@@ -356,12 +353,12 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test that agent path is normalized correctly."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with (
             patch.object(
@@ -401,7 +398,7 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test that agent owner can rate their private agent."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
         # Create private agent owned by testuser
         private_agent = AgentCard(
@@ -419,10 +416,10 @@ class TestRateAgent:
             ratingDetails=[],
         )
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return mock_user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with (
             patch.object(
@@ -450,7 +447,7 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating a group-restricted agent when user is in allowed group."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
         # User in the allowed group
         user_context = {
@@ -478,10 +475,10 @@ class TestRateAgent:
             ratingDetails=[],
         )
 
-        def _mock_auth(session=None):
+        def _mock_auth(request: Request):
             return user_context
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_auth
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with (
             patch.object(

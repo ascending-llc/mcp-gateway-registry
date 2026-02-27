@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from registry.main import app
@@ -18,7 +19,7 @@ class TestProxyToolExecutionRoutes:
 
     def setup_method(self):
         """Override auth dependency for integration testing."""
-        from registry.auth.dependencies import get_current_user_by_mid
+        from registry.auth.dependencies import get_current_user
 
         user_context = {
             "username": "test-admin",
@@ -34,7 +35,11 @@ class TestProxyToolExecutionRoutes:
             "auth_method": "traditional",
             "provider": "local",
         }
-        app.dependency_overrides[get_current_user_by_mid] = lambda: user_context
+
+        def _mock_auth(request: Request):
+            return user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
 
     def teardown_method(self):
         """Clean up dependency overrides."""

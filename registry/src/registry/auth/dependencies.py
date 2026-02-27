@@ -40,13 +40,6 @@ def get_current_user(request: Request) -> dict[str, Any]:
 type CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
 
 
-def user_has_wildcard_access(user_scopes: list[str]) -> bool:
-    """
-    Check if user should be treated as admin.
-    """
-    return "registry-admin" in user_scopes
-
-
 def load_scopes_config() -> dict[str, Any]:
     """Load the scopes configuration from auth_server/scopes.yml"""
     try:
