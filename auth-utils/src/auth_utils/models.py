@@ -1,6 +1,6 @@
 """Structured user context model for MCP Gateway Registry authentication."""
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +16,7 @@ class UserContext(BaseModel):
     # Basic auth uses environment credentials with no corresponding DB record,
     # so no user_id exists. User-facing routes that pass this to DB operations
     # must guard against None explicitly (see proxy_routes._build_authenticated_headers).
-    user_id: Optional[str] = None
+    user_id: str | None = None
     username: str
     groups: list[str] = Field(default_factory=list)
     scopes: list[str] = Field(default_factory=list)

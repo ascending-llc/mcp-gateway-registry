@@ -3,9 +3,9 @@ import logging
 import os
 from typing import Any
 
-from jwt import ExpiredSignatureError, InvalidTokenError
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from jwt import ExpiredSignatureError, InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
