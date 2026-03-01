@@ -20,6 +20,9 @@ dependencies = [
 
     # Auth
     "pyjwt>=2.10.0",
+
+    # Shared packages
+    "registry-pkgs",
 ]
 
 [build-system]
