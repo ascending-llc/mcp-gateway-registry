@@ -45,7 +45,7 @@ COPY ./build-artifacts /opt/build/
 RUN pip install --only-binary :all: -r /opt/build/requirements-registry.txt
 
 # Install own registry package from wheels; all dependencies must be listed in requirements-registry.txt
-RUN pip install --no-deps --no-index --find-links /opt/build/ registry
+RUN pip install --no-deps --no-index --find-links /opt/build/ registry registry-pkgs
 
 # Expose port for the registry service
 EXPOSE 7860

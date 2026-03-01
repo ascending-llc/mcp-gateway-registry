@@ -36,7 +36,7 @@ COPY ./build-artifacts /opt/build/
 RUN pip install --only-binary :all: -r /opt/build/requirements-auth-server.txt
 
 # Install own auth-server package from wheels; all dependencies must be listed in requirements-auth-server.txt
-RUN pip install --no-deps --no-index --find-links /opt/build/ auth-server
+RUN pip install --no-deps --no-index --find-links /opt/build/ auth-server registry-pkgs
 
 # Expose port
 EXPOSE 8888
