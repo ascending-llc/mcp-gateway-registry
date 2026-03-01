@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
 
-from auth_utils.scopes import map_groups_to_scopes
+from registry_pkgs.core.scopes import map_groups_to_scopes
 
 from ..core.config import settings
 from ..models.device_flow import DeviceApprovalRequest, DeviceCodeResponse, DeviceTokenResponse
@@ -114,7 +114,7 @@ async def register_client(registration: ClientRegistrationRequest, request: Requ
             "grant_types": registration.grant_types
             or ["authorization_code", "urn:ietf:params:oauth:grant-type:device_code"],
             "response_types": registration.response_types or ["code"],
-            "scope": registration.scope or "mcp-servers-unrestricted/read mcp-servers-unrestricted/execute",
+            "scope": registration.scope or "servers-read agents-read",
             "token_endpoint_auth_method": registration.token_endpoint_auth_method or "client_secret_post",
             "contacts": registration.contacts or [],
             "registered_at": issued_at,
@@ -351,6 +351,7 @@ async def device_token(
             "name": user_info.get("name"),
             "idp_id": user_info.get("idp_id"),
             "user_id": user_id,
+            "provider": user_info.get("provider"),
             "iss": JWT_ISSUER,
             "aud": audience,
             "sub": user_info["username"],
@@ -662,6 +663,7 @@ async def oauth2_callback(
             mapped_user["user_id"] = user_id
             logger.debug(f"Added user_id {user_id} to mapped_user")
 
+        mapped_user["provider"] = provider
         # Always use OAuth client flow (both external clients and registry)
         client_id = temp_session_data.get("client_id") or settings.registry_app_name
         code_challenge = temp_session_data.get("code_challenge")

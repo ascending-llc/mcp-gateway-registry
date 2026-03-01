@@ -10,7 +10,7 @@ from unittest.mock import (
 )
 
 import pytest
-from fastapi import status
+from fastapi import Request, status
 from fastapi.testclient import TestClient
 
 from registry.constants import REGISTRY_CONSTANTS
@@ -20,22 +20,19 @@ from registry.services.agent_service import agent_service
 
 
 @pytest.fixture
-def mock_nginx_proxied_auth_admin():
-    """Mock nginx_proxied_auth for admin user."""
+def mock_current_user_admin():
+    """Mock current user for admin user."""
 
-    def _mock_auth(session=None):
+    def _mock_auth(request: Request):
         return {
             "username": "testadmin",
-            "groups": ["a2a-registry-admin"],
+            "groups": ["registry-admin"],
             "scopes": [
-                "a2a-registry-admin",
+                "registry-admin",
                 "a2a-agents-unrestricted/read",
             ],
             "auth_method": "traditional",
             "provider": "local",
-            "accessible_agents": [],
-            "accessible_services": ["all"],
-            "can_modify_agents": True,
             "is_admin": True,
         }
 
@@ -43,19 +40,16 @@ def mock_nginx_proxied_auth_admin():
 
 
 @pytest.fixture
-def mock_nginx_proxied_auth_user():
-    """Mock nginx_proxied_auth for regular user with limited access."""
+def mock_current_user_user():
+    """Mock current user for regular user with limited access."""
 
-    def _mock_auth(session=None):
+    def _mock_auth(request: Request):
         return {
             "username": "testuser",
-            "groups": ["a2a-registry-user"],
+            "groups": ["a2a-agent-user"],
             "scopes": ["a2a-agents-restricted/read"],
             "auth_method": "oauth2",
             "provider": "cognito",
-            "accessible_agents": ["code-reviewer"],
-            "accessible_services": ["restricted"],
-            "can_modify_agents": False,
             "is_admin": False,
         }
 
@@ -94,8 +88,8 @@ def sample_agent_card() -> dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from auth_utils.scopes import map_groups_to_scopes
     from registry.utils.crypto_utils import generate_access_token
+    from registry_pkgs.core.scopes import map_groups_to_scopes
 
     groups = ["registry-admins"]
     scopes = map_groups_to_scopes(groups) or ["registry-admins"]
@@ -724,13 +718,13 @@ class TestErrorHandling:
 
     def test_error_invalid_agent_name_format(
         self,
-        mock_nginx_proxied_auth_admin: Any,
+        mock_current_user_admin: Any,
         authenticated_client,
     ) -> None:
         """Test invalid agent name format returns 404."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
+        app.dependency_overrides[get_current_user] = mock_current_user_admin
 
         response = authenticated_client.get(
             f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents/invalid-format/versions"
@@ -747,12 +741,12 @@ class TestErrorHandling:
         """Test missing auth returns 401 or similar error."""
         from fastapi import HTTPException
 
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        def _mock_no_auth(session=None):
+        def _mock_no_auth(request: Request):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
-        app.dependency_overrides[nginx_proxied_auth] = _mock_no_auth
+        app.dependency_overrides[get_current_user] = _mock_no_auth
 
         # Use TestClient without auth cookie to test missing auth
         client = TestClient(app)
@@ -765,14 +759,14 @@ class TestErrorHandling:
 
     def test_error_disabled_agent(
         self,
-        mock_nginx_proxied_auth_admin: Any,
+        mock_current_user_admin: Any,
         sample_agent_card: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test disabled agent returns 404."""
-        from registry.auth.dependencies import nginx_proxied_auth
+        from registry.auth.dependencies import get_current_user
 
-        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
+        app.dependency_overrides[get_current_user] = mock_current_user_admin
 
         with (
             patch.object(
