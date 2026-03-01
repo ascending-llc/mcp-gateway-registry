@@ -1861,6 +1861,7 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "registry-pkgs" },
     { name = "websockets" },
 ]
 
@@ -1875,6 +1876,7 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.10.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "registry-pkgs", editable = "registry-pkgs" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
 
