@@ -10,9 +10,11 @@ from itsdangerous import BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
+from auth_server.utils.security_mask import map_groups_to_scopes
 from registry.auth.dependencies import signer
 from registry.core.config import settings
 from registry.core.telemetry_decorators import AuthMetricsContext
+from registry_pkgs import load_scopes_config
 
 logger = logging.getLogger(__name__)
 
@@ -316,10 +318,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.core.config import settings as auth_settings
-                from auth_server.utils.security_mask import map_groups_to_scopes
-
-                scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+                scopes = map_groups_to_scopes(groups, load_scopes_config())
                 logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
 
             # Verify we have at least some scopes
@@ -382,10 +381,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.core.config import settings as auth_settings
-                from auth_server.utils.security_mask import map_groups_to_scopes
-
-                scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+                scopes = map_groups_to_scopes(groups, load_scopes_config())
                 logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
 
             logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
@@ -409,10 +405,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
             if not data.get("username"):
                 return None
-            # Sets the default value for traditionally authenticated users (from the original get_user_session_data).
-            if data.get("auth_method") != "oauth2":
-                data.setdefault("groups", ["registry-admin"])
-                data.setdefault("scopes", ["registry-admin"])
             return data
 
         except SignatureExpired as e:

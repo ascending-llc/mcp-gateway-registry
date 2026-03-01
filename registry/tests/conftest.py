@@ -37,6 +37,19 @@ def event_loop():
     loop.close()
 
 
+@pytest.fixture(autouse=True)
+def mock_rbac_for_tests(monkeypatch):
+    """Mock RBAC middleware to always allow requests in tests."""
+    from registry.middleware import rbac
+
+    # Mock to always return True (allow all requests)
+    def mock_has_permission(self, user_scopes, path, method):
+        return True
+
+    monkeypatch.setattr(rbac.ScopePermissionMiddleware, "_has_permission", mock_has_permission)
+    yield
+
+
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for tests."""

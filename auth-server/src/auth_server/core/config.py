@@ -7,32 +7,13 @@ All environment variables are loaded here and accessed through the global `setti
 
 import logging
 import secrets
-from pathlib import Path
 
-import yaml
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from registry_pkgs import load_scopes_config
+
 from ..utils.config_loader import get_oauth2_config
-
-
-def load_scopes_config() -> dict:
-    """Load the scopes configuration from the configured scopes.yml file.
-
-    Returns:
-        Parsed YAML as dict, or empty dict on error.
-    """
-    try:
-        scopes_file = settings.scopes_file_path
-        with open(scopes_file) as f:
-            config = yaml.safe_load(f)
-            # Ensure at least an empty mapping structure
-            if not isinstance(config, dict):
-                return {}
-            return config
-    except Exception:
-        # Logging is not directly available here; re-raise or return empty
-        return {}
 
 
 class AuthSettings(BaseSettings):
@@ -70,9 +51,6 @@ class AuthSettings(BaseSettings):
 
     # ==================== CORS Configuration ====================
     cors_origins: str = "*"  # Comma-separated list of allowed origins, or "*" for all
-
-    # ==================== Scopes Configuration ====================
-    scopes_config_path: str | None = None
 
     # ==================== Auth Provider ====================
     auth_provider: str = "keycloak"  # cognito, keycloak, entra
@@ -121,24 +99,17 @@ class AuthSettings(BaseSettings):
     # Claude Desktop will automatically re-initiate the OAuth flow (the user may be prompted again
     # by the provider, but no manual restart of the flow is required).
 
-    # ==================== Paths ====================
+    # ==================== Configuration Properties ====================
 
     @property
     def scopes_config(self) -> dict:
-        """Get the scopes configuration from scopes.yml file."""
+        """Get the scopes configuration using centralized loader from registry_pkgs."""
         return load_scopes_config()
 
     @property
     def oauth2_config(self) -> dict:
         """Get the OAuth2 configuration from oauth2_providers.yml file."""
         return get_oauth2_config()
-
-    @property
-    def scopes_file_path(self) -> Path:
-        """Get path to scopes.yml file."""
-        if self.scopes_config_path:
-            return Path(self.scopes_config_path)
-        return Path(__file__).parent.parent / "scopes.yml"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

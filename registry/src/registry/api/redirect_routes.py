@@ -11,11 +11,12 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import URLSafeTimedSerializer
 
 from auth_server.core.config import settings as auth_settings
-from registry.services.user_service import user_service
-from registry.utils.crypto_utils import generate_access_token, verify_refresh_token
+from auth_server.utils.security_mask import map_groups_to_scopes
+from registry_pkgs import load_scopes_config
 
 from ..core.config import settings
-from ..utils.crypto_utils import generate_token_pair
+from ..services.user_service import user_service
+from ..utils.crypto_utils import generate_access_token, generate_token_pair, verify_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -325,9 +326,7 @@ async def refresh_token(
 
         # If no scopes but has groups, map groups to scopes
         if not scopes and groups:
-            from auth_server.utils.security_mask import map_groups_to_scopes
-
-            scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+            scopes = map_groups_to_scopes(groups, load_scopes_config())
             logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
 
         role = refresh_claims.get("role", "user")

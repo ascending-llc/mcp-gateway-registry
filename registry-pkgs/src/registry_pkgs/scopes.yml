@@ -7,30 +7,6 @@
 # - register-user: create servers and agents, cannot share
 # - register-read-only: read-only access to servers and agents
 
-## server:
-#  /servers (GET)
-#  /servers/{server_id} (GET)
-#  /servers/stats (GET)
-#  /servers/connection (POST)
-#  /servers/{server_id}/tools (GET)
-#  /servers/{server_id}/refresh (POST)
-#  /servers (POST)
-#  /servers/{server_id} (PATCH)
-#  /servers/{server_id} (DELETE)
-#  /servers/{server_id}/toggle (POST)
-#
-## agent:
-#  /agents (GET)
-#  /agents/{path} (GET)
-#  /agents/{path}/rating (GET)
-#  /agents/discover (POST)
-#  /agents/discover/semantic (POST)
-#  /agents/{path}/health (POST)
-#  /agents/register (POST)
-#  /agents/{path} (PUT)
-#  /agents/{path} (DELETE)
-#  /agents/{path}/toggle (POST)
-#  /agents/{path}/rate (POST)
 group_mappings:
   jarvis-registry-admin:
     - servers-read
@@ -39,6 +15,10 @@ group_mappings:
     - server-write
     - servers-share
     - agents-share
+    - system-ops
+    - user-read
+    - acl-read
+    - acl-write
   jarvis-registry-power-user:
     - servers-read
     - agents-read
@@ -46,25 +26,29 @@ group_mappings:
     - server-write
     - servers-share
     - agents-share
-  jarvis-register-user:
+    - user-read
+    - acl-read
+    - acl-write
+  jarvis-registry-user:
     - servers-read
     - agents-read
     - agents-write
     - server-write
-  jarvis-register-read-only:
+    - user-read
+    - acl-read
+  jarvis-registry-read-only:
     - servers-read
     - agents-read
+    - user-read
+    - acl-read
 
 servers-read:
   - action: list_servers # name
     method: GET  # GET,POST or *
-    endpoint: /servers # *  求交集
+    endpoint: /servers
   - action: get_server
     method: GET
     endpoint: /servers/{server_id}
-  - action: servers_stats
-    method: GET
-    endpoint: /servers/stats
   - action: servers_connection
     method: POST
     endpoint: /servers/connection
@@ -135,3 +119,74 @@ agents-share:
   - action: share_agent
     method: PUT
     endpoint: /permissions/agent/{resource_id}
+
+user-read:
+  - action: get_user_info
+    method: GET
+    endpoint: /auth/me
+  - action: get_version
+    method: GET
+    endpoint: /version
+  # Token management
+  - action: generate_user_token
+    method: POST
+    endpoint: /tokens/generate
+  # MCP connection management
+  - action: reinitialize_server
+    method: POST
+    endpoint: /mcp/{server_id}/reinitialize
+  - action: get_connection_status
+    method: GET
+    endpoint: /mcp/connection/status
+  - action: get_server_connection_status
+    method: GET
+    endpoint: /mcp/connection/status/{server_id}
+  - action: get_auth_values
+    method: GET
+    endpoint: /mcp/{server_name}/auth-values
+  # MCP OAuth management
+  - action: oauth_discover
+    method: GET
+    endpoint: /mcp/oauth/discover
+  - action: oauth_initiate
+    method: GET
+    endpoint: /mcp/{server_id}/oauth/initiate
+  - action: oauth_callback
+    method: GET
+    endpoint: /mcp/{server_path}/oauth/callback
+  - action: get_oauth_tokens
+    method: GET
+    endpoint: /mcp/oauth/tokens/{flow_id}
+  - action: get_oauth_status
+    method: GET
+    endpoint: /mcp/oauth/status/{flow_id}
+  - action: cancel_oauth
+    method: POST
+    endpoint: /mcp/oauth/cancel/{server_id}
+  - action: refresh_oauth_token
+    method: POST
+    endpoint: /mcp/oauth/refresh/{server_id}
+  - action: delete_oauth_token
+    method: DELETE
+    endpoint: /mcp/oauth/token/{server_id}
+
+acl-read:
+  - action: search_principals
+    method: GET
+    endpoint: /permissions/search-principals
+  - action: get_resource_permissions
+    method: GET
+    endpoint: /permissions/{resource_type}/{resource_id}
+
+acl-write:
+  - action: update_resource_permissions
+    method: PUT
+    endpoint: /permissions/{resource_type}/{resource_id}
+
+system-ops:
+  - action: get_server_stats
+    method: GET
+    endpoint: /servers/stats
+  - action: get_admin_tokens
+    method: GET
+    endpoint: /admin/tokens

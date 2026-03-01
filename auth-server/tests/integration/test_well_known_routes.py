@@ -197,11 +197,18 @@ class TestWellKnownRoutes:
 
         scopes = data["scopes_supported"]
 
+        # Expect actual scope names from scopes.yml, not group names
         expected_scopes = {
-            "registry-admin",
-            "registry-power-user",
-            "register-user",
-            "register-read-only",
+            "servers-read",
+            "agents-read",
+            "agents-write",
+            "server-write",
+            "servers-share",
+            "agents-share",
+            "system-ops",
+            "user-read",
+            "acl-read",
+            "acl-write",
         }
 
         assert expected_scopes.issubset(set(scopes))
