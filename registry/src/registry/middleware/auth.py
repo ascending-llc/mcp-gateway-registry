@@ -1,18 +1,17 @@
 import base64
 import logging
 import os
-from typing import Any
 
-import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from itsdangerous import BadSignature, SignatureExpired
+from jwt import ExpiredSignatureError, InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import compile_path
 
-from registry_pkgs.core.scopes import load_scopes_config, map_groups_to_scopes
+from registry.auth.dependencies import UserContextDict
+from registry_pkgs.core.jwt_utils import decode_jwt, get_token_kid
+from registry_pkgs.core.scopes import map_groups_to_scopes
 
-from ..auth.dependencies import signer
 from ..core.config import settings
 from ..core.telemetry_decorators import AuthMetricsContext
 from ..utils.crypto_utils import verify_access_token
@@ -89,7 +88,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         )
 
         # Pre-load scopes config once for performance (cached at module level)
-        self.scopes_config = load_scopes_config()
+        self.scopes_config = settings.scopes_config
         logger.info(f"Scopes config loaded with {len(self.scopes_config.get('group_mappings', {}))} group mappings")
 
     def _compile_patterns(self, patterns: list[str]) -> list[tuple]:
@@ -171,7 +170,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return True
         return False
 
-    async def _authenticate(self, request: Request) -> dict[str, Any]:
+    async def _authenticate(self, request: Request) -> UserContextDict:
         """
         Unified authentication logic (simple and efficient)
 
@@ -195,7 +194,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return user_context
         raise AuthenticationError("JWT or session authentication required")
 
-    def _try_basic_auth(self, request: Request) -> dict[str, Any] | None:
+    def _try_basic_auth(self, request: Request) -> UserContextDict | None:
         """Basic authentication for internal endpoints"""
         try:
             # Get Authorization header
@@ -237,7 +236,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Basic auth failed: {e}")
             return None
 
-    def _try_jwt_auth(self, request: Request) -> dict[str, Any] | None:
+    def _try_jwt_auth(self, request: Request) -> UserContextDict | None:
         """JWT token authentication for /api/servers endpoints"""
         try:
             # Get Authorization header
@@ -251,19 +250,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 logger.debug("Empty JWT token after split")
                 return None
 
-            # JWT validation parameters from auth_server/server.py
             # Extract kid from header first
-            kid = None
             try:
-                unverified_header = jwt.get_unverified_header(access_token)
-                kid = unverified_header.get("kid")
-
-                # Check if this is our self-signed token
-                if kid and kid != settings.JWT_SELF_SIGNED_KID:
-                    logger.debug(f"JWT token has wrong kid: {kid}, expected: {settings.JWT_SELF_SIGNED_KID}")
-                    return None
+                kid = get_token_kid(access_token)
             except Exception as e:
                 logger.debug(f"Failed to decode JWT header: {e}")
+                return None
+
+            # Check if this is our self-signed token; reject tokens with an unrecognised explicit kid
+            if kid and kid != settings.JWT_SELF_SIGNED_KID:
+                logger.debug(f"JWT token has wrong kid: {kid}, expected: {settings.JWT_SELF_SIGNED_KID}")
                 return None
 
             # Validate and decode token
@@ -271,41 +267,26 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 # For self-signed tokens (kid='mcp-self-signed'), skip audience validation
                 # because the audience is now the resource URL (RFC 8707 Resource Indicators)
                 # which varies per endpoint (/proxy/mcpgw, /proxy/server2, etc.)
-                # Issuer validation provides sufficient security for self-signed tokens
-                is_self_signed = kid == settings.JWT_SELF_SIGNED_KID
+                # Issuer validation provides sufficient security for self-signed tokens.
+                is_self_signed_token = kid == settings.JWT_SELF_SIGNED_KID
 
-                decode_options = {
-                    "verify_exp": True,
-                    "verify_iat": True,
-                    "verify_iss": True,
-                    "verify_aud": not is_self_signed,  # Skip aud check for self-signed tokens
-                }
-
-                decode_kwargs = {
-                    "algorithms": ["HS256"],
-                    "issuer": settings.JWT_ISSUER,
-                    "options": decode_options,
-                    "leeway": 30,  # 30 second leeway for clock skew
-                }
-
-                # Only validate audience for provider tokens (not self-signed)
-                if not is_self_signed:
-                    decode_kwargs["audience"] = settings.JWT_AUDIENCE
-                else:
+                if is_self_signed_token:
                     logger.info("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
 
-                claims = jwt.decode(access_token, settings.secret_key, **decode_kwargs)
+                claims = decode_jwt(
+                    access_token,
+                    settings.secret_key,
+                    issuer=settings.JWT_ISSUER,
+                    audience=None if is_self_signed_token else settings.JWT_AUDIENCE,
+                )
                 logger.info(
                     f"JWT claims validated: sub={claims.get('sub')}, aud={claims.get('aud')}, scope={claims.get('scope')}"
                 )
-            except jwt.ExpiredSignatureError:
+            except ExpiredSignatureError:
                 logger.debug("JWT token has expired")
                 return None
-            except jwt.InvalidTokenError as e:
+            except InvalidTokenError as e:
                 logger.debug(f"Invalid JWT token: {e}")
-                return None
-            except Exception as e:
-                logger.debug(f"JWT validation error: {e}")
                 return None
 
             # Extract user information from claims
@@ -323,7 +304,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                scopes = map_groups_to_scopes(groups, self.scopes_config)
+                scopes = map_groups_to_scopes(groups)
                 logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
 
             # Verify we have at least some scopes
@@ -357,7 +338,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"JWT auth failed: {e}")
             return None
 
-    async def _try_session_auth(self, request: Request) -> dict[str, Any] | None:
+    async def _try_session_auth(self, request: Request) -> UserContextDict | None:
         """JWT-based session authentication from httpOnly cookie"""
         try:
             session_cookie = request.cookies.get(settings.session_cookie_name)
@@ -384,7 +365,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                scopes = map_groups_to_scopes(groups, self.scopes_config)
+                scopes = map_groups_to_scopes(groups)
                 logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
 
             logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
@@ -403,37 +384,20 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"JWT session auth failed: {e}")
             return None
 
-    def _parse_session_data(self, session_cookie: str) -> dict[str, Any] | None:
-        try:
-            data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
-            if not data.get("username"):
-                return None
-            return data
-
-        except SignatureExpired as e:
-            logger.warning(f"Session cookie expired: {e}")
-            return None
-        except BadSignature as e:
-            logger.warning(f"Session cookie has invalid signature (likely from different server): {e}")
-            return None
-        except Exception as e:
-            logger.warning(f"Session cookie parse error: {e}")
-            return None
-
     def _build_user_context(
         self,
-        username: str,
+        username: str | None,
         groups: list,
         scopes: list,
         auth_method: str,
         provider: str,
-        auth_source: str = None,
-        user_id: str = None,
-    ) -> dict[str, Any]:
+        auth_source: str,
+        user_id: str | None = None,
+    ) -> UserContextDict:
         """
         Construct the complete user context (from the original enhanced_auth logic).
         """
-        user_context = {
+        user_context: UserContextDict = {
             "user_id": user_id,
             "username": username,
             "groups": groups,

@@ -8,7 +8,6 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-import jwt
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -93,20 +92,6 @@ def check_rate_limit(username: str) -> bool:
     # Increment counter
     user_token_generation_counts[rate_key] = current_count + 1
     return True
-
-
-def _create_self_signed_jwt(access_payload: dict) -> str:
-    try:
-        headers = {
-            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
-            "typ": "JWT",
-            "alg": "HS256",
-        }
-        access_token = jwt.encode(access_payload, settings.secret_key, algorithm="HS256", headers=headers)
-        return access_token
-    except Exception as e:
-        logger.error(f"Failed to create self-signed JWT: {e}")
-        raise ValueError(f"Failed to create self-signed JWT: {e}")
 
 
 @asynccontextmanager

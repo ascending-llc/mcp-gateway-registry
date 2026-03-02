@@ -10,7 +10,6 @@ from fastapi import APIRouter, Cookie, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import URLSafeTimedSerializer
 
-from registry_pkgs import load_scopes_config
 from registry_pkgs.core.scopes import map_groups_to_scopes
 
 from ..core.config import settings
@@ -324,7 +323,7 @@ async def refresh_token(
 
         # If no scopes but has groups, map groups to scopes
         if not scopes and groups:
-            scopes = map_groups_to_scopes(groups, load_scopes_config())
+            scopes = map_groups_to_scopes(groups)
             logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
 
         role = refresh_claims.get("role", "user")

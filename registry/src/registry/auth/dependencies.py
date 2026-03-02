@@ -1,10 +1,8 @@
 import logging
-from typing import Annotated, Any
+from typing import Annotated, Any, TypedDict
 
 from fastapi import Depends, HTTPException, Request, status
 from itsdangerous import URLSafeTimedSerializer
-
-from registry_pkgs.core.scopes import load_scopes_config
 
 from ..core.config import settings
 
@@ -13,11 +11,42 @@ logger = logging.getLogger(__name__)
 signer = URLSafeTimedSerializer(settings.secret_key)
 
 
-def get_current_user(request: Request) -> dict[str, Any]:
+class UserContextDict(TypedDict):
     """
-        Get current authenticated user from request state
-        This function replaces the need for Depends(enhanced_auth) or
-    Depends(nginx_proxied_auth) in route handlers.
+    UserContextDict is the type of the dictionary set as the Request.state.user attribute for each incoming request
+    **to a non-public route** by the UnifiedAuthMiddlware.
+    If a FastAPI path operation function needs to access this UserContextDict information, it can retrieve this dictionary
+    by asking for the `user_context: CurrentUser` dependency injection.
+    If an MCP tool/resource/prompt handler function needs it, it can retrieve this dictionary by asking for the
+    `ctx: Context` dependency injection (`mcp.server.fastmcp.Context`) and then accessing
+    `ctx.request_context.request.state.user`.
+    """
+
+    # From the "user_id" field of the JWT claim.
+    user_id: str | None
+
+    # From the "sub" field of the JWT claim.
+    username: str | None
+
+    # From the "groups" field of the JWT claim.
+    groups: list[str]
+
+    # Converted from the "scope" field of the JWT claim, or mapped from the "groups" field if "scope" doesn't exist.
+    scopes: list[str]
+
+    # "jwt" if the JWT token comes from the Authorization header. "traditional" if from browser cookie.
+    auth_method: str
+
+    # "jwt" if the JWT token comes from the Authorization header. "local" if from browser cookie.
+    provider: str
+
+    # "jwt_auth" if the JWT token comes from the Authorization header. "jwt_session_auth" if from browser cookie.
+    auth_source: str
+
+
+def get_current_user(request: Request) -> UserContextDict:
+    """
+    Get current authenticated user from request state.
 
     Args:
         request: FastAPI request object
@@ -34,12 +63,11 @@ def get_current_user(request: Request) -> dict[str, Any]:
 
 
 # Use this type to annotate a parameter of a path operation function or its dependency function so that
-# FastAPI extracts the `user` attribute (typed as dict[str, Any]) of the current request and pass it to the parameter.
+# FastAPI extracts the `user` attribute (typed as UserContextDict) of the current request and pass it to the parameter.
 # Since it's Python 3.12, we use the new type statement instead of typing.TypeAlias
-type CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
-
+type CurrentUser = Annotated[UserContextDict, Depends(get_current_user)]
 # Global scopes configuration loaded from centralized loader
-SCOPES_CONFIG = load_scopes_config()
+SCOPES_CONFIG = settings.scopes_config
 
 
 def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:
@@ -53,7 +81,7 @@ def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:
         List of MCP scopes
     """
     scopes = []
-    group_mappings = SCOPES_CONFIG.get("group_mappings", {})
+    group_mappings = settings.scopes_config.get("group_mappings", {})
 
     for group in groups:
         if group in group_mappings:

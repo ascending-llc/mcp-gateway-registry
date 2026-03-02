@@ -18,9 +18,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Import provider factory to get JWKS from actual provider
-from ..providers.factory import get_auth_provider
-
 
 def _get_auth_server_urls():
     """
@@ -63,7 +60,6 @@ async def oauth_authorization_server_metadata():
     Per RFC 8414, the issuer MUST be at the root origin without any prefix.
     Operational endpoints use auth_server_url which includes the prefix.
     """
-    from registry_pkgs.core.scopes import get_scopes_config
 
     base_url, auth_server_url = _get_auth_server_urls()
 
@@ -71,7 +67,7 @@ async def oauth_authorization_server_metadata():
     auth_provider = settings.auth_provider
 
     # Load scopes from scopes.yml
-    scopes_config = get_scopes_config()
+    scopes_config = settings.scopes_config
 
     # Get all scope names (excluding group_mappings)
     scope_names = [key for key in scopes_config if key != "group_mappings"]
@@ -140,31 +136,7 @@ async def jwks_endpoint():
     """
     JSON Web Key Set (JWKS) endpoint.
 
-    Provides public keys for JWT token verification. This endpoint forwards
-    the JWKS from the configured authentication provider (Cognito, Keycloak,
-    Entra ID) based on AUTH_PROVIDER environment variable.
-
-    For self-signed tokens (HS256), returns empty key set since symmetric
-    keys are not publicly exposed.
+    This auth-server issues only HS256 self-signed tokens, which use a symmetric secret key.
+    Symmetric keys are not be publicly exposed, so it returns an empty key set.
     """
-    try:
-        # Get the configured authentication provider
-        auth_provider = get_auth_provider()
-
-        # Get JWKS from the provider (Cognito, Keycloak, Entra ID, etc.)
-        # Each provider implementation fetches JWKS from their respective endpoints:
-        # - Cognito: https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/jwks.json
-        # - Keycloak: {keycloak_url}/realms/{realm}/protocol/openid-connect/certs
-        # - Entra ID: https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys
-        jwks = auth_provider.get_jwks()
-
-        logger.debug(f"Returning JWKS from {auth_provider.__class__.__name__} provider")
-        return jwks
-
-    except Exception as e:
-        logger.error(f"Failed to retrieve JWKS from provider: {e}")
-
-        # Fallback: Return empty key set for self-signed tokens
-        # HS256 uses symmetric keys (SECRET_KEY), which should not be publicly exposed
-        logger.warning("Falling back to empty JWKS (for self-signed HS256 tokens)")
-        return {"keys": []}
+    return {"keys": []}

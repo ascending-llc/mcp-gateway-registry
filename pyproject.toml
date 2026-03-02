@@ -74,7 +74,6 @@ version = { shell = """
 printf "\n📦 Workspace versions:\n" && \
 printf '   Root          → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
 printf '   registry-pkgs → %s\n' $(grep -m1 '^version = ' registry-pkgs/pyproject.toml | cut -d'\"' -f2) && \
-printf '   auth-utils    → %s\n' $(grep -m1 '^version = ' auth-utils/pyproject.toml | cut -d'\"' -f2) && \
 printf '   registry      → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
 printf '   auth-server   → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
 printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2)""", help = "Show versions across all projects" }
@@ -95,10 +94,6 @@ test-auth-server-cov = { shell = "cd auth-server && uv run poe test-cov" }
 # registry-pkgs tests
 test-registry-pkgs = { shell = "cd registry-pkgs && uv run poe test" }
 test-registry-pkgs-cov = { shell = "cd registry-pkgs && uv run poe test-cov" }
-
-# auth-utils tests
-test-auth-utils = { shell = "cd auth-utils && uv run poe test" }
-test-auth-utils-cov = { shell = "cd auth-utils && uv run poe test-cov" }
 
 # Linting and formatting
 lint = { shell = "uv run ruff check .", help = "Run ruff linter" }

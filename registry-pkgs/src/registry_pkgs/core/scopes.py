@@ -119,21 +119,6 @@ def load_scopes_config() -> dict[str, Any]:
         raise
 
 
-def get_scopes_config() -> dict[str, Any]:
-    """Get the cached scopes configuration.
-
-    This is a convenience function that calls load_scopes_config().
-    Use this when you want to be explicit about retrieving cached config.
-
-    Returns:
-        Dictionary containing scopes configuration
-
-    Raises:
-        Same exceptions as load_scopes_config()
-    """
-    return load_scopes_config()
-
-
 def map_groups_to_scopes(groups: list[str]) -> list[str]:
     """Map user groups to OAuth2 scopes based on the scopes configuration.
 
@@ -149,8 +134,7 @@ def map_groups_to_scopes(groups: list[str]) -> list[str]:
         >>> map_groups_to_scopes(["jarvis-registry-admin"])
         ["servers-read", "agents-read", "agents-write", ...]
     """
-    scopes_config = get_scopes_config()
-    group_mappings = scopes_config.get("group_mappings", {})
+    group_mappings = _SCOPES_CONFIG.get("group_mappings", {})
     scopes: list[str] = []
 
     for group in groups:

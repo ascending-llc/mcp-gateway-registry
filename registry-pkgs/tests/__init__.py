@@ -1,1 +1,1 @@
-"""Tests for shared packages (models and database utilities)."""
+"""Tests for shared packages (models, database, and auth utilities)."""
