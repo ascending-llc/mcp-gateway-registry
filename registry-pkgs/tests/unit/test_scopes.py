@@ -231,34 +231,6 @@ class TestLoadScopesConfig:
                 assert any("2 group mappings" in call for call in info_calls)
 
 
-class TestGetScopesConfig:
-    """Tests for get_scopes_config() convenience function."""
-
-    def test_returns_same_as_load_scopes_config(self, temp_scopes_file, reset_scopes_cache):
-        """Test that get_scopes_config returns same result as load_scopes_config."""
-        with patch("registry_pkgs.core.scopes.settings") as mock_settings:
-            mock_settings.SCOPES_CONFIG_PATH = str(temp_scopes_file)
-
-            result1 = scopes.load_scopes_config()
-
-            # Reset cache to test fresh load
-            scopes._SCOPES_CONFIG = None
-
-            result2 = scopes.get_scopes_config()
-
-            assert result1 == result2
-
-    def test_uses_cached_config(self, temp_scopes_file, reset_scopes_cache):
-        """Test that get_scopes_config uses cached configuration."""
-        with patch("registry_pkgs.core.scopes.settings") as mock_settings:
-            mock_settings.SCOPES_CONFIG_PATH = str(temp_scopes_file)
-
-            result1 = scopes.get_scopes_config()
-            result2 = scopes.get_scopes_config()
-
-            assert result1 is result2  # Same object instance
-
-
 class TestScopesConfigStructure:
     """Tests for scopes configuration structure validation."""
 

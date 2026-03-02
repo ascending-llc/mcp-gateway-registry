@@ -20,7 +20,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from jwt import ExpiredSignatureError, InvalidTokenError
 
-from auth_utils.jwt_utils import (
+from registry_pkgs.core.jwt_utils import (
     build_jwt_payload,
     decode_jwt,
     encode_jwt,

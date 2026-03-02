@@ -15,7 +15,7 @@ import httpx
 from fastmcp import Context
 from fastmcp.server.dependencies import get_http_request
 
-from auth_utils.jwt_utils import build_jwt_payload, encode_jwt
+from registry_pkgs.core.jwt_utils import build_jwt_payload, encode_jwt
 
 logger = logging.getLogger(__name__)
 

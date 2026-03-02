@@ -6,7 +6,7 @@ from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from jwt import DecodeError, ExpiredSignatureError, InvalidIssuerError, InvalidSignatureError
 
-from auth_utils.jwt_utils import decode_jwt
+from registry_pkgs.core.jwt_utils import decode_jwt
 
 from ..config import settings
 

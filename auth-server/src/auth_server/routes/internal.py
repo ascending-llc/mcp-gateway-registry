@@ -8,13 +8,13 @@ import logging
 import time
 import uuid
 
-import jwt
 from fastapi import APIRouter, HTTPException
+
+from registry_pkgs.core.jwt_utils import build_jwt_payload, encode_jwt
 
 from ..core.config import settings
 from ..models import GenerateTokenRequest, GenerateTokenResponse
 from ..utils.security_mask import hash_username
-from auth_utils.jwt_utils import build_jwt_payload, encode_jwt
 
 logger = logging.getLogger(__name__)
 

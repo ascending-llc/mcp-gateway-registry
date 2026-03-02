@@ -119,6 +119,13 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test successfully rating an agent."""
+        from registry.auth.dependencies import get_current_user
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
+
         with (
             patch.object(
                 agent_service,
@@ -140,12 +147,21 @@ class TestRateAgent:
             data = response.json()
             assert data["message"] == "Rating added successfully"
 
+        app.dependency_overrides.clear()
+
     def test_rate_agent_not_found(
         self,
         mock_user_context: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test rating a non-existent agent returns 404."""
+        from registry.auth.dependencies import get_current_user
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
+
         with patch.object(
             agent_service,
             "get_agent_info",
@@ -158,6 +174,8 @@ class TestRateAgent:
 
             assert response.status_code == status.HTTP_404_NOT_FOUND
             assert "not found" in response.json()["detail"].lower()
+
+        app.dependency_overrides.clear()
 
     def test_rate_agent_no_access(
         self,
@@ -205,6 +223,13 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating with invalid type returns validation error."""
+        from registry.auth.dependencies import get_current_user
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
+
         with patch.object(
             agent_service,
             "get_agent_info",
@@ -217,6 +242,8 @@ class TestRateAgent:
 
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
+        app.dependency_overrides.clear()
+
     def test_rate_agent_missing_rating(
         self,
         mock_user_context: dict[str, Any],
@@ -224,6 +251,13 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating without rating field returns validation error."""
+        from registry.auth.dependencies import get_current_user
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
+
         with patch.object(
             agent_service,
             "get_agent_info",
@@ -236,6 +270,8 @@ class TestRateAgent:
 
             assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
+        app.dependency_overrides.clear()
+
     def test_rate_agent_update_rating_fails(
         self,
         mock_user_context: dict[str, Any],
@@ -243,6 +279,13 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test handling when update_rating fails."""
+        from registry.auth.dependencies import get_current_user
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
+
         with (
             patch.object(
                 agent_service,
@@ -264,6 +307,8 @@ class TestRateAgent:
             assert response.status_code == status.HTTP_400_BAD_REQUEST
             assert "Failed to save rating" in response.json()["detail"]
 
+        app.dependency_overrides.clear()
+
     def test_rate_agent_with_different_ratings(
         self,
         mock_user_context: dict[str, Any],
@@ -271,6 +316,13 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating an agent with different valid rating values."""
+        from registry.auth.dependencies import get_current_user
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
+
         for rating_value in [1, 2, 3, 4, 5]:
             with (
                 patch.object(
@@ -292,6 +344,8 @@ class TestRateAgent:
                 assert response.status_code == status.HTTP_200_OK
                 assert response.json()["message"] == "Rating added successfully"
 
+        app.dependency_overrides.clear()
+
     def test_rate_agent_path_normalization(
         self,
         mock_user_context: dict[str, Any],
@@ -299,6 +353,13 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test that agent path is normalized correctly."""
+        from registry.auth.dependencies import get_current_user
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
+
         with (
             patch.object(
                 agent_service,
@@ -329,13 +390,17 @@ class TestRateAgent:
             assert call_args[2] == 5  # rating
             # Username can be either 'admin' or 'testuser' depending on the client
 
+        app.dependency_overrides.clear()
+
     def test_rate_agent_private_agent_by_owner(
         self,
         mock_user_context: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test that agent owner can rate their private agent."""
-        # Create private agent owned by testadmin (matches mock_auth_middleware username)
+        from registry.auth.dependencies import get_current_user
+
+        # Create private agent owned by testuser
         private_agent = AgentCard(
             protocolVersion="1.0",
             name="Private Agent",
@@ -346,10 +411,15 @@ class TestRateAgent:
             tags=["test"],
             skills=[],
             visibility="private",
-            registeredBy="testadmin",  # Same as mock_auth_middleware username
+            registeredBy="testuser",  # Same as mock_user_context username
             numStars=0.0,
             ratingDetails=[],
         )
+
+        def _mock_auth(request: Request):
+            return mock_user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with (
             patch.object(
@@ -370,11 +440,24 @@ class TestRateAgent:
 
             assert response.status_code == status.HTTP_200_OK
 
+        app.dependency_overrides.clear()
+
     def test_rate_agent_group_restricted_with_access(
         self,
         authenticated_client,
     ) -> None:
         """Test rating a group-restricted agent when user is in allowed group."""
+        from registry.auth.dependencies import get_current_user
+
+        # User in the allowed group
+        user_context = {
+            "username": "groupuser",
+            "groups": ["allowed-group"],
+            "is_admin": False,
+            "ui_permissions": {},
+            "accessible_agents": ["all"],
+        }
+
         # Group-restricted agent
         group_agent = AgentCard(
             protocolVersion="1.0",
@@ -391,6 +474,11 @@ class TestRateAgent:
             numStars=0.0,
             ratingDetails=[],
         )
+
+        def _mock_auth(request: Request):
+            return user_context
+
+        app.dependency_overrides[get_current_user] = _mock_auth
 
         with (
             patch.object(
@@ -410,3 +498,5 @@ class TestRateAgent:
             )
 
             assert response.status_code == status.HTTP_200_OK
+
+        app.dependency_overrides.clear()

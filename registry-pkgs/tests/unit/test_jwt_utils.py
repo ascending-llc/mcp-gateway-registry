@@ -6,7 +6,7 @@ from typing import Any
 import jwt
 import pytest
 
-from auth_utils.jwt_utils import (
+from registry_pkgs.core.jwt_utils import (
     build_jwt_payload,
     decode_jwt,
     encode_jwt,

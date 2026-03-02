@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
 
-from auth_utils.jwt_utils import build_jwt_payload, encode_jwt, get_token_kid
+from registry_pkgs.core.jwt_utils import build_jwt_payload, encode_jwt, get_token_kid
 from registry_pkgs.core.scopes import map_groups_to_scopes
 
 from ..core.config import settings

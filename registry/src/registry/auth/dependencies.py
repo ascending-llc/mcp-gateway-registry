@@ -4,8 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from itsdangerous import URLSafeTimedSerializer
 
-from auth_utils.models import UserContextDict
-from registry_pkgs.core.scopes import load_scopes_config
+from registry_pkgs.core.models import UserContextDict
 
 from ..core.config import settings
 
@@ -38,10 +37,6 @@ def get_current_user(request: Request) -> UserContextDict:
 type CurrentUser = Annotated[UserContextDict, Depends(get_current_user)]
 
 
-# Global scopes configuration loaded from centralized loader
-SCOPES_CONFIG = load_scopes_config()
-
-
 def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:
     """
     Map Cognito groups to MCP scopes using the scopes.yml configuration.
@@ -53,7 +48,7 @@ def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:
         List of MCP scopes
     """
     scopes = []
-    group_mappings = SCOPES_CONFIG.get("group_mappings", {})
+    group_mappings = settings.scopes_config.get("group_mappings", {})
 
     for group in groups:
         if group in group_mappings:
