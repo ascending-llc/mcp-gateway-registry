@@ -1001,6 +1001,109 @@ class TestConfigBuilders:
 
         assert updated["headers"] == {"X-New": "2"}
 
+    def test_update_oauth_to_dcr_removes_oauth_config(self):
+        """Test updating from OAuth to DCR (oauth=None) removes oauth object from config."""
+        from registry.schemas.server_api_schemas import ServerUpdateRequest
+        from registry.services.server_service import _update_config_from_request
+
+        # Start with existing OAuth configuration
+        existing_config = {
+            "title": "Test Server",
+            "url": "https://test.example.com",
+            "oauth": {
+                "authorization_url": "https://oauth.example.com/authorize",
+                "token_url": "https://oauth.example.com/token",
+                "client_id": "test-client",
+                "scope": "read write",
+            },
+        }
+
+        # Update to DCR (oauth=None)
+        data = ServerUpdateRequest(oauth=None)
+
+        updated = _update_config_from_request(existing_config, data, server_name="Test Server")
+
+        # OAuth should be removed from config
+        assert "oauth" not in updated
+        # Other fields should remain unchanged
+        assert updated["title"] == "Test Server"
+        assert updated["url"] == "https://test.example.com"
+
+    def test_update_oauth_to_apikey_removes_oauth_adds_apikey(self):
+        """Test updating from OAuth to apiKey replaces oauth with apiKey."""
+        from registry.schemas.server_api_schemas import ServerUpdateRequest
+        from registry.services.server_service import _update_config_from_request
+
+        # Start with existing OAuth configuration
+        existing_config = {
+            "title": "Test Server",
+            "url": "https://test.example.com",
+            "oauth": {
+                "authorization_url": "https://oauth.example.com/authorize",
+                "token_url": "https://oauth.example.com/token",
+            },
+        }
+
+        # Update to apiKey
+        data = ServerUpdateRequest(apiKey={"key": "test-api-key", "authorization_type": "bearer"})
+
+        updated = _update_config_from_request(existing_config, data, server_name="Test Server")
+
+        # OAuth should be removed, apiKey should be added
+        assert "oauth" not in updated
+        assert "apiKey" in updated
+        assert updated["apiKey"]["key"] == "test-api-key"
+        assert updated["apiKey"]["authorization_type"] == "bearer"
+
+    def test_update_apikey_to_dcr_removes_apikey(self):
+        """Test updating from apiKey to DCR (apiKey=None) removes apiKey object."""
+        from registry.schemas.server_api_schemas import ServerUpdateRequest
+        from registry.services.server_service import _update_config_from_request
+
+        # Start with existing apiKey configuration
+        existing_config = {
+            "title": "Test Server",
+            "url": "https://test.example.com",
+            "apiKey": {"key": "existing-key", "authorization_type": "bearer"},
+        }
+
+        # Update to DCR (apiKey=None)
+        data = ServerUpdateRequest(apiKey=None)
+
+        updated = _update_config_from_request(existing_config, data, server_name="Test Server")
+
+        # apiKey should be removed from config
+        assert "apiKey" not in updated
+        # Other fields should remain unchanged
+        assert updated["title"] == "Test Server"
+        assert updated["url"] == "https://test.example.com"
+
+    def test_update_oauth_merge_preserves_existing_fields(self):
+        """Test updating OAuth config merges with existing OAuth fields."""
+        from registry.schemas.server_api_schemas import ServerUpdateRequest
+        from registry.services.server_service import _update_config_from_request
+
+        # Start with existing OAuth configuration
+        existing_config = {
+            "oauth": {
+                "authorization_url": "https://oauth.example.com/authorize",
+                "token_url": "https://oauth.example.com/token",
+                "client_id": "old-client-id",
+                "scope": "read write",
+            }
+        }
+
+        # Partial update (only client_id)
+        data = ServerUpdateRequest(oauth={"client_id": "new-client-id"})
+
+        updated = _update_config_from_request(existing_config, data, server_name="Test Server")
+
+        # Should merge: client_id updated, other fields preserved
+        assert updated["oauth"]["client_id"] == "new-client-id"
+        assert updated["oauth"]["authorization_url"] == "https://oauth.example.com/authorize"
+        assert updated["oauth"]["token_url"] == "https://oauth.example.com/token"
+        assert updated["oauth"]["scope"] == "read write"
+
 
 @pytest.mark.unit
 @pytest.mark.servers
