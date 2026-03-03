@@ -432,9 +432,11 @@ def _update_config_from_request(
         existing_apikey = config.pop("apiKey", {})
         if "oauth" in update_dict:
             oauth_update = update_dict.pop("oauth")
-
-            # Only save if not None and not empty
-            if oauth_update:
+            # If oauth is explicitly None, remove it (DCR - Direct Connection Required)
+            if oauth_update is None:
+                pass
+            # Otherwise, merge/update oauth config
+            elif oauth_update:
                 # Merge new oauth with existing oauth (upsert operation)
                 if isinstance(existing_oauth, dict) and isinstance(oauth_update, dict):
                     existing_oauth.update(oauth_update)
