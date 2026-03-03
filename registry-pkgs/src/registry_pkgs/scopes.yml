@@ -134,6 +134,10 @@ user-read:
   - action: generate_user_token
     method: POST
     endpoint: /tokens/generate
+  # Search functionality
+  - action: search
+    method: GET
+    endpoint: /search/*
   # MCP connection management
   - action: reinitialize_server
     method: POST
