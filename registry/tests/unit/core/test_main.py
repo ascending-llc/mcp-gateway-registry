@@ -53,7 +53,11 @@ class TestMainApplication:
             mock_federation.config.is_any_federation_enabled.return_value = False
             mock_get_federation.return_value = mock_federation
 
-            mock_mcp_app = AsyncMock()
+            # Mock session_manager.run() as an async context manager
+            mock_session_manager = AsyncMock()
+            mock_session_manager.__aenter__ = AsyncMock(return_value=None)
+            mock_session_manager.__aexit__ = AsyncMock(return_value=None)
+            mock_mcp_app.session_manager.run.return_value = mock_session_manager
 
             yield {
                 "vector_service": mock_vector_service,
