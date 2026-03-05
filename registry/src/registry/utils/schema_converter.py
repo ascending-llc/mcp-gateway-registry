@@ -4,34 +4,33 @@ Schema field naming conversion utilities
 Handles conversion between snake_case (API) and camelCase (MongoDB)
 """
 
-import re
 from typing import Any
+
+import inflection
 
 
 def to_camel_case(snake_str: str) -> str:
     """
-    Convert snake_case to camelCase
+    Convert snake_case to camelCase using inflection library
 
     Examples:
         server_name -> serverName
         num_tools -> numTools
         created_at -> createdAt
     """
-    components = snake_str.split("_")
-    return components[0] + "".join(x.title() for x in components[1:])
+    return inflection.camelize(snake_str, uppercase_first_letter=False)
 
 
 def to_snake_case(camel_str: str) -> str:
     """
-    Convert camelCase to snake_case
+    Convert camelCase to snake_case using inflection library
 
     Examples:
         serverName -> server_name
         numTools -> num_tools
         createdAt -> created_at
     """
-    snake_str = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", camel_str)
-    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", snake_str).lower()
+    return inflection.underscore(camel_str)
 
 
 def convert_dict_keys_to_camel(data: dict[str, Any] | Any) -> dict[str, Any] | Any:

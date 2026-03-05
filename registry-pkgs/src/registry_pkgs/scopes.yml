@@ -101,9 +101,6 @@ agents-write:
   - action: sync_wellknown
     method: POST
     endpoint: /agents/{agent_id}/wellknown
-  - action: rate_agent
-    method: POST
-    endpoint: /agents/{agent_id}/rate
 
 server-write:
   - action: register_service

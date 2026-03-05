@@ -12,18 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-
-def to_camel_case(snake_str: str) -> str:
-    """
-    Convert snake_case to camelCase for Pydantic alias generation
-
-    Examples:
-        server_name -> serverName
-        num_tools -> numTools
-        created_at -> createdAt
-    """
-    components = snake_str.split("_")
-    return components[0] + "".join(x.title() for x in components[1:])
+from registry.utils.schema_converter import to_camel_case
 
 
 class APIBaseModel(BaseModel):
