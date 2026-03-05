@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from httpx import AsyncClient, Limits, Timeout
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from ..core.config import settings
 from .core.event_store import InMemoryEventStore
@@ -107,12 +108,20 @@ def create_mcp_app() -> FastMCP:
     Returns:
         Configured FastMCP application instance
     """
+    # Configure transport security settings from environment variables
+    transport_security_settings = TransportSecuritySettings(
+        enable_dns_rebinding_protection=settings.mcpgw_enable_dns_rebinding_protection,
+        allowed_hosts=[host.strip() for host in settings.mcpgw_allowed_hosts.split(",") if host.strip()],
+        allowed_origins=[origin.strip() for origin in settings.mcpgw_allowed_origins.split(",") if origin.strip()],
+    )
+
     mcp = FastMCP(
         "JarvisRegistry",
         json_response=True,
         lifespan=mcp_lifespan,
         event_store=InMemoryEventStore(max_events_per_stream=50, max_streams=500),
         instructions=_SYSTEM_INSTRUCTIONS,
+        transport_security=transport_security_settings,
     )
 
     return mcp
