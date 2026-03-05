@@ -28,13 +28,13 @@ from registry.schemas.a2a_agent_api_schemas import (
     convert_to_list_item,
     convert_to_skills_response,
 )
+from registry.schemas.acl_schema import ResourcePermissions
 from registry.schemas.errors import ErrorCode, create_error_detail
 from registry.services.a2a_agent_service import a2a_agent_service
 from registry.services.access_control_service import acl_service
 from registry_pkgs.database.decorators import use_transaction
 from registry_pkgs.models._generated import PrincipalType, ResourceType
 from registry_pkgs.models.enums import RoleBits
-from registry.schemas.acl_schema import ResourcePermissions
 
 logger = logging.getLogger(__name__)
 

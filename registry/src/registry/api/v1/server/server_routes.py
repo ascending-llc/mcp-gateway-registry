@@ -13,6 +13,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 
+from registry.schemas.acl_schema import ResourcePermissions
 from registry_pkgs.database.decorators import use_transaction
 from registry_pkgs.models._generated import PrincipalType, ResourceType
 from registry_pkgs.models.enums import RoleBits
@@ -41,7 +42,7 @@ from ....services.oauth.connection_status_service import (
 )
 from ....services.oauth.mcp_service import get_mcp_service
 from ....services.server_service import server_service_v1
-from registry.schemas.acl_schema import ResourcePermissions
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
