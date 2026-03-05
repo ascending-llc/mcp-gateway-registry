@@ -202,18 +202,9 @@ system-ops:
     endpoint: /admin/tokens
 
 mcp-proxy-ops:
-  - action: execute_tool
-    method: POST
-    endpoint: /proxy/tools/call
-  - action: read_resource
-    method: POST
-    endpoint: /proxy/resources/read
   - action: delete_session
     method: DELETE
     endpoint: /proxy/sessions/{server_id}
-  - action: execute_prompt
-    method: POST
-    endpoint: /proxy/prompts/execute
   - action: connection_mcp
-    method: GET,POST,PUT,DELETE,PATCH,OPTIONS
-    endpoint: /proxy/{full_path:path}
+    method: GET,POST
+    endpoint: /proxy/mcpgw/mcp
