@@ -41,7 +41,7 @@ from ....services.oauth.connection_status_service import (
 )
 from ....services.oauth.mcp_service import get_mcp_service
 from ....services.server_service import server_service_v1
-
+from registry.schemas.acl_schema import ResourcePermissions
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -396,10 +396,6 @@ async def create_server(
         )
 
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
-
-        # ✅ 直接构造OWNER权限（避免事务内查询问题）
-        # 创建者被授予OWNER权限，包含所有操作权限
-        from registry.schemas.acl_schema import ResourcePermissions
 
         perms = ResourcePermissions(
             VIEW=True,

@@ -34,6 +34,7 @@ from registry.services.access_control_service import acl_service
 from registry_pkgs.database.decorators import use_transaction
 from registry_pkgs.models._generated import PrincipalType, ResourceType
 from registry_pkgs.models.enums import RoleBits
+from registry.schemas.acl_schema import ResourcePermissions
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,6 @@ async def create_agent(
         )
 
         logger.info(f"Granted user {user_id} OWNER permissions for agent {agent.id}")
-        from registry.schemas.acl_schema import ResourcePermissions
 
         permissions = ResourcePermissions(
             VIEW=True,
