@@ -14,10 +14,19 @@ from httpx_sse import EventSource
 from mcp.server.fastmcp import Context
 from mcp.server.session import ServerSession
 from mcp.shared.exceptions import McpError
-from mcp.types import AnyUrl, CallToolResult, EmbeddedResource, ErrorData, TextContent, TextResourceContents
+from mcp.types import (
+    AnyUrl,
+    CallToolResult,
+    EmbeddedResource,
+    ErrorData,
+    InitializeRequestParams,
+    TextContent,
+    TextResourceContents,
+)
 from pydantic import Field
 
 from ...auth.dependencies import UserContextDict
+from ...auth.oauth.types import ClientBranding, StateMetadata
 from ...core.mcp_client import get_session, initialize_mcp_session
 from ...services.server_service import server_service_v1
 from ...utils.otel_metrics import record_server_request
@@ -134,6 +143,21 @@ async def _downstream_tool_call(
         raise InternalServerException(msg) from exc
 
 
+def _get_state_metadata(client_params: InitializeRequestParams | None) -> StateMetadata | None:
+    if client_params is None:
+        return None
+
+    name = client_params.clientInfo.name.strip().lower()
+    if "vscode" in name:
+        return {"client_branding": ClientBranding.VSCODE}
+    elif "claude" in name:
+        return {"client_branding": ClientBranding.CLAUDE}
+    elif "cursor" in name:
+        return {"client_branding": ClientBranding.CURSOR}
+    else:
+        return None
+
+
 async def execute_tool_impl(
     ctx: Context[ServerSession, McpAppContext],
     tool_name: str,
@@ -189,6 +213,8 @@ async def execute_tool_impl(
         # Check if server requires initialization (default True for safety/compatibility)
         requires_init = server.config.get("requiresInit", True)
 
+        state_metadata = _get_state_metadata(ctx.session.client_params)
+
         # Session management logic - only if server requires initialization
         session_key = None
         stored_session_id = None
@@ -210,6 +236,7 @@ async def execute_tool_impl(
                     server=server,
                     auth_context=user_context,
                     additional_headers=additional_headers,
+                    state_metadata=state_metadata,
                 )
                 # Get transport type from server config (default to streamable-http)
                 transport_type = server.config.get("type", "streamable-http")
@@ -224,7 +251,10 @@ async def execute_tool_impl(
 
         # Build final authenticated headers with session ID (if applicable)
         headers = await build_authenticated_headers(
-            server=server, auth_context=user_context, additional_headers=additional_headers
+            server=server,
+            auth_context=user_context,
+            additional_headers=additional_headers,
+            state_metadata=state_metadata,
         )
 
         # Build MCP JSON-RPC request

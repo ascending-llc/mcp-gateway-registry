@@ -177,7 +177,8 @@ async def oauth_callback(
 
         # 3. Decode flow_id from state (state format: flow_id##security_token)
         try:
-            flow_id, security_token = mcp_service.oauth_service.flow_manager.decode_state(state)
+            state_dict = mcp_service.oauth_service.flow_manager.decode_state(state)
+            flow_id, security_token = state_dict["flow_id"], state_dict["security_token"]
             logger.info(
                 f"[MCP OAuth] Callback received: server={server_path}, "
                 f"flow_id={flow_id}, code={'present' if code else 'missing'}, "

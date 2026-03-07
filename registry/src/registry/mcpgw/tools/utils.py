@@ -25,6 +25,7 @@ from pydantic import ValidationError
 from registry_pkgs.models.extended_mcp_server import MCPServerDocument
 
 from ...auth.dependencies import UserContextDict, effective_scopes_from_context
+from ...auth.oauth.types import StateMetadata
 from ...schemas.errors import AuthenticationError, OAuthReAuthRequiredError, OAuthTokenError
 from ...services.server_service import build_complete_headers_for_server
 from ..exceptions import InternalServerException, UrlElicitationRequiredException
@@ -143,7 +144,11 @@ def parse_data_field(
 
 
 async def build_authenticated_headers(
-    server: MCPServerDocument, auth_context: UserContextDict, additional_headers: dict[str, str] | None = None
+    server: MCPServerDocument,
+    auth_context: UserContextDict,
+    additional_headers: dict[str, str] | None = None,
+    *,
+    state_metadata: StateMetadata | None = None,
 ) -> dict[str, str]:
     """
     Build complete headers with authentication for MCP server requests.
@@ -188,7 +193,7 @@ async def build_authenticated_headers(
     # Build complete authentication headers (OAuth, apiKey, custom)
     try:
         user_id = auth_context["user_id"]  # Already validated above
-        auth_headers = await build_complete_headers_for_server(server, user_id)
+        auth_headers = await build_complete_headers_for_server(server, user_id, state_metadata=state_metadata)
 
         # Merge auth headers with case-insensitive override logic
         # Protected headers that won't be overridden by auth headers
