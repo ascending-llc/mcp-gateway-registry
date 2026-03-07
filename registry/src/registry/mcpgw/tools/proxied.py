@@ -15,10 +15,11 @@ from uuid import UUID
 from httpx_sse import EventSource
 from mcp.server.fastmcp import Context
 from mcp.server.session import ServerSession
-from mcp.shared.exceptions import McpError
+from mcp.shared.exceptions import McpError, UrlElicitationRequiredError
 from mcp.types import (
     AnyUrl,
     CallToolResult,
+    ElicitRequestURLParams,
     EmbeddedResource,
     ErrorData,
     InitializeRequestParams,
@@ -39,9 +40,10 @@ from ..exceptions import (
     InternalServerException,
     McpGatewayException,
     MisimplementedSpecException,
+    UrlElicitationRequiredException,
 )
 from .types import get_meta_field
-from .utils import build_authenticated_headers, build_target_url, forward_notification, parse_data_field
+from .utils import build_authenticated_headers, build_target_url, forward_notification, parse_data_field, session_store
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +321,37 @@ async def execute_tool_impl(
             return CallToolResult.model_validate(resp_obj["result"])
         else:
             raise MisimplementedSpecException("Downstream MCP did not return a JSONRPCResponse message.")
+    except UrlElicitationRequiredException as exc:
+        auth_url, server_name = exc.auth_url, exc.server_name
+
+        template = (
+            f"In order to make tool calls to the '{server_name}' MCP server, the client must first perform "
+            "out-of-band re-authorization in a browser window. Please direct the client to open the {} "
+            "in a browser window, finish re-authorization, and come back to retry the same tool call again."
+        )
+
+        elicitation_id = _get_elicitation_id(auth_url)
+        if elicitation_id is not None and _support_url_elicitation(ctx.session.client_params):
+            msg = template.format("provided URL")
+
+            logger.info(f"sending back the URL mode elicitation error response with ID {elicitation_id}.")
+
+            session_store.append(elicitation_id, ctx.session)
+
+            raise UrlElicitationRequiredError(
+                message=msg,
+                elicitations=[ElicitRequestURLParams(elicitationId=elicitation_id, url=auth_url, message=msg)],
+            )
+
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=template.format(f"URL `{auth_url}`"),
+                )
+            ],
+            isError=True,
+        )
     except (McpGatewayException, McpError):
         # These exceptions have been logged and should just bubble up to the caller as a way of communication.
         raise

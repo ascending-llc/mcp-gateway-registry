@@ -3,6 +3,7 @@ Dynamic MCP server proxy routes.
 """
 
 import logging
+from collections import deque
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -222,7 +223,9 @@ async def build_authenticated_headers(
     except OAuthReAuthRequiredError as exc:
         logger.debug(f"in-session re-auth required for server {exc.server_name}")
 
-        raise UrlElicitationRequiredException("OAuth re-authentication required", auth_url=exc.auth_url)
+        raise UrlElicitationRequiredException(
+            "OAuth re-authentication required", auth_url=exc.auth_url, server_name=exc.server_name
+        )
     except (OAuthTokenError, AuthenticationError):
         logger.exception("unexpected OAuth token exception")
 
@@ -259,3 +262,40 @@ def build_target_url(server: MCPServerDocument, remaining_path: str = "") -> str
         base_url += "/"
 
     return base_url + remaining_path
+
+
+class SessionStore:
+    _max_session_count: int
+    _mapping: dict[str, ServerSession]
+    _elicitation_order: deque[str]
+
+    def __int__(self, max_session_count: int = 100):
+        self._max_session_count = max_session_count
+        self._mapping = {}
+        self._elicitation_order = deque(maxlen=self._max_session_count)
+
+    def append(self, elicitation_id: str, session: ServerSession):
+        # The elicitation_id to session mapping cannot be updated once set.
+        # In practice, elicitation_id is a newly generated UUID for each unique elicitation request,
+        # so normally we will not see the same ID being appended again.
+        if elicitation_id in self._mapping:
+            return
+
+        # If we are at max capacity, pop the oldest elicitation_id and its corresponding session.
+        if len(self._mapping) >= self._max_session_count:
+            oldest_id = self._elicitation_order.popleft()
+            self._mapping.pop(oldest_id, None)
+
+        self._mapping[elicitation_id] = session
+        self._elicitation_order.append(elicitation_id)
+
+    def pop(self, elicitation_id: str) -> ServerSession | None:
+        try:
+            self._elicitation_order.remove(elicitation_id)
+        except Exception:
+            logger.exception(f"trying to remove elicitation_id {elicitation_id} that doesn't exist in the deque.")
+
+        return self._mapping.pop(elicitation_id, None)
+
+
+session_store = SessionStore()
