@@ -72,6 +72,7 @@ class FlowStateManager:
         """
         return f"{user_id}:{server_id}"
 
+    @classmethod
     def encode_state(
         self, flow_id: str, security_token: str | None = None, *, state_metadata: StateMetadata | None = None
     ) -> str:
@@ -92,6 +93,7 @@ class FlowStateManager:
 
         return state
 
+    @classmethod
     def decode_state(self, state: str) -> OAuthFlowState:
         """Decode state parameter"""
 
