@@ -265,6 +265,14 @@ def build_target_url(server: MCPServerDocument, remaining_path: str = "") -> str
 
 
 class SessionStore:
+    """
+    Global singleton object that implements the elicitation_id to ServerSession mapping.
+    Before a tool call handler function returns a URL mode elicitation, it sets the map from elicitation_id to session.
+    When the /oauth/callback route receives the callback request, on success, it retrieves the session object
+    via elicitation_id (passed via the "state" parameter) and uses the session to make a best-effort notification
+    to client on elicitation completion.
+    """
+
     _max_session_count: int
     _mapping: dict[str, ServerSession]
     _elicitation_order: deque[str]

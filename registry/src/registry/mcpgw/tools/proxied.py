@@ -149,6 +149,11 @@ async def _downstream_tool_call(
 
 
 def _get_state_metadata(client_params: InitializeRequestParams | None) -> StateMetadata:
+    """
+    Check if client is one of the three brands: VS Code, Claude, and Cursor.
+    If yes, relay this info all the way to frontend for it to use the deep link technology with them.
+    """
+
     if client_params is None:
         return {"client_branding": ClientBranding.UNRECOGNIZED}
 
@@ -164,6 +169,10 @@ def _get_state_metadata(client_params: InitializeRequestParams | None) -> StateM
 
 
 def _support_url_elicitation(client_params: InitializeRequestParams | None) -> bool:
+    """
+    Report if MCP client supports URL mode elicitation by checking its capabilities.
+    """
+
     if client_params is None:
         return False
 
@@ -175,6 +184,10 @@ def _support_url_elicitation(client_params: InitializeRequestParams | None) -> b
 
 
 def _get_elicitation_id(auth_url: str) -> str | None:
+    """
+    Parse the auth_url to obtain the elicitation_id from the "state" query string parameter.
+    """
+
     try:
         parsed = urlsplit(auth_url)
 
@@ -216,6 +229,7 @@ async def execute_tool_impl(
     Returns: CallToolResult
 
     Raises:
+        UrlElicitationRequiredError: The `mcp` package turns this into a URL mode elicitation error response to client.
         McpGatewayException: All classifiable exceptions are raised as subclasses of McpGatewayException.
             Caller of this function should filter on the subclasses to deal with specific exceptions differently.
             E.g. catch a UrlElicitationRequiredException in order to return a URL mode elicitation to client.
@@ -342,6 +356,10 @@ async def execute_tool_impl(
                 message=msg,
                 elicitations=[ElicitRequestURLParams(elicitationId=elicitation_id, url=auth_url, message=msg)],
             )
+
+        logger.info(
+            "Client doesn't support URL mode elicitation. Sending back a tool call result to prompt LLM for re-auth."
+        )
 
         return CallToolResult(
             content=[

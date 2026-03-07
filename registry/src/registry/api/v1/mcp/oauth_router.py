@@ -249,8 +249,8 @@ async def oauth_callback(
 
         # 6. If the flow started from an URL mode elicitation by mcpgw, make a best-effort notification to client.
         client_branding: ClientBranding | None = None
-        if "meta" in state_dict and "elicitation_id" in state_dict["meta"]:
-            try:
+        try:
+            if "meta" in state_dict and "elicitation_id" in state_dict["meta"]:
                 client_branding = state_dict["meta"].get("client_branding", None)
 
                 elicitation_id = state_dict["meta"]["elicitation_id"]
@@ -265,8 +265,8 @@ async def oauth_callback(
                     )
                 else:
                     logger.info(f"could not find session object for elicitation_id {elicitation_id}")
-            except Exception:
-                logger.exception("failed to send elicitation/complete notification to client.")
+        except Exception:
+            logger.exception("failed to send elicitation/complete notification to client.")
 
         # 7. Redirect to success page
         return _redirect_to_page(request, server_path, flag="success", client_branding=client_branding)
