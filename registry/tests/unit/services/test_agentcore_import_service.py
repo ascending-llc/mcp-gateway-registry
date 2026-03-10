@@ -20,6 +20,15 @@ class _FakeRepo:
         return {"indexed_tools": 1, "failed_tools": 0, "deleted": 0}
 
 
+class _FakeA2ARepo:
+    def __init__(self):
+        self.synced = []
+
+    async def sync_agent_to_vector_db(self, agent, is_delete=True):
+        self.synced.append((agent, is_delete))
+        return {"indexed": 1, "failed": 0, "deleted": 0}
+
+
 class _FakeAclService:
     def __init__(self):
         self.grants = []
@@ -76,11 +85,16 @@ class TestAgentCoreImportService:
         return _FakeAclService()
 
     @pytest.fixture
-    def service(self, repo, acl):
+    def a2a_repo(self):
+        return _FakeA2ARepo()
+
+    @pytest.fixture
+    def service(self, repo, acl, a2a_repo):
         return AgentCoreImportService(
             federation_client=SimpleNamespace(),
             acl_service_instance=acl,
             mcp_server_repo=repo,
+            a2a_agent_repo=a2a_repo,
         )
 
     async def test_import_single_server_dry_run_created(self, service, monkeypatch):
@@ -208,6 +222,72 @@ class TestAgentCoreImportService:
         assert len(acl.grants) == 2
         assert acl.grants[0]["perm_bits"] == 15  # OWNER
         assert acl.grants[1]["perm_bits"] == 1  # VIEW
+
+    async def test_create_a2a_agent_syncs_to_vector_db(self, service, a2a_repo):
+        owner_id = PydanticObjectId()
+        discovered = SimpleNamespace(
+            id=PydanticObjectId(),
+            path="/agent/a2a",
+            card=SimpleNamespace(name="a2a-new", model_dump=lambda **_: {"name": "a2a-new"}),
+            tags=["agentcore"],
+            status="active",
+            isEnabled=True,
+            wellKnown=None,
+            federationId="fed-a2a-new",
+            federationGatewayArn="arn:aws:bedrock-agentcore:us-east-1:123:gateway/test",
+            federationMetadata={"sourceType": "runtime"},
+            federationSource=FederationSource.AGENTCORE,
+            createdAt=datetime.now(UTC),
+            updatedAt=datetime.now(UTC),
+            author=None,
+            insert=AsyncMock(),
+        )
+
+        created = await service._create_a2a_agent(
+            discovered_agent=discovered,
+            owner_id=owner_id,
+            viewer_id=None,
+        )
+
+        assert created is discovered
+        discovered.insert.assert_awaited_once()
+        assert len(a2a_repo.synced) == 1
+        assert a2a_repo.synced[0][0] is discovered
+        assert a2a_repo.synced[0][1] is False
+
+    async def test_update_a2a_agent_syncs_to_vector_db(self, service, a2a_repo):
+        existing = SimpleNamespace(
+            id=PydanticObjectId(),
+            path="/agent/a2a",
+            card=SimpleNamespace(name="a2a-upd", model_dump=lambda **_: {"name": "a2a-upd-old"}),
+            tags=["old"],
+            status="inactive",
+            isEnabled=False,
+            wellKnown=None,
+            federationId="fed-a2a-upd",
+            federationGatewayArn="arn:old",
+            federationMetadata={"v": 1},
+            save=AsyncMock(),
+        )
+        new_data = SimpleNamespace(
+            path="/agent/a2a",
+            card=SimpleNamespace(name="a2a-upd", model_dump=lambda **_: {"name": "a2a-upd-new"}),
+            tags=["new"],
+            status="active",
+            isEnabled=True,
+            wellKnown=None,
+            federationId="fed-a2a-upd",
+            federationGatewayArn="arn:new",
+            federationMetadata={"v": 2},
+        )
+
+        changes = await service._update_a2a_agent(existing=existing, new_data=new_data)
+
+        assert changes
+        existing.save.assert_awaited_once()
+        assert len(a2a_repo.synced) == 1
+        assert a2a_repo.synced[0][0] is existing
+        assert a2a_repo.synced[0][1] is True
 
     @staticmethod
     def _async_return(value):

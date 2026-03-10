@@ -15,6 +15,7 @@ from registry_pkgs.database.decorators import get_current_session, use_transacti
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 from registry_pkgs.models._generated import PrincipalType, ResourceType
 from registry_pkgs.models.enums import FederationSource, PermissionBits, RoleBits
+from registry_pkgs.vector.repositories.a2a_agent_repository import get_a2a_agent_repo
 from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 logger = logging.getLogger(__name__)
@@ -30,15 +31,20 @@ class AgentCoreImportService:
     - AgentCore is source of truth for updates
     """
 
+    _IGNORE_FEDERATION_METADATA_KEYS = {"createdAt", "lastUpdatedAt"}
+    _IGNORE_WELL_KNOWN_KEYS = {"lastSyncAt"}
+
     def __init__(
         self,
         federation_client: AgentCoreFederationClient | None = None,
         acl_service_instance=None,
         mcp_server_repo=None,
+        a2a_agent_repo=None,
     ):
         self.federation_client = federation_client or AgentCoreFederationClient()
         self.acl_service = acl_service_instance or acl_service
         self.mcp_server_repo = mcp_server_repo or get_mcp_server_repo()
+        self.a2a_agent_repo = a2a_agent_repo or get_a2a_agent_repo()
 
     async def import_from_runtime(
         self,
@@ -326,7 +332,7 @@ class AgentCoreImportService:
             dry_run=False,
         )
 
-        await self.mcp_server_repo.sync_server_to_vector_db(created_server, is_delete=False)
+        await self.mcp_server_repo.sync_server_to_vector_db(created_server)
         return created_server
 
     async def _import_single_a2a_agent(
@@ -430,6 +436,7 @@ class AgentCoreImportService:
             viewer_id=viewer_id,
             dry_run=False,
         )
+        await self.a2a_agent_repo.sync_agent_to_vector_db(discovered_agent, is_delete=False)
         return discovered_agent
 
     async def _update_a2a_agent(
@@ -455,6 +462,8 @@ class AgentCoreImportService:
         existing.federationMetadata = new_data.federationMetadata
         existing.updatedAt = datetime.now(UTC)
         await existing.save(session=self._get_current_session_or_none())
+        if detected_changes:
+            await self.a2a_agent_repo.sync_agent_to_vector_db(existing, is_delete=True)
         return detected_changes
 
     async def _update_server(
@@ -508,9 +517,15 @@ class AgentCoreImportService:
         self._append_change(
             changes, "federationGatewayArn", existing.federationGatewayArn, new_data.federationGatewayArn
         )
-        self._append_change(
-            changes, "federationMetadata", existing.federationMetadata or {}, new_data.federationMetadata or {}
+        old_metadata = self._normalize_for_diff(
+            existing.federationMetadata or {},
+            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
         )
+        new_metadata = self._normalize_for_diff(
+            new_data.federationMetadata or {},
+            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
+        )
+        self._append_change(changes, "federationMetadata", old_metadata, new_metadata)
         return changes
 
     def _append_change(self, changes: list[str], field: str, old: Any, new: Any) -> None:
@@ -527,15 +542,35 @@ class AgentCoreImportService:
         self._append_change(changes, "tags", sorted(existing.tags or []), sorted(new_data.tags or []))
         self._append_change(changes, "status", existing.status, new_data.status)
         self._append_change(changes, "isEnabled", existing.isEnabled, new_data.isEnabled)
-        old_wk = existing.wellKnown.model_dump(mode="json") if existing.wellKnown else None
-        new_wk = new_data.wellKnown.model_dump(mode="json") if new_data.wellKnown else None
+        old_wk = (
+            self._normalize_for_diff(
+                existing.wellKnown.model_dump(mode="json"),
+                ignore_keys=self._IGNORE_WELL_KNOWN_KEYS,
+            )
+            if existing.wellKnown
+            else None
+        )
+        new_wk = (
+            self._normalize_for_diff(
+                new_data.wellKnown.model_dump(mode="json"),
+                ignore_keys=self._IGNORE_WELL_KNOWN_KEYS,
+            )
+            if new_data.wellKnown
+            else None
+        )
         self._append_change(changes, "wellKnown", old_wk, new_wk)
         self._append_change(
             changes, "federationGatewayArn", existing.federationGatewayArn, new_data.federationGatewayArn
         )
-        self._append_change(
-            changes, "federationMetadata", existing.federationMetadata or {}, new_data.federationMetadata or {}
+        old_metadata = self._normalize_for_diff(
+            existing.federationMetadata or {},
+            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
         )
+        new_metadata = self._normalize_for_diff(
+            new_data.federationMetadata or {},
+            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
+        )
+        self._append_change(changes, "federationMetadata", old_metadata, new_metadata)
         return changes
 
     def _to_json(self, value: Any) -> str:
@@ -543,6 +578,32 @@ class AgentCoreImportService:
             return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
         except Exception:
             return str(value)
+
+    def _normalize_for_diff(
+        self,
+        value: Any,
+        ignore_keys: set[str] | None = None,
+    ) -> Any:
+        """
+        Normalize nested payloads for stable diff comparison.
+        """
+        ignore_keys = ignore_keys or set()
+
+        if isinstance(value, dict):
+            normalized: dict[str, Any] = {}
+            for key in sorted(value.keys()):
+                if key in ignore_keys:
+                    continue
+                normalized[key] = self._normalize_for_diff(value[key], ignore_keys=ignore_keys)
+            return normalized
+
+        if isinstance(value, list):
+            return [self._normalize_for_diff(item, ignore_keys=ignore_keys) for item in value]
+
+        if isinstance(value, datetime):
+            return value.astimezone(UTC).isoformat()
+
+        return value
 
     async def _resolve_identities(
         self, user_id: str | None, dry_run: bool
