@@ -4,8 +4,7 @@ Pydantic Schemas for A2A Agent Management API v1
 These schemas define the request and response models for the
 A2A Agent Management endpoints based on the API documentation.
 
-All schemas use snake_case for API input/output and automatically
-convert to camelCase for MongoDB storage.
+All schemas use camelCase for API input/output and for MongoDB storage.
 """
 
 from datetime import datetime
@@ -27,8 +26,8 @@ class AgentSkillInput(APIBaseModel):
     description: str = Field(description="Detailed skill description")
     tags: list[str] = Field(default_factory=list, description="Skill categorization tags")
     examples: list[str] | None = Field(None, description="Usage examples")
-    input_modes: list[str] | None = Field(None, description="Skill-specific input MIME types")
-    output_modes: list[str] | None = Field(None, description="Skill-specific output MIME types")
+    inputModes: list[str] | None = Field(None, description="Skill-specific input MIME types")
+    outputModes: list[str] | None = Field(None, description="Skill-specific output MIME types")
     security: list[dict[str, list[str]]] | None = Field(None, description="Skill-level security requirements")
 
 
@@ -39,8 +38,8 @@ class AgentSkillOutput(APIBaseModel):
     name: str
     description: str
     tags: list[str] = []
-    input_modes: list[str] | None = None
-    output_modes: list[str] | None = None
+    inputModes: list[str] | None = None
+    outputModes: list[str] | None = None
 
 
 class AgentProviderInput(APIBaseModel):
@@ -62,9 +61,9 @@ class WellKnownInfo(APIBaseModel):
 
     enabled: bool
     url: str | None = None
-    last_sync_at: datetime | None = None
-    last_sync_status: str | None = None
-    last_sync_version: str | None = None
+    lastSyncAt: datetime | None = None
+    lastSyncStatus: str | None = None
+    lastSyncVersion: str | None = None
 
 
 # ==================== Request Schemas ====================
@@ -78,17 +77,17 @@ class AgentCreateRequest(APIBaseModel):
     description: str = Field(default="", description="Agent description")
     url: HttpUrl | str = Field(description="Agent endpoint URL")
     version: str = Field(description="Agent version")
-    protocol_version: str = Field(default="1.0", description="A2A protocol version")
+    protocolVersion: str = Field(default="1.0", description="A2A protocol version")
     capabilities: dict[str, Any] = Field(
         default_factory=dict, description="Feature declarations (e.g., {'streaming': true})"
     )
     skills: list[AgentSkillInput] = Field(default_factory=list, description="Agent capabilities (skills)")
-    security_schemes: dict[str, Any] = Field(default_factory=dict, description="Supported authentication methods")
-    preferred_transport: str = Field(default="HTTP+JSON", description="Preferred transport protocol")
-    default_input_modes: list[str] = Field(
+    securitySchemes: dict[str, Any] = Field(default_factory=dict, description="Supported authentication methods")
+    preferredTransport: str = Field(default="HTTP+JSON", description="Preferred transport protocol")
+    defaultInputModes: list[str] = Field(
         default_factory=lambda: ["text/plain"], description="Supported input MIME types"
     )
-    default_output_modes: list[str] = Field(
+    defaultOutputModes: list[str] = Field(
         default_factory=lambda: ["application/json"], description="Supported output MIME types"
     )
     provider: AgentProviderInput | None = Field(None, description="Agent provider information")
@@ -106,10 +105,10 @@ class AgentUpdateRequest(APIBaseModel):
     tags: list[str] | None = None
     enabled: bool | None = None
     capabilities: dict[str, Any] | None = None
-    security_schemes: dict[str, Any] | None = None
-    preferred_transport: str | None = None
-    default_input_modes: list[str] | None = None
-    default_output_modes: list[str] | None = None
+    securitySchemes: dict[str, Any] | None = None
+    preferredTransport: str | None = None
+    defaultInputModes: list[str] | None = None
+    defaultOutputModes: list[str] | None = None
     provider: AgentProviderInput | None = None
 
 
@@ -127,8 +126,8 @@ class PaginationMetadata(APIBaseModel):
 
     total: int
     page: int
-    per_page: int
-    total_pages: int
+    perPage: int
+    totalPages: int
 
 
 class AgentListItem(APIBaseModel):
@@ -140,15 +139,15 @@ class AgentListItem(APIBaseModel):
     description: str
     url: str
     version: str
-    protocol_version: str
+    protocolVersion: str
     tags: list[str]
-    num_skills: int
+    numSkills: int
     enabled: bool
     status: str
     permissions: ResourcePermissions
     author: str
-    created_at: datetime
-    updated_at: datetime
+    createdAt: datetime
+    updatedAt: datetime
 
 
 class AgentListResponse(APIBaseModel):
@@ -161,13 +160,13 @@ class AgentListResponse(APIBaseModel):
 class AgentStatsResponse(APIBaseModel):
     """Response schema for agent statistics"""
 
-    total_agents: int
-    enabled_agents: int
-    disabled_agents: int
-    by_status: dict[str, int]
-    by_transport: dict[str, int]
-    total_skills: int
-    average_skills_per_agent: float
+    totalAgents: int
+    enabledAgents: int
+    disabledAgents: int
+    byStatus: dict[str, int]
+    byTransport: dict[str, int]
+    totalSkills: int
+    averageSkillsPerAgent: float
 
 
 class AgentDetailResponse(APIBaseModel):
@@ -188,39 +187,39 @@ class AgentDetailResponse(APIBaseModel):
     description: str
     url: str
     version: str
-    protocol_version: str
+    protocolVersion: str
     capabilities: dict[str, Any]
     skills: list[AgentSkillOutput]
-    security_schemes: dict[str, Any]
-    preferred_transport: str
-    default_input_modes: list[str]
-    default_output_modes: list[str]
+    securitySchemes: dict[str, Any]
+    preferredTransport: str
+    defaultInputModes: list[str]
+    defaultOutputModes: list[str]
     provider: AgentProviderOutput | None = None
     tags: list[str]
     status: str
     enabled: bool
     permissions: ResourcePermissions
     author: str
-    well_known: WellKnownInfo | None = None
-    created_at: datetime
-    updated_at: datetime
+    wellKnown: WellKnownInfo | None = None
+    createdAt: datetime
+    updatedAt: datetime
 
 
 class AgentSkillsResponse(APIBaseModel):
     """Response schema for agent skills"""
 
-    agent_id: str
-    agent_name: str
+    agentId: str
+    agentName: str
     skills: list[AgentSkillOutput]
-    total_skills: int
+    totalSkills: int
 
 
 class WellKnownSyncResponse(APIBaseModel):
     """Response schema for well-known sync"""
 
     message: str
-    sync_status: str
-    synced_at: datetime
+    syncStatus: str
+    syncedAt: datetime
     version: str
     changes: list[str]
 
@@ -249,15 +248,15 @@ def convert_to_list_item(agent: Any, acl_permission: int | ResourcePermissions) 
         description=agent.card.description,
         url=str(agent.card.url),
         version=agent.card.version,
-        protocol_version=agent.card.protocol_version,
+        protocolVersion=agent.card.protocol_version,
         tags=agent.tags,
-        num_skills=len(agent.card.skills or []),
+        numSkills=len(agent.card.skills or []),
         enabled=agent.isEnabled,
         status=agent.status,
         permissions=permissions,
         author=str(agent.author),
-        created_at=agent.createdAt,
-        updated_at=agent.updatedAt,
+        createdAt=agent.createdAt,
+        updatedAt=agent.updatedAt,
     )
 
 
@@ -281,8 +280,8 @@ def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> 
             name=skill.name,
             description=skill.description,
             tags=skill.tags or [],
-            input_modes=skill.input_modes if hasattr(skill, "input_modes") else None,
-            output_modes=skill.output_modes if hasattr(skill, "output_modes") else None,
+            inputModes=skill.input_modes if hasattr(skill, "input_modes") else None,
+            outputModes=skill.output_modes if hasattr(skill, "output_modes") else None,
         )
         for skill in (agent.card.skills or [])
     ]
@@ -298,9 +297,9 @@ def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> 
         well_known_info = WellKnownInfo(
             enabled=agent.wellKnown.enabled,
             url=str(agent.wellKnown.url) if agent.wellKnown.url else None,
-            last_sync_at=agent.wellKnown.lastSyncAt,
-            last_sync_status=agent.wellKnown.lastSyncStatus,
-            last_sync_version=agent.wellKnown.lastSyncVersion,
+            lastSyncAt=agent.wellKnown.lastSyncAt,
+            lastSyncStatus=agent.wellKnown.lastSyncStatus,
+            lastSyncVersion=agent.wellKnown.lastSyncVersion,
         )
 
     capabilities_dict = {}
@@ -328,22 +327,22 @@ def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> 
         description=agent.card.description,
         url=str(agent.card.url),
         version=agent.card.version,
-        protocol_version=agent.card.protocol_version,
+        protocolVersion=agent.card.protocol_version,
         capabilities=capabilities_dict,
         skills=skills_output,
-        security_schemes=security_schemes_dict,
-        preferred_transport=agent.card.preferred_transport,
-        default_input_modes=agent.card.default_input_modes or [],
-        default_output_modes=agent.card.default_output_modes or [],
+        securitySchemes=security_schemes_dict,
+        preferredTransport=agent.card.preferred_transport,
+        defaultInputModes=agent.card.default_input_modes or [],
+        defaultOutputModes=agent.card.default_output_modes or [],
         provider=provider_output,
         tags=agent.tags,
         status=agent.status,
         enabled=agent.isEnabled,
         permissions=permissions,
         author=str(agent.author),
-        well_known=well_known_info,
-        created_at=agent.createdAt,
-        updated_at=agent.updatedAt,
+        wellKnown=well_known_info,
+        createdAt=agent.createdAt,
+        updatedAt=agent.updatedAt,
     )
 
 
@@ -355,15 +354,15 @@ def convert_to_skills_response(agent: Any) -> AgentSkillsResponse:
             name=skill.name,
             description=skill.description,
             tags=skill.tags or [],
-            input_modes=skill.input_modes if hasattr(skill, "input_modes") else None,
-            output_modes=skill.output_modes if hasattr(skill, "output_modes") else None,
+            inputModes=skill.input_modes if hasattr(skill, "input_modes") else None,
+            outputModes=skill.output_modes if hasattr(skill, "output_modes") else None,
         )
         for skill in (agent.card.skills or [])
     ]
 
     return AgentSkillsResponse(
-        agent_id=str(agent.id),
-        agent_name=agent.card.name,
+        agentId=str(agent.id),
+        agentName=agent.card.name,
         skills=skills_output,
-        total_skills=len(agent.card.skills or []),
+        totalSkills=len(agent.card.skills or []),
     )

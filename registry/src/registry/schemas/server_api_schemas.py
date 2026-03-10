@@ -4,8 +4,7 @@ Pydantic Schemas for Server Management API v1
 These schemas define the request and response models for the
 Server Management endpoints based on the API documentation.
 
-All schemas use snake_case for API input/output and automatically
-convert to camelCase for MongoDB storage.
+All schemas use camelCase for API input/output and for MongoDB storage.
 """
 
 from datetime import datetime
@@ -38,25 +37,25 @@ class ServerCreateRequest(APIBaseModel):
     description: str | None = Field(default="", description="Server description")
     url: str | None = Field(default=None, description="Backend proxy URL")
     tags: list[str] = Field(default_factory=list, description="Server tags")
-    num_tools: int = Field(default=0, description="Number of tools")
-    num_stars: int = Field(default=0, description="Star count")
-    is_python: bool = Field(default=False, description="Is Python-based")
+    numTools: int = Field(default=0, description="Number of tools")
+    numStars: int = Field(default=0, description="Star count")
+    isPython: bool = Field(default=False, description="Is Python-based")
     license: str | None = Field(default=None, description="License type")
-    auth_type: str | None = Field(default=None, description="Authentication type")
-    auth_provider: str | None = Field(default=None, description="Authentication provider")
-    supported_transports: list[str] = Field(default_factory=list, description="Supported transports")
+    authType: str | None = Field(default=None, description="Authentication type")
+    authProvider: str | None = Field(default=None, description="Authentication provider")
+    supportedTransports: list[str] = Field(default_factory=list, description="Supported transports")
     transport: str | dict[str, Any] | None = Field(default=None, description="Transport configuration (string or dict)")
     startup: bool = Field(default=False, description="Start on system startup")
-    chat_menu: bool = Field(default=True, description="Show in chat menu")
-    tool_list: list[dict[str, Any]] = Field(default_factory=list, description="List of tools")
-    icon_path: str | None = Field(default=None, description="Icon path")
+    chatMenu: bool = Field(default=True, description="Show in chat menu")
+    toolList: list[dict[str, Any]] = Field(default_factory=list, description="List of tools")
+    iconPath: str | None = Field(default=None, description="Icon path")
     timeout: int | None = Field(default=30000, description="Request timeout (ms)")
-    init_timeout: int | None = Field(default=60000, description="Init timeout (ms)")
-    server_instructions: str | None = Field(default=None, description="Usage instructions")
-    requires_oauth: bool = Field(default=False, description="Requires OAuth")
+    initTimeout: int | None = Field(default=60000, description="Init timeout (ms)")
+    serverInstructions: str | None = Field(default=None, description="Usage instructions")
+    requiresOauth: bool = Field(default=False, description="Requires OAuth")
     oauth: dict[str, Any] | None = Field(default=None, description="OAuth configuration")
-    custom_user_vars: dict[str, Any] | None = Field(default=None, description="Custom variables")
-    api_key: dict[str, Any] | None = Field(default=None, description="API Key authentication configuration")
+    customUserVars: dict[str, Any] | None = Field(default=None, description="Custom variables")
+    apiKey: dict[str, Any] | None = Field(default=None, description="API Key authentication configuration")
     headers: dict[str, Any] | None = Field(default=None, description="Custom headers (key/value pairs)")
     enabled: bool | None = Field(
         default=None, description="Whether the server is enabled (auto-set to False during registration)"
@@ -85,25 +84,25 @@ class ServerUpdateRequest(APIBaseModel):
     url: str | None = None
     type: str | None = None
     tags: list[str] | None = None
-    num_tools: int | None = None
-    num_stars: int | None = None
-    is_python: bool | None = None
+    numTools: int | None = None
+    numStars: int | None = None
+    isPython: bool | None = None
     license: str | None = None
-    auth_type: str | None = None
-    auth_provider: str | None = None
-    supported_transports: list[str] | None = None
+    authType: str | None = None
+    authProvider: str | None = None
+    supportedTransports: list[str] | None = None
     transport: str | dict[str, Any] | None = None
     startup: bool | None = None
-    chat_menu: bool | None = None
-    tool_list: list[dict[str, Any]] | None = None
-    icon_path: str | None = None
+    chatMenu: bool | None = None
+    toolList: list[dict[str, Any]] | None = None
+    iconPath: str | None = None
     timeout: int | None = None
-    init_timeout: int | None = None
-    server_instructions: str | None = None
-    requires_oauth: bool | None = None
+    initTimeout: int | None = None
+    serverInstructions: str | None = None
+    requiresOauth: bool | None = None
     oauth: dict[str, Any] | None = None
-    custom_user_vars: dict[str, Any] | None = None
-    api_key: dict[str, Any] | None = None
+    customUserVars: dict[str, Any] | None = None
+    apiKey: dict[str, Any] | None = None
     headers: dict[str, Any] | None = None
     status: str | None = None
     enabled: bool | None = None
@@ -153,7 +152,7 @@ class ToolSchema(APIBaseModel):
 
     name: str
     description: str
-    input_schema: dict[str, Any] | None = None
+    inputSchema: dict[str, Any] | None = None
 
     model_config = {"extra": "allow"}
 
@@ -162,29 +161,29 @@ class ServerListItemResponse(APIBaseModel):
     """Response schema for a server in the list"""
 
     id: str = Field(..., description="Server ID")
-    server_name: str = Field(..., description="Server name")
+    serverName: str = Field(..., description="Server name")
     title: str | None = Field(None, description="Display title for the server")
     description: str | None = None
     type: str | None = Field(None, description="Transport type (e.g., streamable-http, sse, stdio)")
     url: str | None = None
-    api_key: dict[str, Any] | None = None
+    apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
     headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
-    requires_oauth: bool = Field(False, description="Whether OAuth is required")
+    requiresOauth: bool = Field(False, description="Whether OAuth is required")
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
-    oauth_metadata: dict[str, Any] | None = Field(None, description="OAuth metadata from autodiscovery")
+    oauthMetadata: dict[str, Any] | None = Field(None, description="OAuth metadata from autodiscovery")
     tools: str | None = Field(None, description="Comma-separated list of tool names")
     author: str | None = Field(None, description="Author user ID")
     status: str = "active"
     path: str | None = Field(None, description="API path for this server")
     tags: list[str] = Field(default_factory=list)
-    num_tools: int = Field(0, description="Number of tools")
-    num_stars: int = Field(0, description="Star count")
+    numTools: int = Field(0, description="Number of tools")
+    numStars: int = Field(0, description="Star count")
     enabled: bool = Field(default=True, description="Whether the server is enabled")
-    last_connected: datetime | None = Field(None, description="Last connection timestamp")
-    created_at: datetime
-    updated_at: datetime
-    connection_state: str | None = Field(default=None, description="Connection state")
+    lastConnected: datetime | None = Field(None, description="Last connection timestamp")
+    createdAt: datetime
+    updatedAt: datetime
+    connectionState: str | None = Field(default=None, description="Connection state")
     error: str | None = Field(default=None, description="Error message if connection failed")
     permissions: ResourcePermissions | None = Field(
         default=None, description="Resolved ACL permissions for the current user"
@@ -196,15 +195,15 @@ class ServerListItemResponse(APIBaseModel):
     def _serialize(self, serializer, info):
         data = serializer(self)
         has_oauth = data.get("oauth") is not None
-        has_api_key = data.get("api_key") is not None
+        has_api_key = data.get("apiKey") is not None
 
         if has_oauth:
-            data.pop("api_key", None)
+            data.pop("apiKey", None)
         elif has_api_key:
             data.pop("oauth", None)
         else:
             data.pop("oauth", None)
-            data.pop("api_key", None)
+            data.pop("apiKey", None)
         return data
 
 
@@ -222,35 +221,35 @@ class ServerDetailResponse(APIBaseModel):
     """
 
     id: str
-    server_name: str = Field(..., description="Server name")
+    serverName: str = Field(..., description="Server name")
     title: str | None = Field(None, description="Display title for the server")
     description: str | None = None
     type: str | None = Field(None, description="Transport type (e.g., streamable-http, sse, stdio)")
     url: str | None = None
-    api_key: dict[str, Any] | None = None
+    apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
     headers: dict[str, Any] | None = Field(None, description="Custom headers (key/value pairs)")
-    requires_oauth: bool = Field(False, description="Whether OAuth is required")
+    requiresOauth: bool = Field(False, description="Whether OAuth is required")
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
-    oauth_metadata: dict[str, Any] | None = Field(None, description="OAuth metadata from autodiscovery")
+    oauthMetadata: dict[str, Any] | None = Field(None, description="OAuth metadata from autodiscovery")
     tools: str | None = Field(None, description="Comma-separated list of tool names")
-    tool_functions: dict[str, Any] | None = Field(None, description="Complete OpenAI function schemas with mcpToolName")
+    toolFunctions: dict[str, Any] | None = Field(None, description="Complete OpenAI function schemas with mcpToolName")
     resources: list[dict[str, Any]] | None = Field(None, description="List of available resources")
     prompts: list[dict[str, Any]] | None = Field(None, description="List of available prompts")
-    init_duration: int | None = Field(None, description="Initialization duration in ms")
+    initDuration: int | None = Field(None, description="Initialization duration in ms")
     author: str | None = Field(None, description="Author user ID")
     status: str
     path: str | None = Field(None, description="API path for this server")
     tags: list[str] = Field(default_factory=list)
-    num_tools: int = Field(0, description="Number of tools")
-    num_stars: int = Field(0, description="Star count")
+    numTools: int = Field(0, description="Number of tools")
+    numStars: int = Field(0, description="Star count")
     enabled: bool = Field(default=True, description="Whether the server is enabled")
-    last_connected: datetime | None = Field(None, description="Last connection timestamp")
-    last_error: str | None = Field(None, description="Last error timestamp")
-    error_message: str | None = Field(None, description="Error message")
-    created_at: datetime
-    updated_at: datetime
-    connection_state: str | None = Field(default=None, description="Connection state")
+    lastConnected: datetime | None = Field(None, description="Last connection timestamp")
+    lastError: str | None = Field(None, description="Last error timestamp")
+    errorMessage: str | None = Field(None, description="Error message")
+    createdAt: datetime
+    updatedAt: datetime
+    connectionState: str | None = Field(default=None, description="Connection state")
     error: str | None = Field(default=None, description="Error message if connection failed")
     permissions: ResourcePermissions | None = Field(
         default=None, description="Resolved ACL permissions for the current user"
@@ -262,15 +261,15 @@ class ServerDetailResponse(APIBaseModel):
     def _serialize(self, serializer, info):
         data = serializer(self)
         has_oauth = data.get("oauth") is not None
-        has_api_key = data.get("api_key") is not None
+        has_api_key = data.get("apiKey") is not None
 
         if has_oauth:
-            data.pop("api_key", None)
+            data.pop("apiKey", None)
         elif has_api_key:
             data.pop("oauth", None)
         else:
             data.pop("oauth", None)
-            data.pop("api_key", None)
+            data.pop("apiKey", None)
         return data
 
 
@@ -279,9 +278,9 @@ class ServerConnectionTestResponse(APIBaseModel):
 
     success: bool = Field(..., description="Whether the connection test was successful")
     message: str = Field(..., description="Descriptive message about the connection result")
-    server_name: str | None = Field(None, description="MCP server name from serverInfo")
-    protocol_version: str | None = Field(None, description="MCP protocol version")
-    response_time_ms: int | None = Field(None, description="Response time in milliseconds")
+    serverName: str | None = Field(None, description="MCP server name from serverInfo")
+    protocolVersion: str | None = Field(None, description="MCP protocol version")
+    responseTimeMs: int | None = Field(None, description="Response time in milliseconds")
     capabilities: dict[str, Any] | None = Field(None, description="Server capabilities")
     error: str | None = Field(None, description="Error message if connection failed")
 
@@ -293,8 +292,8 @@ class PaginationMetadata(APIBaseModel):
 
     total: int
     page: int
-    per_page: int
-    total_pages: int
+    perPage: int
+    totalPages: int
 
 
 class ServerListResponse(APIBaseModel):
@@ -314,15 +313,15 @@ class ErrorResponse(APIBaseModel):
 class ServerStatsResponse(APIBaseModel):
     """Response schema for server statistics (Admin only)"""
 
-    total_servers: int = Field(..., description="Total number of servers")
-    servers_by_status: dict[str, int] = Field(..., description="Server count grouped by status")
-    servers_by_transport: dict[str, int] = Field(..., description="Server count grouped by transport type")
-    total_tokens: int = Field(..., description="Total number of tokens")
-    tokens_by_type: dict[str, int] = Field(..., description="Token count grouped by type")
-    active_tokens: int = Field(..., description="Number of active (non-expired) tokens")
-    expired_tokens: int = Field(..., description="Number of expired tokens")
-    active_users: int = Field(..., description="Number of users with active tokens")
-    total_tools: int = Field(..., description="Total number of tools across all servers")
+    totalServers: int = Field(..., description="Total number of servers")
+    serversByStatus: dict[str, int] = Field(..., description="Server count grouped by status")
+    serversByTransport: dict[str, int] = Field(..., description="Server count grouped by transport type")
+    totalTokens: int = Field(..., description="Total number of tokens")
+    tokensByType: dict[str, int] = Field(..., description="Token count grouped by type")
+    activeTokens: int = Field(..., description="Number of active (non-expired) tokens")
+    expiredTokens: int = Field(..., description="Number of expired tokens")
+    activeUsers: int = Field(..., description="Number of users with active tokens")
+    totalTools: int = Field(..., description="Total number of tools across all servers")
 
     model_config = {"from_attributes": True}
 
@@ -391,28 +390,28 @@ def convert_to_list_item(
 
     return ServerListItemResponse(
         id=str(server.id),
-        server_name=server.serverName,
+        serverName=server.serverName,
         title=title,
         description=config.get("description"),
         type=transport_type,
         url=config.get("url"),
-        api_key=apikey_config,
+        apiKey=apikey_config,
         oauth=oauth_config,
         headers=config.get("headers"),
-        requires_oauth=config.get("requiresOAuth", False),
+        requiresOauth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
-        oauth_metadata=config.get("oauthMetadata"),
+        oauthMetadata=config.get("oauthMetadata"),
         tools=tools_str,
         author=author_id,
         status=server.status,
         path=server.path,
         tags=server.tags,
-        num_tools=num_tools,
-        num_stars=server.numStars,
+        numTools=num_tools,
+        numStars=server.numStars,
         enabled=config.get("enabled", True),
-        last_connected=server.lastConnected,
-        created_at=server.createdAt or datetime.now(),
-        updated_at=server.updatedAt or datetime.now(),
+        lastConnected=server.lastConnected,
+        createdAt=server.createdAt or datetime.now(),
+        updatedAt=server.updatedAt or datetime.now(),
         permissions=acl_permission,
     )
 
@@ -446,33 +445,33 @@ def convert_to_detail(
 
     return ServerDetailResponse(
         id=str(server.id),
-        server_name=server.serverName,
+        serverName=server.serverName,
         title=title,
         description=config.get("description"),
         type=transport_type,
         url=config.get("url"),
-        api_key=apikey_config,
+        apiKey=apikey_config,
         oauth=oauth_config,
         headers=config.get("headers"),
-        requires_oauth=config.get("requiresOAuth", False),
+        requiresOauth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
-        oauth_metadata=config.get("oauthMetadata"),
+        oauthMetadata=config.get("oauthMetadata"),
         tools=tools_str,
-        tool_functions=tool_functions,
+        toolFunctions=tool_functions,
         resources=resources,
         prompts=prompts,
-        init_duration=config.get("initDuration"),
+        initDuration=config.get("initDuration"),
         author=author_id,
         status=server.status,
         path=server.path,
         tags=server.tags,
-        num_tools=num_tools,
-        num_stars=server.numStars,
+        numTools=num_tools,
+        numStars=server.numStars,
         enabled=config.get("enabled", True),
-        last_connected=server.lastConnected,
-        last_error=last_error_str,
-        error_message=server.errorMessage if hasattr(server, "errorMessage") else None,
-        created_at=server.createdAt or datetime.now(),
-        updated_at=server.updatedAt or datetime.now(),
+        lastConnected=server.lastConnected,
+        lastError=last_error_str,
+        errorMessage=server.errorMessage if hasattr(server, "errorMessage") else None,
+        createdAt=server.createdAt or datetime.now(),
+        updatedAt=server.updatedAt or datetime.now(),
         permissions=acl_permission,
     )

@@ -61,7 +61,7 @@ def check_admin_permission(user_context: dict) -> bool:
 @router.get(
     "/agents",
     response_model=AgentListResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="List Agents",
     description="List all agents with filtering, searching, and pagination",
 )
@@ -190,7 +190,7 @@ async def get_agent_stats(
 @router.get(
     "/agents/{agent_id}",
     response_model=AgentDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Get Agent Detail",
     description="Get detailed information about a specific agent",
 )
@@ -242,7 +242,7 @@ async def get_agent(
 @router.post(
     "/agents",
     response_model=AgentDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     status_code=http_status.HTTP_201_CREATED,
     summary="Create Agent",
     description="Register a new A2A agent",
@@ -314,7 +314,7 @@ async def create_agent(
 @router.patch(
     "/agents/{agent_id}",
     response_model=AgentDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Update Agent",
     description="Update agent configuration",
 )
@@ -436,7 +436,7 @@ async def delete_agent(
 @router.post(
     "/agents/{agent_id}/toggle",
     response_model=AgentDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Toggle Agent Status",
     description="Enable or disable an agent",
 )

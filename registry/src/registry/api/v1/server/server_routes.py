@@ -60,13 +60,13 @@ def apply_connection_status_to_server(
     Apply connection status to a server response object.
     """
     if status:
-        server_item.connection_state = status.get("connection_state")
-        server_item.requires_oauth = status.get("requires_oauth", False)
+        server_item.connectionState = status.get("connection_state")
+        server_item.requiresOauth = status.get("requires_oauth", False)
         server_item.error = status.get("error")
     else:
         # Fallback if status not found
-        server_item.connection_state = ConnectionState.ERROR.value
-        server_item.requires_oauth = fallback_requires_oauth
+        server_item.connectionState = ConnectionState.ERROR.value
+        server_item.requiresOauth = fallback_requires_oauth
         server_item.error = "Connection status not available"
 
 
@@ -76,7 +76,7 @@ def apply_connection_status_to_server(
 @router.get(
     "/servers",
     response_model=ServerListResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="List Servers",
     description="List all servers with filtering, searching, and pagination. Includes connection status for each server.",
 )
@@ -308,7 +308,7 @@ async def check_server_connection(
 @router.get(
     "/servers/{server_id}",
     response_model=ServerDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Get Server Details",
     description="Get detailed information about a specific server, including connection status",
 )
@@ -364,7 +364,7 @@ async def get_server(
 @router.post(
     "/servers",
     response_model=ServerDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     status_code=http_status.HTTP_201_CREATED,
     summary="Register Server",
     description="Register a new MCP server",
@@ -431,7 +431,7 @@ async def create_server(
 @router.patch(
     "/servers/{server_id}",
     response_model=ServerDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Update Server",
     description="Update server configuration",
 )
@@ -549,7 +549,7 @@ async def delete_server(
 @router.post(
     "/servers/{server_id}/toggle",
     response_model=ServerDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Toggle Server Status",
     description="Enable or disable a server",
 )
@@ -603,7 +603,7 @@ async def toggle_server(
 @router.get(
     "/servers/{server_id}/tools",
     response_model=ServerDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Get Server Tools",
     description="Get the list of tools provided by a server",
 )
@@ -665,7 +665,7 @@ async def get_server_tools(
 @router.post(
     "/servers/{server_id}/refresh",
     response_model=ServerDetailResponse,
-    response_model_by_alias=False,  # Use snake_case in API responses
+    response_model_by_alias=True,  # Use camelCase in API responses
     summary="Refresh Server Health",
     description="Refresh server health status and check connectivity",
 )
