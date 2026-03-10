@@ -1,13 +1,15 @@
 const BASE_URL = '/api/v1';
+const AUTH_BASE_URL = '/api/auth';
 const MCP_BASE_URL = `${BASE_URL}/mcp`;
 const SERVER_BASE_URL = `${BASE_URL}/servers`;
 
 const API = {
   // auth
-  getAuthMe: '/api/auth/me',
-  getToken: `${BASE_URL}/tokens/generate`,
   logout: '/redirect/logout',
   refreshToken: '/redirect/refresh',
+  getAuthProviders: `${AUTH_BASE_URL}/providers`,
+  getAuthMe: `${AUTH_BASE_URL}/me`,
+  getToken: `${BASE_URL}/tokens/generate`,
 
   // mcp
   getServerStatusById: (id: string) => `${MCP_BASE_URL}/connection/status/${id}`,
