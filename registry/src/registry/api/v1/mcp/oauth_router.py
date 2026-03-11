@@ -309,7 +309,7 @@ async def get_oauth_tokens(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tokens not found or flow not completed")
 
         # 3. Return tokens
-        return OAuthTokensResponse(tokens=tokens.dict() if hasattr(tokens, "dict") else tokens)
+        return OAuthTokensResponse(tokens=tokens.model_dump() if hasattr(tokens, "model_dump") else tokens)
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
         raise

@@ -167,13 +167,13 @@ async def get_agent_stats(
         stats = await a2a_agent_service.get_stats()
 
         return AgentStatsResponse(
-            total_agents=stats["total_agents"],
-            enabled_agents=stats["enabled_agents"],
-            disabled_agents=stats["disabled_agents"],
-            by_status=stats["by_status"],
-            by_transport=stats["by_transport"],
-            total_skills=stats["total_skills"],
-            average_skills_per_agent=stats["average_skills_per_agent"],
+            totalAgents=stats["total_agents"],
+            enabledAgents=stats["enabled_agents"],
+            disabledAgents=stats["disabled_agents"],
+            byStatus=stats["by_status"],
+            byTransport=stats["by_transport"],
+            totalSkills=stats["total_skills"],
+            averageSkillsPerAgent=stats["average_skills_per_agent"],
         )
 
     except HTTPException:
@@ -566,8 +566,8 @@ async def sync_wellknown(
 
         return WellKnownSyncResponse(
             message=result["message"],
-            sync_status=result["sync_status"],
-            synced_at=result["synced_at"],
+            syncStatus=result["sync_status"],
+            syncedAt=result["synced_at"],
             version=result["version"],
             changes=result["changes"],
         )

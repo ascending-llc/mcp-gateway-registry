@@ -141,7 +141,7 @@ class TestOAuthRouter:
         """Test successful retrieval of OAuth tokens"""
         # Mock token response
         mock_token = Mock()
-        mock_token.dict.return_value = {
+        mock_token.model_dump.return_value = {
             "access_token": "test_access_token",
             "refresh_token": "test_refresh_token",
             "token_type": "Bearer",

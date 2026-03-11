@@ -10,7 +10,7 @@ All schemas use camelCase for API input/output and for MongoDB storage.
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field, field_validator, model_serializer
+from pydantic import ConfigDict, Field, field_validator, model_serializer
 
 from registry.schemas.acl_schema import ResourcePermissions
 from registry.schemas.case_conversion import APIBaseModel
@@ -154,7 +154,7 @@ class ToolSchema(APIBaseModel):
     description: str
     inputSchema: dict[str, Any] | None = None
 
-    model_config = {"extra": "allow"}
+    model_config = ConfigDict(extra="allow")
 
 
 class ServerListItemResponse(APIBaseModel):
@@ -189,7 +189,7 @@ class ServerListItemResponse(APIBaseModel):
         default=None, description="Resolved ACL permissions for the current user"
     )
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
     @model_serializer(mode="wrap")
     def _serialize(self, serializer, info):
@@ -255,7 +255,7 @@ class ServerDetailResponse(APIBaseModel):
         default=None, description="Resolved ACL permissions for the current user"
     )
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
     @model_serializer(mode="wrap")
     def _serialize(self, serializer, info):
@@ -284,7 +284,7 @@ class ServerConnectionTestResponse(APIBaseModel):
     capabilities: dict[str, Any] | None = Field(None, description="Server capabilities")
     error: str | None = Field(None, description="Error message if connection failed")
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaginationMetadata(APIBaseModel):
@@ -323,7 +323,7 @@ class ServerStatsResponse(APIBaseModel):
     activeUsers: int = Field(..., description="Number of users with active tokens")
     totalTools: int = Field(..., description="Total number of tools across all servers")
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==================== Helper Functions ====================

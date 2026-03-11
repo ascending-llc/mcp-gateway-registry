@@ -1,18 +1,11 @@
 """
-Base schema classes with automatic snake_case <-> camelCase conversion
+Base schema classes for API models
 
 All API schemas should inherit from APIBaseModel to ensure consistent
-field naming conventions:
-- API uses snake_case (external interface)
-- MongoDB uses camelCase (internal storage)
-- Automatic conversion handled by Pydantic
+field naming conventions using camelCase throughout.
 """
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict
-
-from registry.utils.schema_converter import to_camel_case
 
 
 class APIBaseModel(BaseModel):
@@ -20,48 +13,11 @@ class APIBaseModel(BaseModel):
     Base model for all API schemas
 
     Features:
-    - API uses snake_case field names (external)
-    - MongoDB uses camelCase field names (internal)
-    - Automatic alias generation for camelCase
-    - Supports both field name and alias on input
-    - API responses use snake_case (by_alias=False by default)
-    - Methods for explicit conversion when needed
+    - Uses camelCase field names for both API and MongoDB
+    - All field names are defined directly in camelCase
+    - Ensures required fields are included in JSON schema serialization
     """
 
     model_config = ConfigDict(
-        populate_by_name=True,  # Allow both snake_case and camelCase on input
-        alias_generator=to_camel_case,  # Auto-generate camelCase aliases for all fields
-        # API responses should use field names (snake_case), not aliases
-        # This ensures JSON responses match API documentation
         json_schema_serialization_defaults_required=True,
     )
-
-    def model_dump_for_mongo(self, **kwargs) -> dict[str, Any]:
-        """
-        Dump model for MongoDB storage (camelCase keys)
-
-        This method serializes the model using aliases (camelCase),
-        which matches the MongoDB storage format.
-
-        Args:
-            **kwargs: Additional arguments passed to model_dump
-
-        Returns:
-            Dictionary with camelCase keys suitable for MongoDB
-        """
-        return self.model_dump(by_alias=True, exclude_none=True, **kwargs)
-
-    def model_dump_for_api(self, **kwargs) -> dict[str, Any]:
-        """
-        Dump model for API response (snake_case keys)
-
-        This method serializes the model using field names (snake_case),
-        which matches the API response format.
-
-        Args:
-            **kwargs: Additional arguments passed to model_dump
-
-        Returns:
-            Dictionary with snake_case keys suitable for API responses
-        """
-        return self.model_dump(by_alias=False, exclude_none=True, **kwargs)
