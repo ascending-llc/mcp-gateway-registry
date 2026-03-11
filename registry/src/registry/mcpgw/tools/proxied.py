@@ -17,7 +17,6 @@ from mcp.server.fastmcp import Context
 from mcp.server.session import ServerSession
 from mcp.shared.exceptions import McpError, UrlElicitationRequiredError
 from mcp.types import (
-    AnyUrl,
     CallToolResult,
     ElicitRequestURLParams,
     EmbeddedResource,
@@ -27,6 +26,7 @@ from mcp.types import (
     TextResourceContents,
 )
 from pydantic import Field
+from pydantic.networks import AnyUrl
 
 from ...auth.dependencies import UserContextDict
 from ...auth.oauth.flow_state_manager import FlowStateManager
