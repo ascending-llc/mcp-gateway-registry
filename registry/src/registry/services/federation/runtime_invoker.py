@@ -278,7 +278,7 @@ class AgentCoreRuntimeInvoker:
                 runtime_session_id,
                 mcp_session_id,
                 protocol_version,
-            ) = await self._call_with_runtime_init_retry(
+            ) = await self._call_with_runtime_init_retry_async(
                 lambda: self._invoke_mcp_jsonrpc(
                     client=client,
                     runtime_arn=runtime_arn,
@@ -290,7 +290,7 @@ class AgentCoreRuntimeInvoker:
                     protocol_version=None,
                 )
             )
-            resources_result, _, _, _ = self._invoke_mcp_jsonrpc(
+            resources_result, _, _, _ = await self._invoke_mcp_jsonrpc(
                 client=client,
                 runtime_arn=runtime_arn,
                 method="resources/list",
@@ -300,7 +300,7 @@ class AgentCoreRuntimeInvoker:
                 mcp_session_id=mcp_session_id,
                 protocol_version=protocol_version,
             )
-            prompts_result, _, _, _ = self._invoke_mcp_jsonrpc(
+            prompts_result, _, _, _ = await self._invoke_mcp_jsonrpc(
                 client=client,
                 runtime_arn=runtime_arn,
                 method="prompts/list",
@@ -338,7 +338,7 @@ class AgentCoreRuntimeInvoker:
         self._runtime_clients[region] = client
         return client
 
-    def _invoke_mcp_jsonrpc(
+    async def _invoke_mcp_jsonrpc(
         self,
         *,
         client: Any,
@@ -371,7 +371,7 @@ class AgentCoreRuntimeInvoker:
             kwargs["mcpProtocolVersion"] = protocol_version
 
         try:
-            response = client.invoke_agent_runtime(**kwargs)
+            response = await asyncio.to_thread(client.invoke_agent_runtime, **kwargs)
         except Exception as exc:
             raise ValueError(
                 "invoke_agent_runtime failed "
@@ -451,7 +451,7 @@ class AgentCoreRuntimeInvoker:
         last_exc: Exception | None = None
         for attempt in range(1, self._runtime_init_retry_attempts + 1):
             try:
-                return operation()
+                return await asyncio.to_thread(operation)
             except Exception as exc:
                 last_exc = exc
                 if not self._is_runtime_init_timeout_error(exc) or attempt == self._runtime_init_retry_attempts:
@@ -461,6 +461,23 @@ class AgentCoreRuntimeInvoker:
             raise last_exc
         raise RuntimeError("retry operation failed without exception")
 
+    async def _call_with_runtime_init_retry_async(self, operation: Callable[[], Any]) -> Any:
+        """
+        Retry transient runtime initialization timeout errors for async operations.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, self._runtime_init_retry_attempts + 1):
+            try:
+                return await operation()
+            except Exception as exc:
+                last_exc = exc
+                if not self._is_runtime_init_timeout_error(exc) or attempt == self._runtime_init_retry_attempts:
+                    raise
+                await asyncio.sleep(self._runtime_init_retry_delay_seconds * attempt)
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("retry async operation failed without exception")
+
     async def _call_with_a2a_card_retry(self, operation: Callable[[], Any]) -> Any:
         """
         Retry A2A card fetch for known transient runtime-side failures.
@@ -468,7 +485,7 @@ class AgentCoreRuntimeInvoker:
         last_exc: Exception | None = None
         for attempt in range(1, self._a2a_card_retry_attempts + 1):
             try:
-                return operation()
+                return await asyncio.to_thread(operation)
             except Exception as exc:
                 last_exc = exc
                 if not self._is_retryable_a2a_card_error(exc) or attempt == self._a2a_card_retry_attempts:

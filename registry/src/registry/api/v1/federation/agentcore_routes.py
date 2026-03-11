@@ -14,6 +14,10 @@ router = APIRouter()
 
 class AgentCoreRuntimeSyncRequest(BaseModel):
     dryRun: bool = Field(default=False, description="Preview only, no persistence")
+    runtimeArns: list[str] | None = Field(
+        default=None,
+        description="Deprecated. AgentCore sync only supports full runtime sync.",
+    )
 
 
 class AgentCoreSyncCounter(BaseModel):

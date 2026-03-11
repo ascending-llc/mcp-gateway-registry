@@ -56,6 +56,7 @@ class ACLService:
             principalId=principal_id,
             resourceType=resource_type,
             resourceId=resource_id,
+            roleId=role_id,
             permBits=perm_bits,
             grantedAt=now,
             createdAt=now,
