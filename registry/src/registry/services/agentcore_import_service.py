@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -31,9 +30,6 @@ class AgentCoreImportService:
     - AgentCore is source of truth for updates
     """
 
-    _IGNORE_FEDERATION_METADATA_KEYS = {"createdAt", "lastUpdatedAt", "enrichedAt", "enrichmentError"}
-    _IGNORE_WELL_KNOWN_KEYS = {"lastSyncAt", "syncError"}
-
     def __init__(
         self,
         federation_client: AgentCoreFederationClient | None = None,
@@ -57,6 +53,9 @@ class AgentCoreImportService:
 
         HTTP/UNKNOWN runtimes are skipped and returned in skipped_runtimes.
         """
+        if runtime_arns:
+            raise ValueError("runtimeArns is not supported. AgentCore sync only supports full runtime sync.")
+
         start_time = time.time()
         errors: list[str] = []
         mcp_results: list[dict[str, Any]] = []
@@ -64,20 +63,19 @@ class AgentCoreImportService:
 
         system_owner_id, viewer_id = await self._resolve_identities(user_id=user_id, dry_run=dry_run)
 
-        discovered = await self.federation_client.discover_runtime_entities(
-            runtime_arns=runtime_arns,
-            author_id=system_owner_id or viewer_id,
-        )
+        discovered = await self.federation_client.discover_runtime_entities(author_id=system_owner_id or viewer_id)
         discovered_mcp = discovered.get("mcp_servers", [])
         discovered_a2a = discovered.get("a2a_agents", [])
         skipped_runtimes = discovered.get("skipped_runtimes", [])
 
-        imported_mcp = 0
+        created_mcp = 0
         updated_mcp = 0
+        deleted_mcp = 0
         skipped_mcp = 0
 
-        imported_a2a = 0
+        created_a2a = 0
         updated_a2a = 0
+        deleted_a2a = 0
         skipped_a2a = 0
 
         for discovered_server in discovered_mcp:
@@ -97,9 +95,9 @@ class AgentCoreImportService:
                     )
                 mcp_results.append(result)
                 action = result.get("action")
-                if action == "created":
-                    imported_mcp += 1
-                elif action == "updated":
+                if action in {"created", "would_create"}:
+                    created_mcp += 1
+                elif action in {"updated", "would_update"}:
                     updated_mcp += 1
                 elif action == "skipped":
                     skipped_mcp += 1
@@ -141,8 +139,12 @@ class AgentCoreImportService:
                 a2a_results.append(result)
                 action = result.get("action")
                 if action == "created":
-                    imported_a2a += 1
+                    created_a2a += 1
                 elif action == "updated":
+                    updated_a2a += 1
+                elif action == "would_create":
+                    created_a2a += 1
+                elif action == "would_update":
                     updated_a2a += 1
                 elif action == "skipped":
                     skipped_a2a += 1
@@ -166,21 +168,90 @@ class AgentCoreImportService:
                     }
                 )
 
+        discovered_mcp_ids = {item.federationId for item in discovered_mcp if item.federationId}
+        discovered_a2a_ids = {item.federationId for item in discovered_a2a if item.federationId}
+        all_discovered_runtime_arns = (
+            discovered_mcp_ids
+            | discovered_a2a_ids
+            | {item.get("runtimeArn") for item in skipped_runtimes if item.get("runtimeArn")}
+        )
+
+        stale_mcp, stale_a2a = await self._collect_stale_entities(
+            all_discovered_runtime_arns=all_discovered_runtime_arns,
+            discovered_mcp_ids=discovered_mcp_ids,
+            discovered_a2a_ids=discovered_a2a_ids,
+        )
+
+        for stale_server in stale_mcp:
+            try:
+                result = await self._delete_stale_server(stale_server=stale_server, dry_run=dry_run)
+                mcp_results.append(result)
+                if result["action"] in {"deleted", "would_delete"}:
+                    deleted_mcp += 1
+                elif result["action"] == "error":
+                    skipped_mcp += 1
+                    if result.get("error"):
+                        errors.append(str(result["error"]))
+            except Exception as exc:
+                message = f"Failed to delete stale MCP server '{stale_server.serverName}': {exc}"
+                logger.error(message, exc_info=True)
+                errors.append(message)
+                skipped_mcp += 1
+                mcp_results.append(
+                    {
+                        "action": "error",
+                        "server_name": stale_server.serverName,
+                        "server_id": str(stale_server.id) if stale_server.id else None,
+                        "changes": [],
+                        "error": str(exc),
+                    }
+                )
+
+        for stale_agent in stale_a2a:
+            try:
+                result = await self._delete_stale_a2a_agent(stale_agent=stale_agent, dry_run=dry_run)
+                a2a_results.append(result)
+                if result["action"] in {"deleted", "would_delete"}:
+                    deleted_a2a += 1
+                elif result["action"] == "error":
+                    skipped_a2a += 1
+                    if result.get("error"):
+                        errors.append(str(result["error"]))
+            except Exception as exc:
+                agent_name = stale_agent.card.name if stale_agent.card else "unknown"
+                message = f"Failed to delete stale A2A agent '{agent_name}': {exc}"
+                logger.error(message, exc_info=True)
+                errors.append(message)
+                skipped_a2a += 1
+                a2a_results.append(
+                    {
+                        "action": "error",
+                        "agent_name": agent_name,
+                        "agent_id": str(stale_agent.id) if stale_agent.id else None,
+                        "changes": [],
+                        "error": str(exc),
+                    }
+                )
+
         duration = round(time.time() - start_time, 3)
         return {
-            "runtime_filter_count": len(runtime_arns or []),
+            "runtime_filter_count": 0,
             "discovered": {
                 "mcp_servers": len(discovered_mcp),
                 "a2a_agents": len(discovered_a2a),
                 "skipped_runtimes": len(skipped_runtimes),
             },
-            "imported": {
-                "mcp_servers": imported_mcp,
-                "a2a_agents": imported_a2a,
+            "created": {
+                "mcp_servers": created_mcp,
+                "a2a_agents": created_a2a,
             },
             "updated": {
                 "mcp_servers": updated_mcp,
                 "a2a_agents": updated_a2a,
+            },
+            "deleted": {
+                "mcp_servers": deleted_mcp,
+                "a2a_agents": deleted_a2a,
             },
             "skipped": {
                 "mcp_servers": skipped_mcp,
@@ -227,7 +298,7 @@ class AgentCoreImportService:
 
             if dry_run:
                 return {
-                    "action": "updated",
+                    "action": "would_update",
                     "server_name": existing.serverName,
                     "server_id": str(existing.id) if existing.id else None,
                     "changes": changes,
@@ -253,7 +324,7 @@ class AgentCoreImportService:
         # Create new server
         if dry_run:
             return {
-                "action": "created",
+                "action": "would_create",
                 "server_name": discovered_server.serverName,
                 "server_id": None,
                 "changes": ["new server"],
@@ -315,7 +386,12 @@ class AgentCoreImportService:
         created_server.numTools = discovered_server.numTools
         merged_config = dict(created_server.config or {})
         merged_config.update(config)
+        if "requiresOAuth" not in merged_config and "requiresOauth" in merged_config:
+            merged_config["requiresOAuth"] = merged_config.get("requiresOauth")
+        merged_config.pop("requiresOauth", None)
+        merged_config["enabled"] = discovered_server.status == "active"
         created_server.config = merged_config
+        created_server.status = discovered_server.status or created_server.status
         created_server.federationSource = FederationSource.AGENTCORE
         created_server.federationId = discovered_server.federationId
         created_server.federationGatewayArn = discovered_server.federationGatewayArn
@@ -367,7 +443,7 @@ class AgentCoreImportService:
 
             if dry_run:
                 return {
-                    "action": "updated",
+                    "action": "would_update",
                     "agent_name": agent_name,
                     "agent_id": str(existing.id) if existing.id else None,
                     "changes": changes,
@@ -392,7 +468,7 @@ class AgentCoreImportService:
 
         if dry_run:
             return {
-                "action": "created",
+                "action": "would_create",
                 "agent_name": agent_name,
                 "agent_id": None,
                 "changes": ["new agent"],
@@ -484,7 +560,11 @@ class AgentCoreImportService:
         existing.path = new_data.path
         existing.tags = list(new_data.tags or [])
         existing.config = dict(new_data.config or {})
+        if "requiresOAuth" not in existing.config and "requiresOauth" in existing.config:
+            existing.config["requiresOAuth"] = existing.config.get("requiresOauth")
+        existing.config.pop("requiresOauth", None)
         existing.status = new_data.status or existing.status
+        existing.config["enabled"] = existing.status == "active"
         existing.numTools = new_data.numTools
         existing.federationSource = FederationSource.AGENTCORE
         existing.federationId = new_data.federationId
@@ -496,7 +576,7 @@ class AgentCoreImportService:
         await existing.save(session=self._get_current_session_or_none())
 
         if detected_changes:
-            await self.mcp_server_repo.sync_server_to_vector_db(existing)
+            await self.mcp_server_repo.sync_server_to_vector_db(existing, is_delete=True)
 
         return detected_changes
 
@@ -505,108 +585,132 @@ class AgentCoreImportService:
         existing: ExtendedMCPServer,
         new_data: ExtendedMCPServer,
     ) -> list[str]:
-        """
-        Detect meaningful changes between existing and newly discovered server.
-        """
-        changes: list[str] = []
-        self._append_change(changes, "serverName", existing.serverName, new_data.serverName)
-        self._append_change(changes, "path", existing.path, new_data.path)
-        self._append_change(changes, "tags", sorted(existing.tags or []), sorted(new_data.tags or []))
-        self._append_change(changes, "config", existing.config or {}, new_data.config or {})
-        self._append_change(changes, "status", existing.status, new_data.status)
-        self._append_change(
-            changes, "federationGatewayArn", existing.federationGatewayArn, new_data.federationGatewayArn
-        )
-        old_metadata = self._normalize_for_diff(
-            existing.federationMetadata or {},
-            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
-        )
-        new_metadata = self._normalize_for_diff(
-            new_data.federationMetadata or {},
-            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
-        )
-        self._append_change(changes, "federationMetadata", old_metadata, new_metadata)
-        return changes
-
-    def _append_change(self, changes: list[str], field: str, old: Any, new: Any) -> None:
-        if old == new:
-            return
-        changes.append(f"{field}: {self._to_json(old)} -> {self._to_json(new)}")
+        return self._detect_runtime_version_change(existing.federationMetadata, new_data.federationMetadata)
 
     def _detect_a2a_changes(self, existing: A2AAgent, new_data: A2AAgent) -> list[str]:
-        changes: list[str] = []
-        self._append_change(changes, "path", existing.path, new_data.path)
-        self._append_change(
-            changes, "card", existing.card.model_dump(mode="json"), new_data.card.model_dump(mode="json")
-        )
-        self._append_change(changes, "tags", sorted(existing.tags or []), sorted(new_data.tags or []))
-        self._append_change(changes, "status", existing.status, new_data.status)
-        self._append_change(changes, "isEnabled", existing.isEnabled, new_data.isEnabled)
-        old_wk = (
-            self._normalize_for_diff(
-                existing.wellKnown.model_dump(mode="json"),
-                ignore_keys=self._IGNORE_WELL_KNOWN_KEYS,
-            )
-            if existing.wellKnown
-            else None
-        )
-        new_wk = (
-            self._normalize_for_diff(
-                new_data.wellKnown.model_dump(mode="json"),
-                ignore_keys=self._IGNORE_WELL_KNOWN_KEYS,
-            )
-            if new_data.wellKnown
-            else None
-        )
-        self._append_change(changes, "wellKnown", old_wk, new_wk)
-        self._append_change(
-            changes, "federationGatewayArn", existing.federationGatewayArn, new_data.federationGatewayArn
-        )
-        old_metadata = self._normalize_for_diff(
-            existing.federationMetadata or {},
-            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
-        )
-        new_metadata = self._normalize_for_diff(
-            new_data.federationMetadata or {},
-            ignore_keys=self._IGNORE_FEDERATION_METADATA_KEYS,
-        )
-        self._append_change(changes, "federationMetadata", old_metadata, new_metadata)
-        return changes
+        return self._detect_runtime_version_change(existing.federationMetadata, new_data.federationMetadata)
 
-    def _to_json(self, value: Any) -> str:
-        try:
-            return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
-        except Exception:
-            return str(value)
-
-    def _normalize_for_diff(
+    def _detect_runtime_version_change(
         self,
-        value: Any,
-        ignore_keys: set[str] | None = None,
-    ) -> Any:
-        """
-        Normalize nested payloads for stable diff comparison.
-        """
-        ignore_keys = ignore_keys or set()
+        existing_metadata: dict[str, Any] | None,
+        new_metadata: dict[str, Any] | None,
+    ) -> list[str]:
+        old_version = self._extract_runtime_version(existing_metadata)
+        new_version = self._extract_runtime_version(new_metadata)
+        if old_version == new_version:
+            return []
+        return [f"runtimeVersion: {old_version} -> {new_version}"]
 
-        if isinstance(value, dict):
-            normalized: dict[str, Any] = {}
-            for key in sorted(value.keys()):
-                if key in ignore_keys:
-                    continue
-                normalized[key] = self._normalize_for_diff(value[key], ignore_keys=ignore_keys)
-            return normalized
+    def _extract_runtime_version(self, metadata: dict[str, Any] | None) -> str | None:
+        if not metadata:
+            return None
+        version = metadata.get("runtimeVersion")
+        if version is None:
+            return None
+        return str(version)
 
-        if isinstance(value, list):
-            return [self._normalize_for_diff(item, ignore_keys=ignore_keys) for item in value]
+    async def _collect_stale_entities(
+        self,
+        *,
+        all_discovered_runtime_arns: set[str],
+        discovered_mcp_ids: set[str],
+        discovered_a2a_ids: set[str],
+    ) -> tuple[list[ExtendedMCPServer], list[A2AAgent]]:
+        stale_mcp: list[ExtendedMCPServer] = []
+        stale_a2a: list[A2AAgent] = []
 
-        if isinstance(value, datetime):
-            return value.astimezone(UTC).isoformat()
+        existing_mcp = await ExtendedMCPServer.find(
+            {"federationSource": FederationSource.AGENTCORE, "federationId": {"$exists": True, "$ne": None}}
+        ).to_list()
+        existing_a2a = await A2AAgent.find(
+            {"federationSource": FederationSource.AGENTCORE, "federationId": {"$exists": True, "$ne": None}}
+        ).to_list()
 
-        if isinstance(value, str) and value.startswith(("http://", "https://")):
-            return value.rstrip("/")
+        for server in existing_mcp:
+            federation_id = server.federationId
+            if not federation_id:
+                continue
+            if (server.federationMetadata or {}).get("sourceType") != "runtime":
+                continue
+            if federation_id not in all_discovered_runtime_arns:
+                stale_mcp.append(server)
+                continue
+            if federation_id not in discovered_mcp_ids:
+                stale_mcp.append(server)
 
-        return value
+        for agent in existing_a2a:
+            federation_id = agent.federationId
+            if not federation_id:
+                continue
+            if (agent.federationMetadata or {}).get("sourceType") != "runtime":
+                continue
+            if federation_id not in all_discovered_runtime_arns:
+                stale_a2a.append(agent)
+                continue
+            if federation_id not in discovered_a2a_ids:
+                stale_a2a.append(agent)
+
+        return stale_mcp, stale_a2a
+
+    async def _delete_stale_server(
+        self,
+        *,
+        stale_server: ExtendedMCPServer,
+        dry_run: bool,
+    ) -> dict[str, Any]:
+        server_name = stale_server.serverName
+        server_id = str(stale_server.id) if stale_server.id else None
+        federation_id = stale_server.federationId
+
+        if dry_run:
+            return {
+                "action": "would_delete",
+                "server_name": server_name,
+                "server_id": server_id,
+                "changes": [f"delete stale federated MCP server ({federation_id})"],
+                "error": None,
+            }
+
+        if server_id:
+            await self.mcp_server_repo.delete_by_server_id(server_id, server_name)
+        await stale_server.delete(session=self._get_current_session_or_none())
+        return {
+            "action": "deleted",
+            "server_name": server_name,
+            "server_id": server_id,
+            "changes": [f"deleted stale federated MCP server ({federation_id})"],
+            "error": None,
+        }
+
+    async def _delete_stale_a2a_agent(
+        self,
+        *,
+        stale_agent: A2AAgent,
+        dry_run: bool,
+    ) -> dict[str, Any]:
+        agent_name = stale_agent.card.name
+        agent_id = str(stale_agent.id) if stale_agent.id else None
+        federation_id = stale_agent.federationId
+
+        if dry_run:
+            return {
+                "action": "would_delete",
+                "agent_name": agent_name,
+                "agent_id": agent_id,
+                "changes": [f"delete stale federated A2A agent ({federation_id})"],
+                "error": None,
+            }
+
+        if agent_id:
+            await self.a2a_agent_repo.delete_by_agent_id(agent_id, agent_name)
+        await stale_agent.delete(session=self._get_current_session_or_none())
+        return {
+            "action": "deleted",
+            "agent_name": agent_name,
+            "agent_id": agent_id,
+            "changes": [f"deleted stale federated A2A agent ({federation_id})"],
+            "error": None,
+        }
 
     async def _resolve_identities(
         self, user_id: str | None, dry_run: bool

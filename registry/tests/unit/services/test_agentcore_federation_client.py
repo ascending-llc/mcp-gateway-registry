@@ -76,3 +76,27 @@ class TestAgentCoreFederationClientAuthDetection:
             metadata={"authorizerConfiguration": {"customJWTAuthorizerConfiguration": {"discoveryUrl": "x"}}}
         )
         assert mode == "JWT"
+
+    def test_runtime_requires_oauth_false_for_iam(self):
+        client = AgentCoreFederationClient()
+        assert client._runtime_requires_oauth({"authorizerConfiguration": None}) is False
+
+    def test_runtime_requires_oauth_true_for_jwt(self):
+        client = AgentCoreFederationClient()
+        assert (
+            client._runtime_requires_oauth(
+                {"authorizerConfiguration": {"customJWTAuthorizerConfiguration": {"discoveryUrl": "x"}}}
+            )
+            is True
+        )
+
+    def test_map_agentcore_status_to_registry_status(self):
+        client = AgentCoreFederationClient()
+        assert client._map_agentcore_status_to_registry_status("READY") == "active"
+        assert client._map_agentcore_status_to_registry_status("FAILED") == "error"
+        assert client._map_agentcore_status_to_registry_status("CREATING") == "inactive"
+
+    def test_extract_a2a_card_payload_supports_wrapped_payload(self):
+        client = AgentCoreFederationClient()
+        payload = {"agentCard": {"name": "wrapped-agent"}}
+        assert client._extract_a2a_card_payload(payload)["name"] == "wrapped-agent"

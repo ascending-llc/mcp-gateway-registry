@@ -13,7 +13,6 @@ router = APIRouter()
 
 
 class AgentCoreRuntimeSyncRequest(BaseModel):
-    runtimeArns: list[str] | None = Field(default=None, description="Optional runtime ARN allow-list")
     dryRun: bool = Field(default=False, description="Preview only, no persistence")
 
 
@@ -39,8 +38,9 @@ class AgentCoreSyncEntityResult(BaseModel):
 class AgentCoreRuntimeSyncResponse(BaseModel):
     runtime_filter_count: int
     discovered: AgentCoreSyncDiscoveredCounter
-    imported: AgentCoreSyncCounter
+    created: AgentCoreSyncCounter
     updated: AgentCoreSyncCounter
+    deleted: AgentCoreSyncCounter
     skipped: AgentCoreSyncCounter
     errors: list[str] = Field(default_factory=list)
     mcp_servers: list[AgentCoreSyncEntityResult] = Field(default_factory=list)
@@ -65,8 +65,9 @@ async def sync_agentcore_runtime(
     No background jobs; request blocks until import completes.
     """
     try:
+        if data.runtimeArns:
+            raise ValueError("runtimeArns is not supported. AgentCore sync only supports full runtime sync.")
         result = await agentcore_import_service.import_from_runtime(
-            runtime_arns=data.runtimeArns,
             dry_run=data.dryRun,
             user_id=user_context.get("user_id"),
         )

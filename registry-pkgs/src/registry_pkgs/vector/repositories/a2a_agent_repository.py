@@ -86,6 +86,27 @@ class A2AAgentRepository(Repository[A2AAgent]):
             logger.error("A2A sync failed for agent %s: %s", agent.card.name, e, exc_info=True)
             return None
 
+    async def delete_by_agent_id(self, agent_id: str, agent_name: str | None = None) -> bool:
+        """
+        Delete all vector docs for an A2A agent by MongoDB id.
+        """
+        await self.ensure_collection()
+        log_name = f"'{agent_name}' (ID: {agent_id})" if agent_name else f"ID: {agent_id}"
+
+        try:
+            if not self.adapter.has_property(self.collection, "agent_id"):
+                logger.info(
+                    "Collection '%s' has no 'agent_id' property. Skip delete for %s.", self.collection, log_name
+                )
+                return True
+
+            deleted = await self.adelete_by_filter({"agent_id": agent_id})
+            logger.info("Deleted %s A2A vector document(s) for %s", deleted, log_name)
+            return True
+        except Exception as e:
+            logger.error("Failed to delete A2A vector docs for %s: %s", log_name, e, exc_info=True)
+            return False
+
 
 def create_a2a_agent_repository(db_client: DatabaseClient) -> A2AAgentRepository:
     return A2AAgentRepository(db_client)

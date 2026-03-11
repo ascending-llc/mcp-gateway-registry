@@ -221,6 +221,9 @@ class A2AAgent(Document):
             "is_enabled": self.isEnabled,
             "tags": self.tags,
         }
+        runtime_version = (self.federationMetadata or {}).get("runtimeVersion")
+        if runtime_version is not None:
+            base_metadata["runtime_version"] = str(runtime_version)
 
         docs: list[LangChainDocument] = [
             LangChainDocument(
