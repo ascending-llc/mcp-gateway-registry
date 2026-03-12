@@ -350,7 +350,6 @@ class AgentCoreFederationClient:
             f"{self._build_runtime_invocation_url(runtime_arn=runtime_arn, region=region)}?qualifier=DEFAULT"
         )
         status = runtime_detail.get("status", "READY")
-        requires_oauth = self._runtime_requires_oauth(runtime_detail)
 
         server_info = {
             "server_name": runtime_name,
@@ -361,7 +360,6 @@ class AgentCoreFederationClient:
                 "description": runtime_detail.get("description", f"AgentCore MCP runtime {runtime_name}"),
                 "type": "streamable-http",
                 "url": runtime_mcp_url,
-                "requiresOAuth": requires_oauth,
                 "authProvider": "bedrock-agentcore",
             },
             "author": author_id or PydanticObjectId(),
