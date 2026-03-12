@@ -1,6 +1,8 @@
 import asyncio
 import json
+import logging
 import os
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -11,6 +13,8 @@ from botocore.credentials import RefreshableCredentials
 
 from registry.constants import REGISTRY_CONSTANTS
 from registry.core.mcp_client import MCPServerData, get_tools_and_capabilities_from_server
+
+logger = logging.getLogger(__name__)
 
 
 class _SigV4HttpxAuth(httpx.Auth):
@@ -272,30 +276,26 @@ class AgentCoreRuntimeInvoker:
         client = await self._get_runtime_client(region)
 
         try:
-            # Follow AWS official IAM sample: call tools/list directly via InvokeAgentRuntime.
-            (
-                tools_result,
-                runtime_session_id,
-                mcp_session_id,
-                protocol_version,
-            ) = await self._call_with_runtime_init_retry_async(
-                lambda: self._invoke_mcp_jsonrpc(
-                    client=client,
-                    runtime_arn=runtime_arn,
-                    method="tools/list",
-                    params={},
-                    request_id=1,
-                    runtime_session_id=None,
-                    mcp_session_id=None,
-                    protocol_version=None,
-                )
+            runtime_session_id, mcp_session_id, protocol_version = await self._initialize_mcp_session(
+                client=client,
+                runtime_arn=runtime_arn,
+            )
+            tools_result, _, _, _ = await self._invoke_mcp_jsonrpc(
+                client=client,
+                runtime_arn=runtime_arn,
+                method="tools/list",
+                params={},
+                request_id=self._next_request_id(),
+                runtime_session_id=runtime_session_id,
+                mcp_session_id=mcp_session_id,
+                protocol_version=protocol_version,
             )
             resources_result, _, _, _ = await self._invoke_mcp_jsonrpc(
                 client=client,
                 runtime_arn=runtime_arn,
                 method="resources/list",
                 params={},
-                request_id=2,
+                request_id=self._next_request_id(),
                 runtime_session_id=runtime_session_id,
                 mcp_session_id=mcp_session_id,
                 protocol_version=protocol_version,
@@ -305,7 +305,7 @@ class AgentCoreRuntimeInvoker:
                 runtime_arn=runtime_arn,
                 method="prompts/list",
                 params={},
-                request_id=3,
+                request_id=self._next_request_id(),
                 runtime_session_id=runtime_session_id,
                 mcp_session_id=mcp_session_id,
                 protocol_version=protocol_version,
@@ -332,6 +332,50 @@ class AgentCoreRuntimeInvoker:
             raise ValueError(f"Failed to initialize AgentCore runtime client for region {region}")
         return client
 
+    async def _initialize_mcp_session(
+        self,
+        *,
+        client: Any,
+        runtime_arn: str,
+    ) -> tuple[str | None, str | None, str | None]:
+        """
+        Establish the MCP session explicitly and obtain the session identifiers
+        from the initialize response before issuing list/call methods.
+        """
+        (
+            init_result,
+            runtime_session_id,
+            mcp_session_id,
+            protocol_version,
+        ) = await self._call_with_runtime_init_retry_async(
+            lambda: self._invoke_mcp_jsonrpc(
+                client=client,
+                runtime_arn=runtime_arn,
+                method="initialize",
+                params={
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "mcp-gateway-registry", "version": "1.0.0"},
+                },
+                request_id=self._next_request_id(),
+                runtime_session_id=None,
+                mcp_session_id=None,
+                protocol_version=None,
+            )
+        )
+        negotiated_protocol_version = init_result.get("protocolVersion") or protocol_version or "2024-11-05"
+
+        await self._send_mcp_notification(
+            client=client,
+            runtime_arn=runtime_arn,
+            method="notifications/initialized",
+            params={},
+            runtime_session_id=runtime_session_id,
+            mcp_session_id=mcp_session_id,
+            protocol_version=negotiated_protocol_version,
+        )
+        return runtime_session_id, mcp_session_id, negotiated_protocol_version
+
     async def _invoke_mcp_jsonrpc(
         self,
         *,
@@ -339,7 +383,7 @@ class AgentCoreRuntimeInvoker:
         runtime_arn: str,
         method: str,
         params: dict[str, Any],
-        request_id: int,
+        request_id: str | int,
         runtime_session_id: str | None,
         mcp_session_id: str | None,
         protocol_version: str | None,
@@ -398,20 +442,68 @@ class AgentCoreRuntimeInvoker:
         )
 
     @staticmethod
+    def _next_request_id() -> str:
+        """
+        Generate a JSON-RPC request id that is unique across concurrent requests
+        and across service instances.
+        """
+        return uuid.uuid4().hex
+
+    async def _send_mcp_notification(
+        self,
+        *,
+        client: Any,
+        runtime_arn: str,
+        method: str,
+        params: dict[str, Any],
+        runtime_session_id: str | None,
+        mcp_session_id: str | None,
+        protocol_version: str | None,
+    ) -> None:
+        payload = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }
+        kwargs: dict[str, Any] = {
+            "agentRuntimeArn": runtime_arn,
+            "qualifier": "DEFAULT",
+            "contentType": "application/json",
+            "accept": "application/json, text/event-stream",
+            "payload": json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        }
+        if runtime_session_id:
+            kwargs["runtimeSessionId"] = runtime_session_id
+        if mcp_session_id:
+            kwargs["mcpSessionId"] = mcp_session_id
+        if protocol_version:
+            kwargs["mcpProtocolVersion"] = protocol_version
+
+        try:
+            response = await asyncio.to_thread(client.invoke_agent_runtime, **kwargs)
+        except Exception as exc:
+            raise ValueError(
+                "invoke_agent_runtime notification failed "
+                f"(method={method}, runtime_arn={runtime_arn}, qualifier=DEFAULT): {exc}"
+            ) from exc
+
+        response_bytes = self._read_response_blob(response.get("response"))
+        response_text = response_bytes.decode("utf-8", errors="replace") if response_bytes else ""
+        response_payload = self._extract_json_payload(response_text)
+        if response_payload.get("error"):
+            raise ValueError(
+                "MCP notification failed "
+                f"(method={method}, statusCode={response.get('statusCode')}, contentType={response.get('contentType')}, "
+                f"error={response_payload['error']}, body={response_text[:1000]})"
+            )
+
+    @staticmethod
     def _extract_json_payload(response_text: str) -> dict[str, Any]:
         """
         Parse JSON payload from direct JSON or SSE-like "data: {...}" envelope.
         """
         if not response_text:
             return {}
-
-        # Direct JSON response.
-        try:
-            parsed = json.loads(response_text)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
 
         # Handle text/event-stream style chunks.
         for line in response_text.splitlines():
@@ -425,6 +517,14 @@ class AgentCoreRuntimeInvoker:
                 except json.JSONDecodeError:
                     continue
 
+        # Direct JSON response.
+        try:
+            parsed = json.loads(response_text)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
         # Fallback: find first JSON object in mixed text.
         start = response_text.find("{")
         if start >= 0:
@@ -434,6 +534,7 @@ class AgentCoreRuntimeInvoker:
                 if isinstance(parsed, dict):
                     return parsed
             except json.JSONDecodeError:
+                logger.debug("Unable to parse runtime response as JSON payload: %s", response_text[:1000])
                 return {}
 
         return {}

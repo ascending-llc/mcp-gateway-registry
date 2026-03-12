@@ -56,7 +56,6 @@ class _FakeServer:
         name: str,
         federation_id: str,
         title: str = "title",
-        gateway_arn: str = "arn:aws:bedrock-agentcore:us-east-1:123:gateway/gw",
     ):
         self.id = None
         self.serverName = name
@@ -77,7 +76,6 @@ class _FakeServer:
         self.author = PydanticObjectId()
         self.federationSource = FederationSource.AGENTCORE
         self.federationId = federation_id
-        self.federationGatewayArn = gateway_arn
         self.federationSyncedAt = datetime.now(UTC)
         self.federationMetadata = {"sourceType": "gateway_target", "runtimeVersion": "1"}
         self.createdAt = datetime.now(UTC)
@@ -170,6 +168,11 @@ class TestAgentCoreImportService:
         assert kwargs["user_id"] == str(owner_id)
         assert kwargs["data"].title == discovered.config["title"]
         assert kwargs["data"].url == discovered.config["url"]
+        assert kwargs["data"].authProvider == discovered.config["authProvider"]
+        assert kwargs["data"].transport == discovered.config["type"]
+        assert kwargs["data"].supportedTransports == [discovered.config["type"]]
+        assert kwargs["data"].requiresOauth is True
+        assert kwargs["data"].initTimeout == discovered.config["initDuration"]
         assert created_server.federationId == discovered.federationId
         assert len(repo.synced) == 1
 
@@ -248,7 +251,6 @@ class TestAgentCoreImportService:
             isEnabled=True,
             wellKnown=None,
             federationId="fed-a2a-new",
-            federationGatewayArn="arn:aws:bedrock-agentcore:us-east-1:123:gateway/test",
             federationMetadata={"sourceType": "runtime"},
             federationSource=FederationSource.AGENTCORE,
             createdAt=datetime.now(UTC),
@@ -279,7 +281,6 @@ class TestAgentCoreImportService:
             isEnabled=False,
             wellKnown=None,
             federationId="fed-a2a-upd",
-            federationGatewayArn="arn:old",
             federationMetadata={"sourceType": "runtime", "runtimeVersion": "1"},
             save=AsyncMock(),
         )
@@ -291,7 +292,6 @@ class TestAgentCoreImportService:
             isEnabled=True,
             wellKnown=None,
             federationId="fed-a2a-upd",
-            federationGatewayArn="arn:new",
             federationMetadata={"sourceType": "runtime", "runtimeVersion": "2"},
         )
 
@@ -372,7 +372,6 @@ class TestAgentCoreImportService:
         discovered_same_version.config["description"] = "changed-desc"
         discovered_same_version.tags = ["changed-tag"]
         discovered_same_version.status = "inactive"
-        discovered_same_version.federationGatewayArn = "arn:new"
         discovered_same_version.federationMetadata["extra"] = {"changed": True}
 
         assert service._detect_changes(existing, discovered_same_version) == []

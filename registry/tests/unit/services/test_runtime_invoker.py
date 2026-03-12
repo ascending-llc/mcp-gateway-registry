@@ -23,6 +23,15 @@ def _build_invoker() -> AgentCoreRuntimeInvoker:
 
 @pytest.mark.unit
 class TestAgentCoreRuntimeInvoker:
+    def test_next_request_id_returns_unique_strings(self):
+        invoker = _build_invoker()
+        request_id_1 = invoker._next_request_id()
+        request_id_2 = invoker._next_request_id()
+
+        assert isinstance(request_id_1, str)
+        assert isinstance(request_id_2, str)
+        assert request_id_1 != request_id_2
+
     def test_detect_runtime_auth_mode_defaults_to_iam(self):
         invoker = _build_invoker()
         assert invoker.detect_runtime_auth_mode(metadata={}) == "IAM"
@@ -117,6 +126,85 @@ class TestAgentCoreRuntimeInvoker:
         assert mcp_session_id == "m1"
         assert protocol_version == "2025-11-05"
         assert calls["to_thread"] == 1
+
+    @pytest.mark.asyncio
+    async def test_initialize_mcp_session_uses_initialize_then_initialized(self, monkeypatch):
+        invoker = _build_invoker()
+        invoke_mock = AsyncMock(
+            return_value=(
+                {"protocolVersion": "2025-11-05"},
+                "runtime-session-1",
+                "mcp-session-1",
+                None,
+            )
+        )
+        notification_mock = AsyncMock()
+        monkeypatch.setattr(invoker, "_invoke_mcp_jsonrpc", invoke_mock)
+        monkeypatch.setattr(invoker, "_send_mcp_notification", notification_mock)
+
+        runtime_session_id, mcp_session_id, protocol_version = await invoker._initialize_mcp_session(
+            client=object(),
+            runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1",
+        )
+
+        assert runtime_session_id == "runtime-session-1"
+        assert mcp_session_id == "mcp-session-1"
+        assert protocol_version == "2025-11-05"
+        invoke_mock.assert_awaited_once()
+        assert invoke_mock.await_args.kwargs["method"] == "initialize"
+        assert invoke_mock.await_args.kwargs["params"]["clientInfo"]["name"] == "mcp-gateway-registry"
+        notification_mock.assert_awaited_once()
+        assert notification_mock.await_args.kwargs["method"] == "notifications/initialized"
+        assert notification_mock.await_args.kwargs["mcp_session_id"] == "mcp-session-1"
+
+    @pytest.mark.asyncio
+    async def test_fetch_mcp_payloads_via_sdk_initializes_before_list_calls(self, monkeypatch):
+        invoker = _build_invoker()
+
+        class _FakeClient:
+            pass
+
+        runtime_client = _FakeClient()
+        initialize_mock = AsyncMock(return_value=("runtime-session-1", "mcp-session-1", "2025-11-05"))
+        invoked_methods: list[tuple[str, str | None, str | None, str | None]] = []
+
+        async def _fake_invoke_mcp_jsonrpc(**kwargs):
+            invoked_methods.append(
+                (
+                    kwargs["method"],
+                    kwargs["runtime_session_id"],
+                    kwargs["mcp_session_id"],
+                    kwargs["protocol_version"],
+                )
+            )
+            method = kwargs["method"]
+            if method == "tools/list":
+                return {"tools": []}, "runtime-session-1", "mcp-session-1", "2025-11-05"
+            if method == "resources/list":
+                return {"resources": []}, "runtime-session-1", "mcp-session-1", "2025-11-05"
+            if method == "prompts/list":
+                return {"prompts": []}, "runtime-session-1", "mcp-session-1", "2025-11-05"
+            raise AssertionError(f"unexpected method {method}")
+
+        monkeypatch.setattr(invoker, "_get_runtime_client", AsyncMock(return_value=runtime_client))
+        monkeypatch.setattr(invoker, "_initialize_mcp_session", initialize_mock)
+        monkeypatch.setattr(invoker, "_invoke_mcp_jsonrpc", _fake_invoke_mcp_jsonrpc)
+
+        result = await invoker._fetch_mcp_payloads_via_sdk(
+            metadata={"runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1"},
+            runtime_detail=None,
+        )
+
+        assert result.error_message is None
+        initialize_mock.assert_awaited_once_with(
+            client=runtime_client,
+            runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1",
+        )
+        assert invoked_methods == [
+            ("tools/list", "runtime-session-1", "mcp-session-1", "2025-11-05"),
+            ("resources/list", "runtime-session-1", "mcp-session-1", "2025-11-05"),
+            ("prompts/list", "runtime-session-1", "mcp-session-1", "2025-11-05"),
+        ]
 
     @pytest.mark.asyncio
     async def test_fetch_mcp_payloads_iam_prefers_sdk_success(self, monkeypatch):

@@ -380,15 +380,15 @@ class AgentCoreImportService:
             description=config.get("description", ""),
             url=config.get("url"),
             tags=list(discovered_server.tags or []),
-            num_tools=discovered_server.numTools or 0,
-            auth_provider=config.get("authProvider"),
+            numTools=discovered_server.numTools or 0,
+            authProvider=config.get("authProvider"),
             transport=config.get("type"),
-            requires_oauth=bool(config.get("requiresOAuth", False)),
+            supportedTransports=[config.get("type")] if config.get("type") else [],
+            requiresOauth=bool(config.get("requiresOAuth", False)),
             timeout=config.get("timeout"),
-            init_timeout=config.get("initDuration"),
+            initTimeout=config.get("initDuration"),
             headers=config.get("headers"),
             oauth=config.get("oauth"),
-            enabled=True,
         )
         created_server = await server_service_v1.create_server(
             data=create_request,
@@ -398,8 +398,8 @@ class AgentCoreImportService:
 
         now = datetime.now(UTC)
         created_server.serverName = discovered_server.serverName
-        created_server.path = discovered_server.path or created_server.path
-        created_server.tags = list(discovered_server.tags or [])
+        # create_server() recomputes numTools from toolFunctions. For AgentCore imports
+        # we skip post-registration discovery and persist the discovered runtime count.
         created_server.numTools = discovered_server.numTools
         merged_config = dict(created_server.config or {})
         merged_config.update(config)
@@ -411,7 +411,6 @@ class AgentCoreImportService:
         created_server.status = discovered_server.status or created_server.status
         created_server.federationSource = FederationSource.AGENTCORE
         created_server.federationId = discovered_server.federationId
-        created_server.federationGatewayArn = discovered_server.federationGatewayArn
         created_server.federationSyncedAt = now
         created_server.federationMetadata = discovered_server.federationMetadata
         created_server.updatedAt = now
@@ -550,7 +549,6 @@ class AgentCoreImportService:
         existing.wellKnown = new_data.wellKnown
         existing.federationSource = FederationSource.AGENTCORE
         existing.federationId = new_data.federationId
-        existing.federationGatewayArn = new_data.federationGatewayArn
         existing.federationSyncedAt = datetime.now(UTC)
         existing.federationMetadata = new_data.federationMetadata
         existing.updatedAt = datetime.now(UTC)
@@ -585,7 +583,6 @@ class AgentCoreImportService:
         existing.numTools = new_data.numTools
         existing.federationSource = FederationSource.AGENTCORE
         existing.federationId = new_data.federationId
-        existing.federationGatewayArn = new_data.federationGatewayArn
         existing.federationSyncedAt = datetime.now(UTC)
         existing.federationMetadata = new_data.federationMetadata
         existing.updatedAt = datetime.now(UTC)
