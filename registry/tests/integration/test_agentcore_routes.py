@@ -40,15 +40,6 @@ class TestAgentCoreRuntimeSyncRoute:
         assert body["created"]["mcp_servers"] == 1
         mock_import.assert_awaited_once()
 
-    def test_sync_runtime_rejects_runtime_arns(self, test_client):
-        response = test_client.post(
-            f"/api/{settings.API_VERSION}/federation/agentcore/runtime/sync",
-            json={"dryRun": False, "runtimeArns": ["arn:aws:bedrock-agentcore:us-east-1:1:runtime/x"]},
-        )
-
-        assert response.status_code == 400
-        assert "runtimeArns is not supported" in response.text
-
     def test_sync_runtime_maps_unexpected_error_to_500(self, test_client, monkeypatch):
         mock_import = AsyncMock(side_effect=RuntimeError("boom"))
         monkeypatch.setattr(

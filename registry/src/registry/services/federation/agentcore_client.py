@@ -5,10 +5,10 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
-import boto3
 from beanie import PydanticObjectId
 
 from registry.constants import REGISTRY_CONSTANTS
+from registry.services.federation.agentcore_client_provider import AgentCoreClientProvider
 from registry.services.federation.runtime_invoker import AgentCoreRuntimeInvoker
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 from registry_pkgs.models.enums import FederationSource
@@ -28,14 +28,15 @@ class AgentCoreFederationClient:
     def __init__(
         self,
         region: str | None = None,
+        client_provider: AgentCoreClientProvider | None = None,
+        runtime_invoker: AgentCoreRuntimeInvoker | None = None,
     ):
         self.region = region or REGISTRY_CONSTANTS.AWS_REGION or "us-east-1"
-        self._control_clients: dict[str, Any] = {}
-        self._aws_sessions: dict[str, Any] = {}
-        self._client_locks: dict[str, asyncio.Lock] = {}
-        self.runtime_invoker = AgentCoreRuntimeInvoker(
+        self.client_provider = client_provider or AgentCoreClientProvider(default_region=self.region)
+        self.runtime_invoker = runtime_invoker or AgentCoreRuntimeInvoker(
             default_region=self.region,
-            get_session=self._get_session,
+            get_runtime_client=self.client_provider.get_runtime_client,
+            get_runtime_credentials_provider=self.client_provider.get_runtime_credentials_provider,
             extract_region_from_arn=self._extract_region_from_arn,
         )
 
@@ -127,66 +128,8 @@ class AgentCoreFederationClient:
             qualifier=qualifier,
         )
 
-    def _init_boto3_client(self, region: str):
-        if region in self._control_clients:
-            return self._control_clients[region]
-
-        access_key = REGISTRY_CONSTANTS.AWS_ACCESS_KEY_ID
-        secret_key = REGISTRY_CONSTANTS.AWS_SECRET_ACCESS_KEY
-        session_token = REGISTRY_CONSTANTS.AWS_SESSION_TOKEN
-        assume_role_arn = REGISTRY_CONSTANTS.AGENTCORE_ASSUME_ROLE_ARN
-
-        if access_key and secret_key:
-            base_session = boto3.Session(
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                aws_session_token=session_token,
-            )
-            logger.info("Initialized AgentCore AWS session with explicit access keys")
-        else:
-            base_session = boto3.Session(region_name=region)
-            logger.info("Initialized AgentCore AWS session with default credential chain")
-
-        session = base_session
-        if assume_role_arn:
-            sts_client = base_session.client("sts")
-            assumed_role = sts_client.assume_role(
-                RoleArn=assume_role_arn,
-                RoleSessionName=f"agentcore-federation-{region}",
-            )
-            credentials = assumed_role["Credentials"]
-            session = boto3.Session(
-                region_name=region,
-                aws_access_key_id=credentials["AccessKeyId"],
-                aws_secret_access_key=credentials["SecretAccessKey"],
-                aws_session_token=credentials["SessionToken"],
-            )
-            logger.info("Initialized AgentCore AWS session via assume role")
-
-        client = session.client("bedrock-agentcore-control", region_name=region)
-        self._control_clients[region] = client
-        self._aws_sessions[region] = session
-        return client
-
     async def _get_control_client(self, region: str) -> Any:
-        cached = self._control_clients.get(region)
-        if cached:
-            return cached
-
-        lock = self._client_locks.setdefault(region, asyncio.Lock())
-        async with lock:
-            cached = self._control_clients.get(region)
-            if cached:
-                return cached
-            return await asyncio.to_thread(self._init_boto3_client, region)
-
-    async def _get_session(self, region: str) -> Any:
-        session = self._aws_sessions.get(region)
-        if session:
-            return session
-        await self._get_control_client(region)
-        return self._aws_sessions.get(region)
+        return await self.client_provider.get_control_client(region)
 
     def _list_runtime_summaries(self, control_client: Any) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []

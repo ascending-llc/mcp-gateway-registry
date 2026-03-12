@@ -5,9 +5,12 @@ from typing import Any
 
 from beanie import PydanticObjectId
 
+from registry.constants import REGISTRY_CONSTANTS
 from registry.schemas.server_api_schemas import ServerCreateRequest
 from registry.services.access_control_service import acl_service
 from registry.services.federation.agentcore_client import AgentCoreFederationClient
+from registry.services.federation.agentcore_client_provider import AgentCoreClientProvider
+from registry.services.federation.runtime_invoker import AgentCoreRuntimeInvoker
 from registry.services.server_service import server_service_v1
 from registry.services.user_service import user_service
 from registry_pkgs.database.decorators import get_current_session, use_transaction
@@ -33,11 +36,25 @@ class AgentCoreImportService:
     def __init__(
         self,
         federation_client: AgentCoreFederationClient | None = None,
+        agentcore_client_provider: AgentCoreClientProvider | None = None,
+        runtime_invoker: AgentCoreRuntimeInvoker | None = None,
         acl_service_instance=None,
         mcp_server_repo=None,
         a2a_agent_repo=None,
     ):
-        self.federation_client = federation_client or AgentCoreFederationClient()
+        default_region = REGISTRY_CONSTANTS.AWS_REGION or "us-east-1"
+        client_provider = agentcore_client_provider or AgentCoreClientProvider(default_region=default_region)
+        invoker = runtime_invoker or AgentCoreRuntimeInvoker(
+            default_region=client_provider.default_region,
+            get_runtime_client=client_provider.get_runtime_client,
+            get_runtime_credentials_provider=client_provider.get_runtime_credentials_provider,
+            extract_region_from_arn=AgentCoreFederationClient._extract_region_from_arn,
+        )
+        self.federation_client = federation_client or AgentCoreFederationClient(
+            region=client_provider.default_region,
+            client_provider=client_provider,
+            runtime_invoker=invoker,
+        )
         self.acl_service = acl_service_instance or acl_service
         self.mcp_server_repo = mcp_server_repo or get_mcp_server_repo()
         self.a2a_agent_repo = a2a_agent_repo or get_a2a_agent_repo()

@@ -4,7 +4,6 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-import boto3
 import httpx
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
@@ -56,13 +55,14 @@ class AgentCoreRuntimeInvoker:
         self,
         *,
         default_region: str,
-        get_session: Callable[[str], Any],
+        get_runtime_client: Callable[[str], Any],
+        get_runtime_credentials_provider: Callable[[str], Any],
         extract_region_from_arn: Callable[[str, str], str],
     ):
         self.default_region = default_region
-        self.get_session = get_session
+        self.get_runtime_client = get_runtime_client
+        self.get_runtime_credentials_provider = get_runtime_credentials_provider
         self.extract_region_from_arn = extract_region_from_arn
-        self._runtime_clients: dict[str, Any] = {}
         self._runtime_init_retry_attempts = max(
             1, int(getattr(REGISTRY_CONSTANTS, "AGENTCORE_RUNTIME_INIT_RETRY_ATTEMPTS", 4) or 4)
         )
@@ -327,15 +327,9 @@ class AgentCoreRuntimeInvoker:
         )
 
     async def _get_runtime_client(self, region: str) -> Any:
-        cached = self._runtime_clients.get(region)
-        if cached:
-            return cached
-
-        session = await self.get_session(region)
-        if not session:
-            session = boto3.Session(region_name=region)
-        client = session.client("bedrock-agentcore", region_name=region)
-        self._runtime_clients[region] = client
+        client = await self.get_runtime_client(region)
+        if not client:
+            raise ValueError(f"Failed to initialize AgentCore runtime client for region {region}")
         return client
 
     async def _invoke_mcp_jsonrpc(
@@ -589,7 +583,7 @@ class AgentCoreRuntimeInvoker:
             return {"Authorization": f"Bearer {token}"}, None
 
         region = self.extract_region_from_arn(metadata.get("runtimeArn", ""), self.default_region)
-        session = await self.get_session(region)
-        if not session:
-            raise ValueError(f"Failed to initialize AWS session for runtime auth in region {region}")
-        return {}, _SigV4HttpxAuth("bedrock-agentcore", region, session.get_credentials)
+        credentials_provider = await self.get_runtime_credentials_provider(region)
+        if not credentials_provider:
+            raise ValueError(f"Failed to initialize runtime credentials provider for region {region}")
+        return {}, _SigV4HttpxAuth("bedrock-agentcore", region, credentials_provider)

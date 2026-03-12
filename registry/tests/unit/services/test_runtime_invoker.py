@@ -7,12 +7,16 @@ from registry.services.federation.runtime_invoker import AgentCoreRuntimeInvoker
 
 
 def _build_invoker() -> AgentCoreRuntimeInvoker:
-    async def _get_session(_region: str):
-        return None
+    async def _get_runtime_client(_region: str):
+        return object()
+
+    async def _get_runtime_credentials_provider(_region: str):
+        return lambda: None
 
     return AgentCoreRuntimeInvoker(
         default_region="us-east-1",
-        get_session=_get_session,
+        get_runtime_client=_get_runtime_client,
+        get_runtime_credentials_provider=_get_runtime_credentials_provider,
         extract_region_from_arn=lambda _arn, default: default,
     )
 
