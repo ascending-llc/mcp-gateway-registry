@@ -12,6 +12,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from registry_pkgs import load_scopes_config
+from registry_pkgs.core.config import MongoConfig, ScopesConfig, TelemetryConfig
 
 from ..utils.config_loader import get_oauth2_config
 
@@ -86,6 +87,14 @@ class AuthSettings(BaseSettings):
     # ==================== Metrics Settings ====================
     metrics_service_url: str = "http://localhost:8890"
     metrics_api_key: str = ""
+    otel_metrics_config_path: str = ""
+    otel_exporter_otlp_endpoint: str = "http://otel-collector:4318"
+    otel_prometheus_enabled: bool = False
+    otel_prometheus_port: int = 9464
+    mongo_uri: str = "mongodb://127.0.0.1:27017/jarvis"
+    mongodb_username: str = ""
+    mongodb_password: str = ""
+    scopes_config_path: str = ""
 
     # ==================== OAuth Device Flow Settings ====================
     device_code_expiry_seconds: int = 600  # 10 minutes
@@ -104,7 +113,28 @@ class AuthSettings(BaseSettings):
     @property
     def scopes_config(self) -> dict:
         """Get the scopes configuration using centralized loader from registry_pkgs."""
-        return load_scopes_config()
+        return load_scopes_config(self.scopes_file_config)
+
+    @property
+    def scopes_file_config(self) -> ScopesConfig:
+        return ScopesConfig(scopes_config_path=self.scopes_config_path)
+
+    @property
+    def mongo_config(self) -> MongoConfig:
+        return MongoConfig(
+            mongo_uri=self.mongo_uri,
+            mongodb_username=self.mongodb_username,
+            mongodb_password=self.mongodb_password,
+        )
+
+    @property
+    def telemetry_config(self) -> TelemetryConfig:
+        return TelemetryConfig(
+            otel_metrics_config_path=self.otel_metrics_config_path,
+            otel_exporter_otlp_endpoint=self.otel_exporter_otlp_endpoint,
+            otel_prometheus_enabled=self.otel_prometheus_enabled,
+            otel_prometheus_port=self.otel_prometheus_port,
+        )
 
     @property
     def oauth2_config(self) -> dict:
