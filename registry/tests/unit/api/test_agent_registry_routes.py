@@ -13,7 +13,7 @@ import pytest
 from fastapi import Request, status
 from fastapi.testclient import TestClient
 
-from registry.core.config import settings
+from registry.core.config import Settings, settings
 from registry.main import app
 from registry.services.agent_service import agent_service
 
@@ -91,7 +91,7 @@ def admin_session_cookie():
     from registry_pkgs.core.scopes import map_groups_to_scopes
 
     groups = ["registry-admins"]
-    scopes = map_groups_to_scopes(groups) or ["registry-admins"]
+    scopes = map_groups_to_scopes(groups, Settings(_env_file=None).scopes_file_config) or ["registry-admins"]
 
     return generate_access_token(
         user_id="test-admin-id",

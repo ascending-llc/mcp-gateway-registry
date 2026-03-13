@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from registry_pkgs.database import close_mongodb, init_mongodb
 from registry_pkgs.database.redis_client import close_redis, init_redis
 from registry_pkgs.telemetry import setup_metrics
+from registry_pkgs.vector.client import initialize_database
 
 from .api.agent_routes import router as agent_router
 from .api.management_routes import router as management_router
@@ -66,19 +67,22 @@ async def lifespan(app: FastAPI):
     try:
         logger.info("🔭 Initializing Telemetry...")
         try:
-            setup_metrics("mcp-gateway-registry")
+            setup_metrics("mcp-gateway-registry", settings.telemetry_config)
         except Exception as e:
             logger.warning(f"Failed to initialize telemetry: {e}")
 
         # Initialize MongoDB connection first
         logger.info("🗄️  Initializing MongoDB connection...")
-        await init_mongodb()
+        await init_mongodb(settings.mongo_config)
         logger.info("✅ MongoDB connection established")
 
         # Initialize Redis connection
         logger.info("🔴 Initializing Redis connection...")
-        await init_redis()
+        await init_redis(settings.redis_config)
         logger.info("✅ Redis connection established")
+
+        logger.info("🧭 Initializing vector database client...")
+        initialize_database(settings.vector_backend_config)
 
         logger.info("🔍 Initializing vector search service...")
         await vector_service.initialize()

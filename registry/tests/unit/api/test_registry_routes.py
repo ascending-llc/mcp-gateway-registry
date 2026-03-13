@@ -8,7 +8,7 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from registry.core.config import settings
+from registry.core.config import Settings, settings
 from registry.health.service import health_service
 from registry.main import app
 from registry.services.server_service import server_service_v1
@@ -72,7 +72,7 @@ def admin_session_cookie():
     from registry_pkgs.core.scopes import map_groups_to_scopes
 
     groups = ["registry-admins"]
-    scopes = map_groups_to_scopes(groups) or ["registry-admins"]
+    scopes = map_groups_to_scopes(groups, Settings(_env_file=None).scopes_file_config) or ["registry-admins"]
 
     return generate_access_token(
         user_id="test-admin-id",
@@ -183,7 +183,7 @@ class TestV0ListServers:
 
         # Create session cookie (JWT access token) for this user
         groups = user_context["groups"]
-        scopes = map_groups_to_scopes(groups) or []
+        scopes = map_groups_to_scopes(groups, Settings(_env_file=None).scopes_file_config) or []
 
         user_session_cookie = generate_access_token(
             user_id="test-user-id",
@@ -394,7 +394,7 @@ class TestV0ListServerVersions:
 
         user_context = mock_enhanced_auth_user()
         groups = user_context["groups"]
-        scopes = map_groups_to_scopes(groups) or []
+        scopes = map_groups_to_scopes(groups, Settings(_env_file=None).scopes_file_config) or []
 
         user_session_cookie = generate_access_token(
             user_id="test-user-id",

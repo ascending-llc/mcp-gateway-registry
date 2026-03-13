@@ -239,7 +239,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                scopes = map_groups_to_scopes(groups)
+                scopes = map_groups_to_scopes(groups, settings.scopes_file_config)
                 logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
 
             # Verify we have at least some scopes
@@ -300,7 +300,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                scopes = map_groups_to_scopes(groups)
+                scopes = map_groups_to_scopes(groups, settings.scopes_file_config)
                 logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
 
             logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")

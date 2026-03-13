@@ -10,7 +10,7 @@ from fastapi import Request, status
 from fastapi.testclient import TestClient
 
 from registry.auth.dependencies import map_cognito_groups_to_scopes
-from registry.core.config import settings
+from registry.core.config import Settings, settings
 from registry.main import app
 from registry.schemas.agent_models import AgentCard
 from registry.services.agent_service import agent_service
@@ -67,7 +67,7 @@ def user_session_cookie():
     from registry_pkgs.core.scopes import map_groups_to_scopes
 
     groups = ["users"]
-    scopes = map_groups_to_scopes(groups) or []
+    scopes = map_groups_to_scopes(groups, Settings(_env_file=None).scopes_file_config) or []
 
     return generate_access_token(
         user_id="test-user-id",
