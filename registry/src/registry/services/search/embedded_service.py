@@ -16,6 +16,7 @@ from pydantic import HttpUrl
 
 from registry.schemas.agent_models import AgentCard
 
+from ...core.config import Settings
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ class _PydanticAwareJSONEncoder(json.JSONEncoder):
 class EmbeddedFaissService(VectorSearchService):
     """Embedded vector search using FAISS and sentence-transformers."""
 
-    def __init__(self, settings):
+    def __init__(self, settings: Settings):
         """
         Initialize the embedded FAISS service.
 
@@ -106,7 +107,7 @@ class EmbeddedFaissService(VectorSearchService):
                 logger.info(
                     f"Local model not found at {self.settings.embeddings_model_dir}, downloading from Hugging Face"
                 )
-                self.embedding_model = SentenceTransformer(str(self.settings.EMBEDDINGS_MODEL_NAME))
+                self.embedding_model = SentenceTransformer(str(self.settings.embeddings_model_name))
 
             # Restore original environment variable
             if original_st_home:
