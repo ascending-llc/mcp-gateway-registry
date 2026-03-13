@@ -213,11 +213,7 @@ class TestAgentCoreImportService:
 
         monkeypatch.setattr(service, "_import_single_server_in_transaction", _fake_import_single_server)
 
-        result = await service.import_from_runtime(
-            runtime_arns=None,
-            dry_run=False,
-            user_id="dummy",
-        )
+        result = await service.import_from_runtime(dry_run=False, user_id="dummy")
 
         assert result["discovered"]["mcp_servers"] == 2
         assert result["created"]["mcp_servers"] == 1
@@ -302,10 +298,6 @@ class TestAgentCoreImportService:
         assert len(a2a_repo.synced) == 1
         assert a2a_repo.synced[0][0] is existing
         assert a2a_repo.synced[0][1] is True
-
-    async def test_import_from_runtime_rejects_runtime_arns(self, service):
-        with pytest.raises(ValueError):
-            await service.import_from_runtime(runtime_arns=["arn:aws:bedrock-agentcore:us-east-1:1:runtime/x"])
 
     async def test_collects_stale_entities(self, service, monkeypatch):
         stale_server = _FakeServer(name="stale-mcp", federation_id="arn:runtime:stale")
