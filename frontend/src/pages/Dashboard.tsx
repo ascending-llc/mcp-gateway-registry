@@ -1,5 +1,4 @@
 import { ArrowPathIcon, MagnifyingGlassIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import axios from 'axios';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { HiCommandLine, HiServerStack } from 'react-icons/hi2';
@@ -9,27 +8,11 @@ import McpIcon from '@/assets/McpIcon';
 import AgentCard from '@/components/AgentCard';
 import SemanticSearchResults from '@/components/SemanticSearchResults';
 import ServerCard from '@/components/ServerCard';
-import { useAuth } from '@/contexts/AuthContext';
 import { useGlobal } from '@/contexts/GlobalContext';
-import type { ServerInfo } from '@/contexts/ServerContext';
 import { useServer } from '@/contexts/ServerContext';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 
-interface Agent {
-  name: string;
-  path: string;
-  url?: string;
-  description?: string;
-  version?: string;
-  visibility?: 'public' | 'private' | 'group-restricted';
-  trust_level?: 'community' | 'verified' | 'trusted' | 'unverified';
-  enabled: boolean;
-  tags?: string[];
-  last_checked_time?: string;
-  usersCount?: number;
-  rating?: number;
-  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
-}
+import type { Agent } from '@/services/agent/type';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -46,10 +29,7 @@ const Dashboard: React.FC = () => {
 
     refreshServerData,
     refreshAgentData,
-    handleServerUpdate,
-    setAgents,
   } = useServer();
-  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -57,7 +37,6 @@ const Dashboard: React.FC = () => {
 
   // Agent state management
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
-  const [agentApiToken, setAgentApiToken] = useState<string | null>(null);
 
   // Local view filter that includes 'external' mode not in context
   const [viewFilter, setViewFilter] = useState<'servers' | 'agents' | 'external'>('servers');
@@ -71,13 +50,6 @@ const Dashboard: React.FC = () => {
     tags: [] as string[],
   });
   const [editAgentLoading, setEditAgentLoading] = useState(false);
-
-  const handleAgentUpdate = useCallback(
-    (path: string, updates: Partial<Agent>) => {
-      setAgents(prevAgents => prevAgents.map(agent => (agent.path === path ? { ...agent, ...updates } : agent)));
-    },
-    [setAgents],
-  );
 
   // External registry tags - can be configured via environment or constants
   // Default tags that identify servers from external registries
@@ -202,7 +174,8 @@ const Dashboard: React.FC = () => {
     // Apply filter first
     if (activeFilter === 'enabled') filtered = filtered.filter(a => a.enabled);
     else if (activeFilter === 'disabled') filtered = filtered.filter(a => !a.enabled);
-    else if (activeFilter === 'unhealthy') filtered = filtered.filter(a => a.status === 'unhealthy');
+    else if (activeFilter === 'unhealthy')
+      filtered = filtered.filter(a => a.status === 'inactive' || a.status === 'error');
 
     // Then apply search
     if (searchTerm) {
@@ -273,25 +246,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleEditServer = async (server: ServerInfo) => {
-    navigate(`/server-edit?id=${server.id}`);
-  };
-
-  const handleEditAgent = async (agent: Agent) => {
-    // For now, just populate the form with existing data
-    // In the future, we might fetch additional details from an API
-    setEditingAgent(agent);
-    setEditAgentForm({
-      name: agent.name,
-      path: agent.path,
-      description: agent.description || '',
-      version: agent.version || '1.0.0',
-      visibility: agent.visibility || 'private',
-      trust_level: agent.trust_level || 'community',
-      tags: agent.tags || [],
-    });
-  };
-
   const handleCloseEdit = () => {
     setEditingAgent(null);
   };
@@ -309,20 +263,13 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleToggleAgent = async (path: string, enabled: boolean) => {
-    setAgents(prevAgents => prevAgents.map(agent => (agent.path === path ? { ...agent, enabled } : agent)));
-    try {
-      await axios.post(`/api/agents${path}/toggle?enabled=${enabled}`);
-      showToast(`Agent ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
-    } catch (error: any) {
-      setAgents(prevAgents => prevAgents.map(agent => (agent.path === path ? { ...agent, enabled: !enabled } : agent)));
-      showToast(error.response?.data?.detail || 'Failed to toggle agent', 'error');
+  const handleRegister = useCallback(() => {
+    if (viewFilter === 'agents') {
+      navigate('/agent-registry');
+    } else {
+      navigate('/server-registry');
     }
-  };
-
-  const handleRegisterServer = useCallback(() => {
-    navigate('/server-registry');
-  }, []);
+  }, [viewFilter, navigate]);
 
   const renderDashboardCollections = () => (
     <>
@@ -346,7 +293,7 @@ const Dashboard: React.FC = () => {
                 </p>
                 {!searchTerm && activeFilter === 'all' && (
                   <button
-                    onClick={handleRegisterServer}
+                    onClick={handleRegister}
                     className='mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors'
                   >
                     <PlusIcon className='h-4 w-4 mr-2' />
@@ -363,13 +310,7 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 {filteredServers.map(server => (
-                  <ServerCard
-                    key={server.id}
-                    server={server}
-                    onEdit={handleEditServer}
-                    onServerUpdate={handleServerUpdate}
-                    onRefreshSuccess={refreshServerData}
-                  />
+                  <ServerCard key={server.id} server={server} />
                 ))}
               </div>
             )}
@@ -400,21 +341,12 @@ const Dashboard: React.FC = () => {
               <div
                 className='grid'
                 style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                  gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
                 }}
               >
                 {filteredAgents.map(agent => (
-                  <AgentCard
-                    key={agent.path}
-                    agent={agent}
-                    onToggle={handleToggleAgent}
-                    onEdit={handleEditAgent}
-                    canModify={user?.canModifyServers || false}
-                    onRefreshSuccess={refreshAgentData}
-                    onAgentUpdate={handleAgentUpdate}
-                    authToken={agentApiToken}
-                  />
+                  <AgentCard key={agent.id} agent={agent} />
                 ))}
               </div>
             )}
@@ -454,18 +386,12 @@ const Dashboard: React.FC = () => {
                     <div
                       className='grid'
                       style={{
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                        gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                        gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
                       }}
                     >
                       {filteredExternalServers.map(server => (
-                        <ServerCard
-                          key={server.id}
-                          server={server}
-                          onEdit={handleEditServer}
-                          onServerUpdate={handleServerUpdate}
-                          onRefreshSuccess={refreshServerData}
-                        />
+                        <ServerCard key={server.id} server={server} />
                       ))}
                     </div>
                   </div>
@@ -478,20 +404,12 @@ const Dashboard: React.FC = () => {
                     <div
                       className='grid'
                       style={{
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                        gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                        gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
                       }}
                     >
                       {filteredExternalAgents.map(agent => (
-                        <AgentCard
-                          key={agent.path}
-                          agent={agent}
-                          onToggle={handleToggleAgent}
-                          onEdit={handleEditAgent}
-                          canModify={user?.canModifyServers || false}
-                          onRefreshSuccess={refreshAgentData}
-                          onAgentUpdate={handleAgentUpdate}
-                        />
+                        <AgentCard key={agent.id} agent={agent} />
                       ))}
                     </div>
                   </div>
@@ -598,10 +516,15 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            <button onClick={handleRegisterServer} className='btn-primary flex items-center space-x-2 flex-shrink-0'>
-              <PlusIcon className='h-4 w-4' />
-              <span>Register</span>
-            </button>
+            {viewFilter !== 'external' && (
+              <button
+                onClick={handleRegister}
+                className='btn-primary flex items-center justify-center space-x-2 flex-shrink-0 w-[190px]'
+              >
+                <PlusIcon className='h-4 w-4' />
+                <span>{viewFilter === 'agents' ? 'Register Agent' : 'Register Server'}</span>
+              </button>
+            )}
 
             <button
               onClick={handleRefreshHealth}

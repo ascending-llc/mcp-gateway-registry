@@ -4,7 +4,7 @@ import type React from 'react';
 import { useState } from 'react';
 import type { ServerInfo } from '@/contexts/ServerContext';
 import type { SemanticAgentHit, SemanticServerHit, SemanticToolHit } from '../hooks/useSemanticSearch';
-import type { Agent as AgentType } from './AgentCard';
+import type { Agent as AgentType } from '@/services/agent/type';
 import AgentDetailsModal from './AgentDetailsModal';
 import ServerConfigModal from './ServerConfigModal';
 
@@ -48,16 +48,28 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
   };
 
   const mapHitToAgent = (hit: SemanticAgentHit): AgentType => ({
+    id: '', 
     name: hit.agentName,
     path: hit.path,
-    url: hit.url || (hit.agentCard as any)?.url,
-    description: hit.description,
-    version: (hit as any).version,
-    visibility: (hit.visibility as AgentType['visibility']) ?? 'public',
-    trust_level: (hit.trustLevel as AgentType['trust_level']) ?? 'unverified',
+    url: hit.url || (hit.agentCard as any)?.url || '',
+    description: hit.description || '',
+    version: (hit as any).version || '',
+    protocolVersion: '',
+    capabilities: { streaming: false, pushNotifications: false },
+    skills: [],
+    securitySchemes: { bearer: { type: '', scheme: '' } },
+    preferredTransport: '',
+    defaultInputModes: [],
+    defaultOutputModes: [],
+    provider: { organization: '', url: '' },
+    permissions: { VIEW: false, EDIT: false, DELETE: false, SHARE: false },
+    author: '',
+    wellKnown: { enabled: false, url: '', lastSyncAt: '', lastSyncStatus: '', lastSyncVersion: '' },
+    createdAt: '',
+    updatedAt: '',
     enabled: hit.isEnabled ?? true,
     tags: hit.tags,
-    status: 'unknown',
+    status: 'unknown' as any,
   });
 
   return (

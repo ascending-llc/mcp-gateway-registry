@@ -1,8 +1,8 @@
-import axios from 'axios';
 import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { getBasePath } from '@/config';
 import SERVICES from '@/services';
+import type { Agent } from '@/services/agent/type';
 import { ServerConnection } from '@/services/mcp/type';
 import type { PermissionType, Server } from '@/services/server/type';
 
@@ -26,22 +26,6 @@ export interface ServerInfo {
   isPython?: boolean;
   connectionState: ServerConnection;
   requiresOauth: boolean;
-}
-
-interface Agent {
-  name: string;
-  path: string;
-  url?: string;
-  description?: string;
-  version?: string;
-  visibility?: 'public' | 'private' | 'group-restricted';
-  trust_level?: 'community' | 'verified' | 'trusted' | 'unverified';
-  enabled: boolean;
-  tags?: string[];
-  last_checked_time?: string;
-  usersCount?: number;
-  rating?: number;
-  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
 }
 
 interface ServerStats {
@@ -83,6 +67,7 @@ interface ServerContextType {
   refreshServerData: (notLoading?: boolean) => Promise<ServerInfo[]>;
   refreshAgentData: (notLoading?: boolean) => Promise<void>;
   handleServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
+  handleAgentUpdate: (id: string, updates: Partial<Agent>) => void;
   getServerStatusByPolling: (serverId: string, callback?: (state: ServerConnection | undefined) => void) => void;
   cancelPolling: (serverId?: string) => void;
 }
@@ -129,18 +114,23 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       total: agents.length,
       enabled: agents.filter(a => a.enabled).length,
       disabled: agents.filter(a => !a.enabled).length,
-      withIssues: agents.filter(a => a.status === 'unhealthy').length,
+      withIssues: agents.filter(a => a.status === 'inactive' || a.status === 'error').length,
     }),
     [agents],
   );
 
   // Helper function to map backend health status to frontend status
-  const mapHealthStatus = (healthStatus: string): 'healthy' | 'unhealthy' | 'unknown' => {
-    if (!healthStatus || healthStatus === 'unknown') return 'unknown';
-    if (healthStatus === 'healthy') return 'healthy';
-    if (healthStatus.includes('unhealthy') || healthStatus.includes('error') || healthStatus.includes('timeout'))
-      return 'unhealthy';
-    return 'unknown';
+  const mapHealthStatus = (healthStatus: string): Agent['status'] => {
+    if (!healthStatus || healthStatus === 'unknown') return 'unknown' as any;
+    if (healthStatus === 'active' || healthStatus === 'healthy') return 'active';
+    if (
+      healthStatus === 'inactive' ||
+      healthStatus.includes('unhealthy') ||
+      healthStatus.includes('error') ||
+      healthStatus.includes('timeout')
+    )
+      return 'inactive';
+    return 'unknown' as any;
   };
 
   const handleServerUpdate = (id: string, updates: Partial<ServerInfo>) => {
@@ -189,28 +179,50 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     }
   }, []);
 
+  const handleAgentUpdate = (id: string, updates: Partial<Agent>) => {
+    setAgents(prevAgents => prevAgents.map(agent => (agent.id === id ? { ...agent, ...updates } : agent)));
+  };
   const refreshAgentData = useCallback(async (notLoading?: boolean) => {
     try {
       if (!notLoading) setAgentLoading(true);
       setAgentError(null);
-      const agentsResponse = await axios.get('/api/agents').catch(() => ({ data: { agents: [] } }));
-      const agentsData = agentsResponse.data || {};
-      const agentsList = agentsData.agents || [];
+      const result = await SERVICES.AGENT.getAgentsList({});
+      const agentsList = result?.agents || [];
 
       const transformedAgents: Agent[] = agentsList.map((agentInfo: any) => ({
+        id: agentInfo.id,
         name: agentInfo.display_name || agentInfo.name || 'Unknown Agent',
+        description: agentInfo.description || '',
         path: agentInfo.path,
         url: agentInfo.url,
-        description: agentInfo.description || '',
         version: agentInfo.version,
-        visibility: agentInfo.visibility || 'private',
-        trust_level: agentInfo.trust_level || 'community',
-        enabled: agentInfo.is_enabled !== undefined ? agentInfo.is_enabled : false,
+        protocolVersion: agentInfo.protocolVersion || '',
+        capabilities: agentInfo.capabilities || { streaming: false, pushNotifications: false },
+        skills: agentInfo.skills || [],
+        securitySchemes: agentInfo.securitySchemes || { bearer: { type: '', scheme: '' } },
+        preferredTransport: agentInfo.preferredTransport || '',
+        defaultInputModes: agentInfo.defaultInputModes || [],
+        defaultOutputModes: agentInfo.defaultOutputModes || [],
+        provider: agentInfo.provider || { organization: '', url: '' },
+        permissions: agentInfo.permissions || { VIEW: false, EDIT: false, DELETE: false, SHARE: false },
+        author: agentInfo.author || '',
+        wellKnown: agentInfo.wellKnown || {
+          enabled: false,
+          url: '',
+          lastSyncAt: '',
+          lastSyncStatus: '',
+          lastSyncVersion: '',
+        },
+        createdAt: agentInfo.createdAt || '',
+        updatedAt: agentInfo.updatedAt || '',
+        enabled:
+          agentInfo.is_enabled !== undefined
+            ? agentInfo.is_enabled
+            : agentInfo.enabled !== undefined
+              ? agentInfo.enabled
+              : false,
         tags: agentInfo.tags || [],
-        last_checked_time: agentInfo.last_checked_iso,
-        usersCount: 0,
-        rating: agentInfo.num_stars || 0,
-        status: mapHealthStatus(agentInfo.health_status || 'unknown'),
+        status: mapHealthStatus(agentInfo.health_status || agentInfo.status || 'unknown'),
       }));
       setAgents(transformedAgents);
     } catch (error: any) {
@@ -327,6 +339,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     refreshServerData,
     refreshAgentData,
     handleServerUpdate,
+    handleAgentUpdate,
     getServerStatusByPolling,
     cancelPolling,
   };
