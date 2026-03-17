@@ -4,9 +4,9 @@ import time
 
 from redis import Redis
 
-from registry.constants import REGISTRY_CONSTANTS
-from registry.schemas.enums import OAuthFlowStatus
-from registry.schemas.oauth_schema import MCPOAuthFlowMetadata, OAuthFlow, OAuthTokens
+from ...constants import REGISTRY_CONSTANTS
+from ...schemas.enums import OAuthFlowStatus
+from ...schemas.oauth_schema import MCPOAuthFlowMetadata, OAuthFlow, OAuthTokens
 
 logger = logging.getLogger(__name__)
 

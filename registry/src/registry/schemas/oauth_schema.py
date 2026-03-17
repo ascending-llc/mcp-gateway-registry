@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
-from registry.schemas.enums import OAuthFlowStatus
+from .enums import OAuthFlowStatus
 
 
 class OAuthTokens(BaseModel):

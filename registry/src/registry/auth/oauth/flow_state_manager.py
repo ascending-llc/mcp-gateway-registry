@@ -7,13 +7,6 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from registry.schemas.oauth_schema import (
-    MCPOAuthFlowMetadata,
-    OAuthClientInformation,
-    OAuthFlow,
-    OAuthMetadata,
-    OAuthTokens,
-)
 from registry_pkgs.database.redis_client import get_redis_client
 
 from ...auth.oauth.oauth_utils import parse_scope, scope_to_string
@@ -21,6 +14,13 @@ from ...auth.oauth.redis_flow_storage import RedisFlowStorage
 from ...auth.oauth.types import OAuthFlowState, StateMetadata
 from ...core.config import settings
 from ...schemas.enums import OAuthFlowStatus
+from ...schemas.oauth_schema import (
+    MCPOAuthFlowMetadata,
+    OAuthClientInformation,
+    OAuthFlow,
+    OAuthMetadata,
+    OAuthTokens,
+)
 
 logger = logging.getLogger(__name__)
 
