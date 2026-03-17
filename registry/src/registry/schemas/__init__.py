@@ -19,7 +19,7 @@ from .errors import (
     ErrorCode,
     create_error_detail,
 )
-from .oauth_sachema import (
+from .oauth_schema import (
     MCPOAuthFlowMetadata,
     OAuthClientInformation,
     OAuthFlow,

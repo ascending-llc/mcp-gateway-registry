@@ -5,7 +5,7 @@ from bson import ObjectId
 
 from registry.auth.oauth import FlowStateManager
 from registry.schemas.enums import OAuthFlowStatus
-from registry.schemas.oauth_sachema import OAuthTokens
+from registry.schemas.oauth_schema import OAuthTokens
 from registry.services.oauth.oauth_service import MCPOAuthService
 from registry.services.oauth.token_service import token_service
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
@@ -269,7 +269,7 @@ class TestMCPOAuthService:
         }
 
         # Mock DCR registration
-        from registry.schemas.oauth_sachema import OAuthClientInformation
+        from registry.schemas.oauth_schema import OAuthClientInformation
 
         mock_client_info = OAuthClientInformation(
             client_id="dcr_registered_client_123",

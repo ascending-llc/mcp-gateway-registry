@@ -6,7 +6,7 @@ from typing import Any
 from beanie import PydanticObjectId
 
 from registry.schemas.enums import TokenType
-from registry.schemas.oauth_sachema import OAuthClientInformation, OAuthTokens
+from registry.schemas.oauth_schema import OAuthClientInformation, OAuthTokens
 from registry.services.user_service import user_service
 from registry.utils.crypto_utils import decrypt_auth_fields, encrypt_value
 from registry_pkgs.models import IUser

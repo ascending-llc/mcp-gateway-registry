@@ -7,7 +7,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from registry.schemas.oauth_sachema import (
+from registry.schemas.oauth_schema import (
     MCPOAuthFlowMetadata,
     OAuthClientInformation,
     OAuthFlow,

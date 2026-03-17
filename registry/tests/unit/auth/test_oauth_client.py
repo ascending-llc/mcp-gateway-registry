@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from registry.auth.oauth.oauth_client import OAuthClient
-from registry.schemas.oauth_sachema import (
+from registry.schemas.oauth_schema import (
     MCPOAuthFlowMetadata,
     OAuthClientInformation,
     OAuthMetadata,

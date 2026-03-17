@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 from registry.schemas.enums import ConnectionState
-from registry.schemas.oauth_sachema import OAuthTokens
+from registry.schemas.oauth_schema import OAuthTokens
 from registry.services.server_service import server_service_v1
 
 logger = logging.getLogger(__name__)

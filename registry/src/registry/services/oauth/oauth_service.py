@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from registry.schemas.oauth_sachema import (
+from registry.schemas.oauth_schema import (
     OAuthTokens,
 )
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
@@ -156,7 +156,7 @@ class MCPOAuthService:
 
                 try:
                     # Build OAuth metadata for DCR
-                    from registry.schemas.oauth_sachema import OAuthMetadata, OAuthProtectedResourceMetadata
+                    from registry.schemas.oauth_schema import OAuthMetadata, OAuthProtectedResourceMetadata
 
                     metadata_obj = OAuthMetadata(
                         issuer=oauth_metadata.get("issuer"),
