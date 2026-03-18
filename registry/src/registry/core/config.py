@@ -150,6 +150,11 @@ class Settings(BaseSettings):
     aws_secret_access_key: str | None = None
     aws_session_token: str | None = None
     agentcore_assume_role_arn: str | None = None
+    agentcore_runtime_jwt: str | None = None
+    agentcore_runtime_init_retry_attempts: int = 4
+    agentcore_runtime_init_retry_delay_seconds: float = 5.0
+    agentcore_a2a_card_retry_attempts: int = 3
+    agentcore_a2a_card_retry_delay_seconds: float = 3.0
 
     # ==================== JWT ====================
     jwt_issuer: str = "jarvis-auth-server"
