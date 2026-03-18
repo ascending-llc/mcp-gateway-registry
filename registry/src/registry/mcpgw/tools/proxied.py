@@ -595,17 +595,11 @@ def get_tools() -> list[tuple[str, Callable]]:
         tool_name: Annotated[
             str,
             Field(
-                description="Tool name from discovery - can be scoped name (e.g., 'tavily_search_mcp_tavily_search')"
+                description="Actual downstream MCP tool name to execute, matching .config.toolFunctions[*].mcpToolName"
             ),
         ],
         arguments: Annotated[dict[str, Any], Field(description="Tool parameters from input_schema")],
         server_id: Annotated[str, Field(description="Server ID from discovery")],
-        mcp_tool_name: Annotated[
-            str | None,
-            Field(
-                description="Original MCP tool name (e.g., 'tavily_search') - extract from toolFunction.mcpToolName if available",
-            ),
-        ] = None,
     ) -> CallToolResult:
         """
         🚀 AUTO-USE: Execute any discovered tool to get real-time data.
@@ -615,7 +609,6 @@ def get_tools() -> list[tuple[str, Callable]]:
         # Web search
         execute_tool(
             tool_name="tavily_search",
-            mcp_tool_name="tavily_search",  # Extract from toolFunction.mcpToolName
             arguments={"query": "latest AI news", "max_results": 5},
             server_id="6972e222755441652c23090f"
         )
@@ -629,27 +622,18 @@ def get_tools() -> list[tuple[str, Callable]]:
         ```
 
         **Parameters:**
-        - tool_name: Tool identifier (can be scoped name like "tavily_search_mcp_tavily_search")
-        - mcp_tool_name: Original MCP name from toolFunction.mcpToolName (e.g., "tavily_search")
+        - tool_name: Actual downstream MCP tool name (same value as `.config.toolFunctions[*].mcpToolName`)
         - arguments: Tool-specific parameters from input_schema
         - server_id: Server ID from discovery
 
-        **Note:** If mcp_tool_name is provided, it's used for execution (MCP standard).
-        Otherwise, tool_name is used directly.
+        **Important:** Pass the real downstream MCP tool name here, not the registry-scoped toolFunction key.
 
         ⚠️ Use after discover_servers to execute tools.
         Returns: Tool-specific results (format varies by tool)
         """
-        # Resolve tool name at interface layer: use mcpToolName if provided, otherwise use tool_name
-        resolved_tool_name = mcp_tool_name or tool_name
-
-        # Log the resolution for debugging
-        if mcp_tool_name and mcp_tool_name != tool_name:
-            logger.debug(f"Resolved tool name: '{resolved_tool_name}' (from mcpToolName, scoped was '{tool_name}')")
-
         return await execute_tool_impl(
             ctx,
-            resolved_tool_name,
+            tool_name,
             arguments,
             server_id,
         )
