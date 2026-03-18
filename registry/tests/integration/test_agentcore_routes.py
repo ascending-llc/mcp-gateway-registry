@@ -27,8 +27,8 @@ class TestAgentCoreRuntimeSyncRoute:
         mock_service = AsyncMock()
         mock_service.import_from_runtime.return_value = _sync_response()
         monkeypatch.setattr(
-            "registry.api.v1.federation.agentcore_routes.get_agentcore_import_service",
-            lambda: mock_service,
+            "registry.api.v1.federation.agentcore_routes.agentcore_import_service",
+            mock_service,
         )
 
         response = test_client.post(
@@ -45,8 +45,8 @@ class TestAgentCoreRuntimeSyncRoute:
         mock_service = AsyncMock()
         mock_service.import_from_runtime.side_effect = RuntimeError("boom")
         monkeypatch.setattr(
-            "registry.api.v1.federation.agentcore_routes.get_agentcore_import_service",
-            lambda: mock_service,
+            "registry.api.v1.federation.agentcore_routes.agentcore_import_service",
+            mock_service,
         )
 
         response = test_client.post(
@@ -61,8 +61,8 @@ class TestAgentCoreRuntimeSyncRoute:
         mock_service = AsyncMock()
         mock_service.import_from_runtime.return_value = _sync_response()
         monkeypatch.setattr(
-            "registry.api.v1.federation.agentcore_routes.get_agentcore_import_service",
-            lambda: mock_service,
+            "registry.api.v1.federation.agentcore_routes.agentcore_import_service",
+            mock_service,
         )
         monkeypatch.setattr(
             "registry.middleware.rbac.ScopePermissionMiddleware._has_permission",

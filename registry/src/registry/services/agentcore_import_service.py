@@ -808,13 +808,4 @@ class AgentCoreImportService:
         )
 
 
-_agentcore_import_service: AgentCoreImportService | None = None
-
-
-def get_agentcore_import_service() -> AgentCoreImportService:
-    global _agentcore_import_service
-
-    if _agentcore_import_service is None:
-        _agentcore_import_service = AgentCoreImportService()
-
-    return _agentcore_import_service
+agentcore_import_service = AgentCoreImportService()

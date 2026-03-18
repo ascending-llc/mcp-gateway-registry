@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from ....auth.dependencies import CurrentUser
 from ....core.telemetry_decorators import track_registry_operation
 from ....schemas.errors import ErrorCode, create_error_detail
-from ....services.agentcore_import_service import get_agentcore_import_service
+from ....services.agentcore_import_service import agentcore_import_service
 
 router = APIRouter()
 
@@ -65,7 +65,7 @@ async def sync_agentcore_runtime(
     No background jobs; request blocks until import completes.
     """
     try:
-        result = await get_agentcore_import_service().import_from_runtime(
+        result = await agentcore_import_service.import_from_runtime(
             dry_run=data.dryRun,
             user_id=user_context.get("user_id"),
         )

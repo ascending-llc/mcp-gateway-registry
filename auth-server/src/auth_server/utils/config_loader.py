@@ -6,13 +6,13 @@ from typing import Any, Optional
 
 import yaml
 
+from ..core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
 def _get_settings_value(var_name: str) -> str | None:
     """Resolve an oauth2 placeholder from auth-server settings."""
-    from ..core.config import settings
-
     field_name = var_name.strip().lower()
     value = getattr(settings, field_name, None)
     if value is None:

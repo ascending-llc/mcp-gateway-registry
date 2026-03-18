@@ -59,7 +59,6 @@ class AsorFederationClient(BaseFederationClient):
         # Always check for pre-obtained access token first (for 3LO scenarios)
         if self.access_token:
             logger.info("Using pre-obtained ASOR access token from settings")
-            logger.debug(f"Token starts with: {self.access_token[:50]}...")
             self._access_token = self.access_token
             # Set a reasonable expiry (1 hour from now)
             self._token_expiry = datetime.now(UTC).replace(microsecond=0) + timedelta(hours=1)
