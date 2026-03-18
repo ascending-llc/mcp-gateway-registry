@@ -43,7 +43,7 @@ jobs:
       schema_version: ${{ steps.schema.outputs.schema-version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get latest schema version
         id: schema
