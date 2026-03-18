@@ -97,7 +97,7 @@ const INIT_DATA: ServerConfig = {
   description: '',
   path: '',
   url: '',
-  headers: { Authorization: '', 'x-jarvis-auth': '' },
+  headers: null,
   type: 'streamable-http',
   authConfig: DEFAULT_AUTH_CONFIG,
   trustServer: false,

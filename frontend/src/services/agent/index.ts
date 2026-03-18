@@ -24,8 +24,11 @@ const toggleAgentState: (id: string, data: TYPE.ToggleAgentStateRequest) => Prom
 
 const testAgentUrl: (url: string, config: any) => Promise<any> = async () => ({ success: true });
 
-const getWellKnownAgentCards: (id: string) => Promise<TYPE.GetWellKnownAgentCardsResponse> = async id =>
-  await Request.get(API.getWellKnownAgentCards(id));
+const getAgentSkills: (id: string) => Promise<TYPE.GetAgentSkillsResponse> = async id =>
+  await Request.get(API.getAgentSkills(id));
+
+const getWellKnownAgentCards: (url: string) => Promise<TYPE.GetWellKnownAgentCardsResponse> = async url =>
+  await Request.get(API.getWellKnownAgentCards, { url });
 
 const AGENT = {
   getAgentsList,
@@ -36,6 +39,7 @@ const AGENT = {
   deleteAgent,
   toggleAgentState,
   testAgentUrl,
+  getAgentSkills,
   getWellKnownAgentCards,
 };
 

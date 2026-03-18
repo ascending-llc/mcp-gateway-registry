@@ -1,6 +1,6 @@
-import { PencilIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, WrenchScrewdriverIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useGlobal } from '@/contexts/GlobalContext';
@@ -15,6 +15,39 @@ interface AgentCardProps {
   agent: Agent & { [key: string]: any }; // Allow additional fields from full agent JSON
 }
 
+interface ParsedSkillExample {
+  label: string;
+  prettyJson: string | null;
+}
+
+const parseSkillExample = (example: string): ParsedSkillExample => {
+  const colonIndex = example.indexOf(':');
+  let label = '';
+  let content = example;
+
+  if (colonIndex !== -1) {
+    const potentialLabel = example.substring(0, colonIndex).trim();
+    const potentialContent = example.substring(colonIndex + 1).trim();
+    if (potentialContent.startsWith('{') || potentialContent.startsWith('[')) {
+      label = potentialLabel;
+      content = potentialContent;
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(content);
+    return {
+      label,
+      prettyJson: JSON.stringify(parsed, null, 2),
+    };
+  } catch {
+    return {
+      label: '',
+      prettyJson: null,
+    };
+  }
+};
+
 /**
  * AgentCard component for displaying A2A agents.
  */
@@ -23,6 +56,19 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent }) => {
   const { showToast } = useGlobal();
   const { handleAgentUpdate } = useServer();
   const [loading, setLoading] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showSkills) {
+        setShowSkills(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showSkills]);
 
   const toEditPage = async (agent: Agent) => {
     navigate(`/agent-edit?id=${(agent as any).id || agent.path}`);
@@ -43,7 +89,7 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent }) => {
   };
 
   return (
-    <div>
+    <>
       <div className='group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col relative bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'>
         {loading && (
           <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
@@ -114,7 +160,11 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent }) => {
           <div className='grid grid-cols-2 gap-2'>
             <div className='flex items-center gap-1.5'>
               {(agent.skills?.length || 0) > 0 ? (
-                <div className='flex items-center gap-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded transition-all text-xs'>
+                <button
+                  onClick={() => setShowSkills(true)}
+                  className='flex items-center gap-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded transition-all text-xs'
+                  title='View skills'
+                >
                   <div className='p-1 bg-blue-50 dark:bg-blue-900/30 rounded'>
                     <WrenchScrewdriverIcon className='h-3.5 w-3.5' />
                   </div>
@@ -122,7 +172,7 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent }) => {
                     <div className='text-xs font-semibold'>{agent.skills.length}</div>
                     <div className='text-xs'>Skills</div>
                   </div>
-                </div>
+                </button>
               ) : (
                 <div className='flex items-center gap-1.5 text-gray-400 dark:text-gray-500'>
                   <div className='p-1 bg-gray-50 dark:bg-gray-800 rounded'>
@@ -209,7 +259,102 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent }) => {
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Skills Modal */}
+      {showSkills && (
+        <div className='fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50'>
+          <div className='bg-white dark:bg-gray-800 rounded-xl p-6 pt-0 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto'>
+            <div className='flex items-center justify-between mb-4 sticky top-0 bg-white dark:bg-gray-800 z-10 pb-2 border-b border-gray-100 dark:border-gray-700 -mx-6 px-6 -mt-6 pt-6'>
+              <h3 className='text-lg font-semibold text-gray-900 dark:text-white'>Skills for {agent.name}</h3>
+              <button
+                onClick={() => setShowSkills(false)}
+                className='text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              >
+                <XMarkIcon className='h-6 w-6' />
+              </button>
+            </div>
+
+            <div className='space-y-4 mt-[2.8rem]'>
+              {agent.skills?.length > 0 ? (
+                agent.skills.map((skill, index) => (
+                  <div key={skill.id || index} className='border border-gray-200 dark:border-gray-700 rounded-lg p-4'>
+                    <h4 className='font-medium text-gray-900 dark:text-white mb-2'>{skill.name}</h4>
+                    {skill.description && (
+                      <p className='text-sm text-gray-600 dark:text-gray-300 mb-2'>{skill.description}</p>
+                    )}
+                    {skill.tags && skill.tags.length > 0 && (
+                      <div className='flex flex-wrap gap-1 mb-2'>
+                        {skill.tags.map(tag => (
+                          <span
+                            key={tag}
+                            className='px-1.5 py-0.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded'
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {(skill.inputModes?.length > 0 || skill.outputModes?.length > 0) && (
+                      <details className='text-xs'>
+                        <summary className='cursor-pointer text-gray-500 dark:text-gray-300'>View Modes</summary>
+                        <div className='mt-2 p-3 bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded text-gray-900 dark:text-gray-100 space-y-1'>
+                          {skill.inputModes?.length > 0 && (
+                            <div>
+                              <span className='font-medium'>Input:</span> {skill.inputModes.join(', ')}
+                            </div>
+                          )}
+                          {skill.outputModes?.length > 0 && (
+                            <div>
+                              <span className='font-medium'>Output:</span> {skill.outputModes.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                        {skill.examples && skill.examples.length > 0 && (
+                          <div className='mt-3 space-y-2'>
+                            <div className='text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1'>
+                              <span className='w-1 h-3 bg-blue-500 rounded-full'></span>
+                              Examples
+                            </div>
+                            <div className='space-y-3'>
+                              {skill.examples.map((example, i) => {
+                                const parsedExample = parseSkillExample(example);
+
+                                if (parsedExample.prettyJson) {
+                                  return (
+                                    <div key={i} className='rounded-lg border border-gray-100 dark:border-gray-800 overflow-hidden'>
+                                      {parsedExample.label && (
+                                        <div className='px-2 py-1 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400'>
+                                          {parsedExample.label}
+                                        </div>
+                                      )}
+                                      <pre className='p-2.5 bg-gray-50/50 dark:bg-gray-900/30 text-[11px] font-mono text-blue-600 dark:text-blue-400 overflow-x-auto'>
+                                        {parsedExample.prettyJson}
+                                      </pre>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div key={i} className='p-2.5 bg-gray-50/50 dark:bg-gray-900/30 rounded-lg border border-gray-100 dark:border-gray-800 text-[11px] text-gray-600 dark:text-gray-400 italic break-all'>
+                                    {example}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </details>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className='text-gray-500 dark:text-gray-300'>No skills available for this agent.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

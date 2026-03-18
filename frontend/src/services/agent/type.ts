@@ -52,6 +52,7 @@ export type AgentSkillItem = {
   tags: string[];
   inputModes: string[];
   outputModes: string[];
+  examples?: string[];
 };
 
 export type AgentSecuritySchemes = {
@@ -147,6 +148,13 @@ export type UpdateAgentRequest = {
 
 export type ToggleAgentStateRequest = {
   enabled: boolean;
+};
+
+export type GetAgentSkillsResponse = {
+  agentId: string;
+  agentName: string;
+  skills: AgentSkillItem[];
+  totalSkills: number;
 };
 
 export type GetWellKnownAgentCardsResponse = {

@@ -42,7 +42,7 @@ const API = {
   deleteAgent: (id: string) => `${AGENT_BASE_URL}/${id}`,
   toggleAgentState: (id: string) => `${AGENT_BASE_URL}/${id}/toggle`,
   getAgentSkills: (id: string) => `${AGENT_BASE_URL}/${id}/skills`,
-  getWellKnownAgentCards: (id: string) => `${AGENT_BASE_URL}/${id}/well-known/agent-cards`,
+  getWellKnownAgentCards: `${AGENT_BASE_URL}/.well-known/agent-cards`,
 };
 
 export default API;

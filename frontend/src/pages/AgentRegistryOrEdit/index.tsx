@@ -13,12 +13,21 @@ import type { AgentConfig } from './types';
 
 const INIT_DATA: AgentConfig = { title: '', description: '', path: '', url: '', trustAgent: false };
 
+const STATUS_STYLE: Record<string, { pill: string; dot: string; label: string }> = {
+  active: { pill: 'bg-emerald-500/15 text-emerald-300', dot: 'bg-emerald-400', label: 'Active' },
+  inactive: { pill: 'bg-orange-500/15 text-orange-300', dot: 'bg-orange-400', label: 'Inactive' },
+  error: { pill: 'bg-red-500/15 text-red-300', dot: 'bg-red-400', label: 'Error' },
+};
+
+const getStatusStyle = (status?: string) =>
+  STATUS_STYLE[status ?? ''] ?? { pill: 'bg-amber-500/15 text-amber-300', dot: 'bg-amber-400', label: 'Unknown' };
+
 const AgentRegistryOrEdit: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const id = searchParams.get('id');
   const { showToast } = useGlobal();
-  const { handleAgentUpdate } = useServer();
+  const { refreshAgentData, handleAgentUpdate } = useServer();
 
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -110,6 +119,7 @@ const AgentRegistryOrEdit: React.FC = () => {
       await SERVICES.AGENT.deleteAgent(id);
       showToast('Agent deleted successfully', 'success');
       navigate('/', { replace: true });
+      refreshAgentData(true);
     } catch (error: any) {
       showToast(error?.detail || error, 'error');
     }
@@ -135,6 +145,7 @@ const AgentRegistryOrEdit: React.FC = () => {
       } else {
         await SERVICES.AGENT.createAgent(payload);
         showToast('Agent created successfully', 'success');
+        refreshAgentData(true);
       }
       goBack();
     } catch (error: any) {
@@ -157,12 +168,19 @@ const AgentRegistryOrEdit: React.FC = () => {
               <h1 className='text-2xl font-bold text-gray-900 dark:text-white m-0'>
                 {isReadOnly ? 'View Agent' : isEditMode ? 'Edit Agent' : 'Register Agent'}
               </h1>
-              {isReadOnly && (
-                <span className='inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/15 text-green-300'>
-                  <span className='w-2 h-2 rounded-full bg-green-500 inline-block' />
-                  Active
-                </span>
-              )}
+              {isReadOnly &&
+                agentDetail &&
+                (() => {
+                  const { pill, dot, label } = getStatusStyle(agentDetail.status);
+                  return (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${pill}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full inline-block ${dot}`} />
+                      {label}
+                    </span>
+                  );
+                })()}
             </div>
             <p className='text-base text-gray-500 dark:text-gray-400 mt-0.5'>Configure an Agent</p>
           </div>
