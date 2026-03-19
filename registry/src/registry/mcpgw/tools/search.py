@@ -66,9 +66,13 @@ async def discover_servers_impl(
     logger.info(f"🔍 Discovering {type_list} for query: '{query}' (search_type={search_type})")
 
     try:
-        search_request = SearchRequest.model_validate(
-            {"query": query, "top_n": top_n, "search_type": search_type, "type_list": type_list}
-        )
+        payload: dict[str, Any] = {"search_type": search_type, "type_list": type_list}
+        if query:
+            payload["query"] = query
+        if top_n is not None:
+            payload["top_n"] = top_n
+
+        search_request = SearchRequest.model_validate(payload)
         user_context: UserContextDict = ctx.request_context.request.state.user  # type: ignore[union-attr]
 
         result = await search_servers(search_request, user_context)
@@ -104,9 +108,9 @@ def get_tools() -> list[tuple[str, Callable]]:
         query: Annotated[
             str,
             Field(
-                min_length=1,
+                min_length=0,
                 max_length=512,
-                description="Natural language query or keywords (e.g., 'web search', 'github', 'email automation') - leave empty to see all",
+                description="Natural language query or keywords (e.g., 'web search', 'github', 'email automation'). May be omitted or empty. For `type_list=[\"server\"]`, an empty query means list available servers.",
             ),
         ] = "",
         top_n: Annotated[

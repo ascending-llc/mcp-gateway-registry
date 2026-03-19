@@ -111,3 +111,63 @@ async def test_search_servers_serializes_server_models_to_dicts():
 
     assert response["total"] == 1
     assert response["servers"] == [{"serverName": "server-1", "path": "/server-1"}]
+
+
+@pytest.mark.asyncio
+async def test_search_servers_lists_servers_when_query_is_empty():
+    fake_server = _FakeServerModel(serverName="server-1", path="/server-1")
+    list_servers = AsyncMock(return_value=([fake_server], 1))
+
+    with (
+        patch("registry.api.v1.search_routes.server_service_v1.list_servers", new=list_servers),
+        patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new=AsyncMock(side_effect=AssertionError("vector search should not run for empty server query")),
+        ),
+    ):
+        response = await search_servers(
+            search=SearchRequest(
+                query="",
+                top_n=5,
+                search_type=SearchType.HYBRID,
+                type_list=[ServerEntityType.SERVER],
+                include_disabled=False,
+            ),
+            user_context={"username": "tester"},
+        )
+
+    list_servers.assert_awaited_once_with(query=None, status="active", page=1, per_page=5)
+    assert response["query"] == ""
+    assert response["total"] == 1
+    assert response["servers"] == [{"serverName": "server-1", "path": "/server-1"}]
+
+
+@pytest.mark.asyncio
+async def test_search_servers_filters_metadata_when_non_server_query_is_empty():
+    filter_results = [{"server_id": "id-1", "server_name": "server-1", "entity_type": "tool", "tool_name": "search"}]
+
+    with (
+        patch(
+            "registry.api.v1.search_routes.mcp_server_repo.afilter",
+            new=AsyncMock(return_value=filter_results),
+        ) as afilter,
+        patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new=AsyncMock(side_effect=AssertionError("vector search should not run for empty non-server query")),
+        ),
+    ):
+        response = await search_servers(
+            search=SearchRequest(
+                query="",
+                top_n=5,
+                search_type=SearchType.HYBRID,
+                type_list=[ServerEntityType.TOOL],
+                include_disabled=False,
+            ),
+            user_context={"username": "tester"},
+        )
+
+    afilter.assert_awaited_once_with(filters={"enabled": True, "entity_type": ["tool"]}, limit=5)
+    assert response["query"] == ""
+    assert response["total"] == 1
+    assert response["servers"] == filter_results
