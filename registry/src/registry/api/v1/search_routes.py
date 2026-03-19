@@ -281,14 +281,24 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
         # if it includes the server, add tool,resource and prompt.
         # search only server and get server detail from mongo
         if len(search.type_list) == 1 and search.type_list[0] == ServerEntityType.SERVER:
-            filters = {"enabled": not search.include_disabled}
+            filters = {
+                "enabled": not search.include_disabled,
+                "entity_type": [ServerEntityType.SERVER.value],
+            }
             results = await mcp_server_repo.asearch_with_rerank(
                 query=query, search_type=search.search_type, filters=filters, k=top_n
             )
-            server_ids = [str(result.get("server_id")) for result in results]
+            seen_server_ids: set[str] = set()
+            server_ids: list[str] = []
+            for result in results:
+                server_id = str(result.get("server_id"))
+                if not server_id or server_id in seen_server_ids:
+                    continue
+                seen_server_ids.add(server_id)
+                server_ids.append(server_id)
             async with asyncio.TaskGroup() as tg:
                 tasks = [tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids]
-            search_results = [t.result() for t in tasks]
+            search_results = [server for t in tasks if (server := t.result()) is not None]
             logger.info(f"Found {len(search_results)} servers with full details")
         else:
             filters = {"enabled": not search.include_disabled, "entity_type": [dt.value for dt in search.type_list]}
@@ -308,7 +318,8 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
 
         success = True
         results_count = len(search_results)
-        return {"query": query, "total": len(search_results), "servers": search_results}
+
+        return {"query": query, "type_list": search.type_list, "total": len(search_results), "servers": search_results}
     finally:
         # Record tool discovery metrics per discovered server
         duration = time.perf_counter() - start_time

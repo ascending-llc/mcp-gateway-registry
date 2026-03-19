@@ -595,7 +595,7 @@ def get_tools() -> list[tuple[str, Callable]]:
         tool_name: Annotated[
             str,
             Field(
-                description="Use the exact `tool_name` field from one discover_servers result for the same `server_id`. Pass it unchanged. Do not use a display name, registry-scoped function key, or rewritten name. This exact string is forwarded as `tools/call.params.name` to the downstream MCP server."
+                description="Final downstream MCP tool name to execute. If the previous discovery call used `type_list=[\"server\"]` and only `server`, first choose one tool entry from `server.config.toolFunctions`, then pass that chosen entry's `mcpToolName` as `tool_name` (or fall back to that chosen entry's key/name only if `mcpToolName` is missing). In every other discovery case, pass the returned `tool_name` unchanged. This exact string is forwarded as downstream MCP `tools/call.params.name`."
             ),
         ],
         arguments: Annotated[dict[str, Any], Field(description="Tool parameters from input_schema")],
@@ -622,19 +622,41 @@ def get_tools() -> list[tuple[str, Callable]]:
         ```
 
         **Parameters:**
-        - tool_name: The exact `tool_name` value from a single `discover_servers` result. Use it unchanged and pair it with the matching `server_id` from that same result. This exact value is forwarded as `tools/call.params.name` to the downstream MCP server.
+        - tool_name: Final downstream MCP tool name. This is the exact value that will be forwarded to downstream MCP as `tools/call.params.name`.
         - arguments: Tool-specific parameters from input_schema
         - server_id: Server ID from discovery
 
-        **Important:**
+        **How to set `tool_name`:**
+        - Case 1: the previous discovery call used `type_list=["server"]` and only `server`.
+          - The discovery response contains full server documents in `servers`.
+          - Pick one server document.
+          - Inspect that server document's `config.toolFunctions`.
+          - Choose the single tool entry that best matches the user's task.
+          - Set `server_id` to that server document's `id`.
+          - Set `tool_name` to that chosen tool entry's `mcpToolName`.
+          - Only if `mcpToolName` is missing, fall back to that chosen tool entry's key/name.
+        - Case 2: every other discovery case, including `type_list=["tool"]`.
+          - The discovery response already contains executable tool results.
+          - Set `server_id` to the returned `server_id`.
+          - Set `tool_name` to the returned `tool_name` unchanged.
+
+        **Important constraints:**
+        - `execute_tool` always runs exactly one tool.
+        - `tool_name` must always be the final downstream MCP tool name.
         - Do not invent, rename, scope, or rewrite the tool name.
-        - Do not pass a display name or registry-scoped function key.
-        - Use the `tool_name` field from discover_servers exactly as returned.
-        - Pair it with the matching `server_id` from the same discovery result.
+        - Do not pass a display label or registry-only alias.
+        - Do not pass the full server document into `execute_tool`.
+        - Pair the final `tool_name` with the matching `server_id` from the same discovery result.
 
         **Example:**
         - If discover_servers returns `{"tool_name": "tavily_search", "server_id": "abc123"}`,
           then call `execute_tool(tool_name="tavily_search", server_id="abc123", arguments={...})`.
+        - If a server result contains:
+          - `config.toolFunctions["add_numbers_mcp_minimal_mcp_iam"].mcpToolName = "add_numbers"`
+          - `config.toolFunctions["greet_mcp_minimal_mcp_iam"].mcpToolName = "greet"`
+          then first choose the correct tool entry for the task.
+          - To execute the add tool, call `execute_tool(tool_name="add_numbers", server_id="<server id>", arguments={...})`.
+          - To execute the greet tool, call `execute_tool(tool_name="greet", server_id="<server id>", arguments={...})`.
 
         ⚠️ Use after discover_servers to execute tools.
         Returns: Tool-specific results (format varies by tool)
