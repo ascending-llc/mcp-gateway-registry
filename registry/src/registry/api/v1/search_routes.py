@@ -298,7 +298,10 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
                 server_ids.append(server_id)
             async with asyncio.TaskGroup() as tg:
                 tasks = [tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids]
-            search_results = [server for t in tasks if (server := t.result()) is not None]
+            raw_servers = [server for t in tasks if (server := t.result()) is not None]
+            search_results = [
+                server.model_dump(mode="json") if hasattr(server, "model_dump") else server for server in raw_servers
+            ]
             logger.info(f"Found {len(search_results)} servers with full details")
         else:
             filters = {"enabled": not search.include_disabled, "entity_type": [dt.value for dt in search.type_list]}
