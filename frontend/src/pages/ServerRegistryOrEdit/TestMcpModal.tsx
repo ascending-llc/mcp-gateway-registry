@@ -44,7 +44,7 @@ const TestMcpModal = ({ serverPath, onClose }: Props) => {
         jarvisRef.current = new JarvisEmbed({
           provider: 'direct',
           token,
-          model: 'claude-sonnet-4-6',
+          model: 'anthropic-claude-sonnet-4-6',
           apiUrl: JARVIS_URL,
           container,
           width: '100%',
