@@ -21,6 +21,9 @@ interface ParsedSkillExample {
 }
 
 const parseSkillExample = (example: string): ParsedSkillExample => {
+  if (typeof example !== 'string' || !example) {
+    return { label: '', prettyJson: null };
+  }
   const colonIndex = example.indexOf(':');
   let label = '';
   let content = example;

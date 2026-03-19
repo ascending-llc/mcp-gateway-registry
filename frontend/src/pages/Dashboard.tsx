@@ -12,8 +12,6 @@ import ServerCard from '@/components/ServerCard';
 import { useServer } from '@/contexts/ServerContext';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 
-import type { Agent } from '@/services/agent/type';
-
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -153,62 +151,6 @@ const Dashboard: React.FC = () => {
 
     return filtered;
   }, [externalAgents, searchTerm]);
-
-  // DEV-only mock agent for testing AgentCard Skills modal
-  const MOCK_AGENT_FOR_TEST: Agent = {
-    id: '__mock_agent__',
-    path: '/mock/agent',
-    name: 'Mock Agent (DEV)',
-    description: 'This is a mock agent used to test the Skills modal in AgentCard. Only visible in development.',
-    url: 'http://localhost:9999',
-    version: '1.0.0',
-    protocolVersion: '1.0',
-    capabilities: { streaming: true, pushNotifications: false },
-    skills: [
-      {
-        id: 'skill-1',
-        name: 'Text Summarization',
-        description: 'Summarizes long text into concise bullet points using LLM.',
-        tags: ['nlp', 'summarize'],
-        inputModes: ['text/plain', 'text/markdown'],
-        outputModes: ['text/plain'],
-        examples: [
-          'input: {"skillId":"analyze-csv","param":{"file_id":"123"}}',
-          'output: {"status":"success","data":{"id":"123","summary":"Analyzed CSV content."}}',
-        ],
-      },
-      {
-        id: 'skill-2',
-        name: 'Image Analysis',
-        description: 'Analyzes images and returns structured JSON descriptions.',
-        tags: ['vision', 'multimodal'],
-        inputModes: ['image/png', 'image/jpeg'],
-        outputModes: ['application/json'],
-        examples: ['Find AWS case studies for fintech companies'],
-      },
-      {
-        id: 'skill-3',
-        name: 'Code Generation',
-        description: 'Generates code snippets based on natural language instructions.',
-        tags: ['code', 'generation'],
-        inputModes: ['text/plain'],
-        outputModes: ['text/plain', 'application/json'],
-      },
-    ],
-    securitySchemes: { bearer: { type: 'http', scheme: 'bearer' } },
-    preferredTransport: 'HTTP+JSON',
-    defaultInputModes: ['text/plain'],
-    defaultOutputModes: ['text/plain'],
-    provider: { organization: 'Mock Corp', url: 'https://mock.example.com' },
-    tags: ['mock', 'dev'],
-    status: 'active',
-    enabled: true,
-    permissions: { VIEW: true, EDIT: false, DELETE: false, SHARE: false },
-    author: 'dev',
-    wellKnown: { enabled: false, url: '', lastSyncAt: '', lastSyncStatus: '', lastSyncVersion: '' },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
 
   // Filter agents based on activeFilter and searchTerm
   const filteredAgents = useMemo(() => {
@@ -380,9 +322,6 @@ const Dashboard: React.FC = () => {
                   gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
                 }}
               >
-                {process.env.NODE_ENV !== 'production' && (
-                  <AgentCard key={MOCK_AGENT_FOR_TEST.id} agent={MOCK_AGENT_FOR_TEST} />
-                )}
                 {filteredAgents.map(agent => (
                   <AgentCard key={agent.id} agent={agent} />
                 ))}
