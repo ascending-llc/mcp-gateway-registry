@@ -153,7 +153,6 @@ const AgentRegistryOrEdit: React.FC = () => {
         description: formData.description,
         path: formData.path,
         url: formData.url,
-        version: '1.0.0',
       };
 
       if (isEditMode) {
