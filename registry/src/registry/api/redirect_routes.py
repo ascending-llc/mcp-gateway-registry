@@ -6,14 +6,15 @@ import urllib.parse
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Cookie, Request, status
+from fastapi import APIRouter, Cookie, Depends, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import URLSafeTimedSerializer
 
 from registry_pkgs.core.scopes import map_groups_to_scopes
 
 from ..core.config import settings
-from ..services.user_service import user_service
+from ..deps import get_user_service
+from ..services.user_service import UserService
 from ..utils.crypto_utils import generate_access_token, generate_token_pair, verify_refresh_token
 
 logger = logging.getLogger(__name__)
@@ -69,12 +70,17 @@ async def oauth2_login_redirect(provider: str, request: Request):
 
 
 @router.get("/redirect")
-async def oauth2_callback(request: Request, code: str = None, error: str = None, details: str = None):
+async def oauth2_callback(
+    request: Request,
+    code: str = None,
+    error: str = None,
+    details: str = None,
+    user_service: UserService = Depends(get_user_service),
+):
     """Handle OAuth2 callback from auth server
     This endpoint receives an authorization code and exchanges it for a JWT access token.
     The user_id has already been resolved by auth_server from MongoDB and included in the JWT.
     """
-
     try:
         if error:
             logger.warning(f"OAuth2 callback received error: {error}, details: {details}")

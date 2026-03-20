@@ -466,21 +466,6 @@ class TestFlowStateManager:
             assert flow.user_id == user_id
             assert flow.server_name == server_name
 
-    def test_singleton_get_flow_manager(self):
-        """Test the singleton get_flow_manager function."""
-        from registry.auth.oauth.flow_state_manager import get_flow_state_manager
-
-        # First call should create instance
-        manager1 = get_flow_state_manager()
-        assert manager1 is not None
-
-        # Second call should return same instance
-        manager2 = get_flow_state_manager()
-        assert manager2 is manager1
-
-        # Verify it's a FlowStateManager instance
-        assert isinstance(manager1, FlowStateManager)
-
     @pytest.mark.asyncio
     async def test_cleanup_expired_flows(self):
         """Test cleanup of expired flows."""

@@ -97,7 +97,10 @@ def mock_settings(test_settings: Settings, monkeypatch):
 @pytest.fixture
 def server_service(mock_settings: Settings) -> ServerServiceV1:
     """Create a fresh server service for testing."""
-    service = ServerServiceV1()
+    user_service = Mock()
+    token_service = Mock()
+    oauth_service = Mock()
+    service = ServerServiceV1(user_service=user_service, token_service=token_service, oauth_service=oauth_service)
     return service
 
 
@@ -115,7 +118,7 @@ def mock_faiss_service() -> Mock:
 @pytest.fixture
 def health_service() -> HealthMonitoringService:
     """Create a fresh health monitoring service for testing."""
-    service = HealthMonitoringService()
+    service = HealthMonitoringService(server_service=Mock())
     return service
 
 
@@ -179,6 +182,20 @@ def create_test_jwt_token(
     )
 
 
+def make_container(**services):
+    """Create a lightweight container-like object for tests."""
+    return type("Container", (), services)()
+
+
+def make_container_factory(**services):
+    """Build a zero-argument FastAPI dependency override that returns a container-like object."""
+
+    def factory():
+        return make_container(**services)
+
+    return factory
+
+
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token) for testing."""
@@ -226,8 +243,20 @@ def test_client(mock_auth_middleware) -> TestClient:
 
     Uses mock_auth_middleware to bypass authentication checks.
     """
+    app.state.container = make_container(
+        server_service=Mock(),
+        acl_service=Mock(),
+        mcp_service=Mock(),
+        status_resolver=Mock(),
+        vector_service=Mock(),
+        mcp_server_repo=Mock(),
+        health_service=Mock(),
+    )
     client = TestClient(app)
-    return client
+    yield client
+    app.dependency_overrides.clear()
+    if hasattr(app.state, "container"):
+        del app.state.container
 
 
 @pytest.fixture
@@ -358,21 +387,32 @@ def mock_telemetry_metrics(monkeypatch):
 def cleanup_services():
     """Automatically cleanup services after each test."""
     yield
-    # Reset global service states
-    from registry.health.service import health_service
-    from registry.services.server_service import server_service_v1
+    services_to_cleanup = []
 
-    # Clear server service state if methods exist
-    if hasattr(server_service_v1, "registered_servers"):
-        server_service_v1.registered_servers.clear()
-    if hasattr(server_service_v1, "service_state"):
-        server_service_v1.service_state.clear()
+    container = getattr(getattr(app.state, "container", None), "health_service", None)
+    if container is not None:
+        services_to_cleanup.append(container)
 
-    health_service.server_health_status.clear()
-    health_service.server_last_check_time.clear()
-    # Clear active_connections only if it exists (websocket feature)
-    if hasattr(health_service, "active_connections"):
-        health_service.active_connections.clear()
+    server_services_to_cleanup = []
+    container_server_service = getattr(getattr(app.state, "container", None), "server_service", None)
+    if container_server_service is not None:
+        server_services_to_cleanup.append(container_server_service)
+
+    for service in server_services_to_cleanup:
+        registered_servers = getattr(service, "registered_servers", None)
+        if hasattr(registered_servers, "clear") and not isinstance(registered_servers, AsyncMock):
+            registered_servers.clear()
+        service_state = getattr(service, "service_state", None)
+        if hasattr(service_state, "clear") and not isinstance(service_state, AsyncMock):
+            service_state.clear()
+
+    for service in services_to_cleanup:
+        if hasattr(service, "server_health_status"):
+            service.server_health_status.clear()
+        if hasattr(service, "server_last_check_time"):
+            service.server_last_check_time.clear()
+        if hasattr(service, "active_connections"):
+            service.active_connections.clear()
 
 
 # Test markers for different test categories

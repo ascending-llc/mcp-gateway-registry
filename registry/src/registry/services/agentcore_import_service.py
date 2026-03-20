@@ -15,12 +15,12 @@ from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_serv
 
 from ..core.config import settings
 from ..schemas.server_api_schemas import ServerCreateRequest
-from .access_control_service import acl_service
+from .access_control_service import ACLService
 from .federation.agentcore_client import AgentCoreFederationClient
 from .federation.agentcore_client_provider import AgentCoreClientProvider
 from .federation.runtime_invoker import AgentCoreRuntimeInvoker
-from .server_service import server_service_v1
-from .user_service import user_service
+from .server_service import ServerServiceV1
+from .user_service import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +37,12 @@ class AgentCoreImportService:
 
     def __init__(
         self,
+        acl_service_instance: ACLService,
+        server_service: ServerServiceV1,
+        user_service_instance: UserService,
         federation_client: AgentCoreFederationClient | None = None,
         agentcore_client_provider: AgentCoreClientProvider | None = None,
         runtime_invoker: AgentCoreRuntimeInvoker | None = None,
-        acl_service_instance=None,
         mcp_server_repo=None,
         a2a_agent_repo=None,
     ):
@@ -57,7 +59,9 @@ class AgentCoreImportService:
             client_provider=client_provider,
             runtime_invoker=invoker,
         )
-        self.acl_service = acl_service_instance or acl_service
+        self.acl_service = acl_service_instance
+        self.server_service = server_service
+        self.user_service = user_service_instance
         db_client = get_db_client()
         self.mcp_server_repo = mcp_server_repo or get_mcp_server_repo(db_client)
         self.a2a_agent_repo = a2a_agent_repo or get_a2a_agent_repo(db_client)
@@ -389,7 +393,7 @@ class AgentCoreImportService:
             headers=config.get("headers"),
             oauth=config.get("oauth"),
         )
-        created_server = await server_service_v1.create_server(
+        created_server = await self.server_service.create_server(
             data=create_request,
             user_id=str(owner_id),
             skip_post_registration_checks=True,
@@ -736,7 +740,7 @@ class AgentCoreImportService:
                 return None, None
             raise ValueError("user_id is required for import")
 
-        user = await user_service.get_user_by_user_id(user_id)
+        user = await self.user_service.get_user_by_user_id(user_id)
         if not user:
             if dry_run:
                 return None, None
@@ -806,6 +810,3 @@ class AgentCoreImportService:
             viewer_id=viewer_id,
             dry_run=False,
         )
-
-
-agentcore_import_service = AgentCoreImportService()

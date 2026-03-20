@@ -6,11 +6,13 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from registry.api.v1.mcp.connection_router import router
+from registry.deps import get_container
 from registry.schemas.enums import ConnectionState
-from registry.services.oauth.mcp_service import MCPService, get_mcp_service
+from registry.services.oauth.mcp_service import MCPService
+from tests.conftest import make_container_factory
 
 # Valid MongoDB ObjectId for testing (24 hex characters)
-TEST_SERVER_ID = "507f1f77bcf86cd799439011"
+TEST_SERVER_ID = "000000000000000000000001"
 TEST_SERVER_NAME = "test_server"
 
 # Create a mock MCP service
@@ -26,6 +28,11 @@ mock_mcp_service.connection_service = mock_connection_service
 
 # Mock server_service_v1
 mock_server_service_v1 = AsyncMock()
+
+mock_container = Mock()
+mock_container.server_service = mock_server_service_v1
+mock_container.mcp_service = mock_mcp_service
+mock_container.status_resolver = Mock()
 
 # Mock connection status service functions
 mock_get_servers_connection_status = AsyncMock()
@@ -82,20 +89,21 @@ def client():
         response = await call_next(request)
         return response
 
-    # Override the get_mcp_service dependency
-    app.dependency_overrides[get_mcp_service] = lambda: mock_mcp_service
+    mock_container.mcp_service = mock_mcp_service
+    app.dependency_overrides[get_container] = make_container_factory(
+        server_service=mock_container.server_service,
+        mcp_service=mock_container.mcp_service,
+        status_resolver=mock_container.status_resolver,
+    )
 
-    # Mock server_service_v1
-    with patch("registry.api.v1.mcp.connection_router.server_service_v1", mock_server_service_v1):
-        # Mock connection status service functions
+    with patch(
+        "registry.api.v1.mcp.connection_router.get_servers_connection_status", mock_get_servers_connection_status
+    ):
         with patch(
-            "registry.api.v1.mcp.connection_router.get_servers_connection_status", mock_get_servers_connection_status
+            "registry.api.v1.mcp.connection_router.get_single_server_connection_status",
+            mock_get_single_server_connection_status,
         ):
-            with patch(
-                "registry.api.v1.mcp.connection_router.get_single_server_connection_status",
-                mock_get_single_server_connection_status,
-            ):
-                yield TestClient(app)
+            yield TestClient(app)
 
 
 class TestConnectionRouter:

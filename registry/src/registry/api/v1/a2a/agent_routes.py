@@ -12,12 +12,13 @@ from typing import Annotated, Literal
 import httpx
 from a2a.client import A2ACardResolver
 from beanie import PydanticObjectId
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
 from fastapi.responses import JSONResponse
 
 from registry.auth.dependencies import CurrentUser
 from registry.core.telemetry_decorators import track_registry_operation
+from registry.deps import get_a2a_agent_service, get_acl_service
 from registry.schemas.a2a_agent_api_schemas import (
     AgentCreateRequest,
     AgentDetailResponse,
@@ -38,8 +39,8 @@ from registry_pkgs.models.enums import RoleBits
 
 from ....schemas.acl_schema import ResourcePermissions
 from ....schemas.errors import ErrorCode, create_error_detail
-from ....services.a2a_agent_service import a2a_agent_service
-from ....services.access_control_service import acl_service
+from ....services.a2a_agent_service import A2AAgentService
+from ....services.access_control_service import ACLService
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,8 @@ async def list_agents(
     status: Annotated[Literal["active", "inactive", "error"] | None, Query()] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 20,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """
     List agents with optional filtering and pagination.
@@ -147,6 +150,7 @@ async def list_agents(
 @track_registry_operation("read", resource_type="stats")
 async def get_agent_stats(
     user_context: CurrentUser,
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """
     Get system-wide agent statistics.
@@ -203,6 +207,8 @@ async def get_agent_stats(
 async def get_agent(
     agent_id: str,
     user_context: CurrentUser,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """Get detailed information about an agent by ID"""
     try:
@@ -257,6 +263,8 @@ async def get_agent(
 async def create_agent(
     data: AgentCreateRequest,
     user_context: CurrentUser,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """Create a new agent"""
     try:
@@ -329,6 +337,8 @@ async def update_agent(
     agent_id: str,
     data: AgentUpdateRequest,
     user_context: CurrentUser,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """Update an agent with partial data"""
     try:
@@ -385,6 +395,8 @@ async def update_agent(
 async def delete_agent(
     agent_id: str,
     user_context: CurrentUser,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """Delete an agent"""
     try:
@@ -450,6 +462,8 @@ async def toggle_agent(
     agent_id: str,
     data: AgentToggleRequest,
     user_context: CurrentUser,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """Toggle agent enabled/disabled status"""
     try:
@@ -503,6 +517,8 @@ async def toggle_agent(
 async def get_agent_skills(
     agent_id: str,
     user_context: CurrentUser,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """Get agent skills"""
     try:
@@ -553,6 +569,8 @@ async def get_agent_skills(
 async def sync_wellknown(
     agent_id: str,
     user_context: CurrentUser,
+    acl_service: ACLService = Depends(get_acl_service),
+    a2a_agent_service: A2AAgentService = Depends(get_a2a_agent_service),
 ):
     """Sync agent configuration from well-known endpoint"""
     try:

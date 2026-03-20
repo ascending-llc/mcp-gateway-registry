@@ -40,7 +40,8 @@ from ..schemas.server_api_schemas import (
 from ..utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
 from ..utils.schema_converter import convert_dict_keys_to_snake
 from ..utils.utils import generate_server_name_from_title, normalize_headers
-from .user_service import user_service
+from .oauth.token_service import TokenService
+from .user_service import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ async def build_complete_headers_for_server(
     server: MCPServerDocument,
     user_id: str | None = None,
     *,
+    oauth_service: Any | None = None,
     state_metadata: StateMetadata | None = None,
 ) -> dict[str, str]:
     """
@@ -107,7 +109,6 @@ async def build_complete_headers_for_server(
     import base64
 
     from registry.core.config import settings
-    from registry.services.oauth.oauth_service import get_oauth_service
     from registry.utils.crypto_utils import decrypt_auth_fields
 
     config = server.config or {}
@@ -163,7 +164,8 @@ async def build_complete_headers_for_server(
             )
 
         # Get OAuth token (handles refresh automatically)
-        oauth_service = await get_oauth_service()
+        if oauth_service is None:
+            raise AuthenticationError("OAuth-enabled server requires configured oauth_service")
         access_token, auth_url, error = await oauth_service.get_valid_access_token(
             user_id=user_id, server=server, state_metadata=state_metadata
         )
@@ -523,9 +525,17 @@ def _update_config_from_request(
 class ServerServiceV1:
     """Service class for managing MCP servers with MongoDB"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        user_service: UserService,
+        token_service: TokenService,
+        oauth_service: Any,
+    ):
         """Initialize server service with search index manager."""
         self.mcp_server_repo = None
+        self.user_service = user_service
+        self.token_service = token_service
+        self.oauth_service = oauth_service
         logger.info("ServerServiceV1 initialized with search index manager")
 
     def _get_mcp_server_repo(self):
@@ -686,7 +696,7 @@ class ServerServiceV1:
         num_tools = len(tool_functions) if tool_functions else 0
 
         # Get author user reference - authentication required
-        author = await user_service.get_user_by_user_id(user_id)
+        author = await self.user_service.get_user_by_user_id(user_id)
 
         if not author:
             raise ValueError(f"Authentication required: User {user_id} not found")
@@ -1226,7 +1236,6 @@ class ServerServiceV1:
             If failed, returns (None, error_message)
         """
         from registry.auth.oauth import OAuthClient
-        from registry.services.oauth.token_service import token_service
 
         config = server.config or {}
         url = config.get("url")
@@ -1236,7 +1245,7 @@ class ServerServiceV1:
 
         try:
             # Get OAuth tokens for the user
-            oauth_tokens = await token_service.get_oauth_tokens(user_id, server.serverName)
+            oauth_tokens = await self.token_service.get_oauth_tokens(user_id, server.serverName)
 
             if not oauth_tokens or not oauth_tokens.access_token:
                 return None, f"No OAuth tokens found for user {user_id}"
@@ -1263,7 +1272,7 @@ class ServerServiceV1:
                     return None, "No OAuth configuration found"
 
                 # Get refresh token
-                refresh_token_doc = await token_service.get_oauth_refresh_token(user_id, server.serverName)
+                refresh_token_doc = await self.token_service.get_oauth_refresh_token(user_id, server.serverName)
                 if not refresh_token_doc or not refresh_token_doc.token:
                     return None, "No refresh token available"
 
@@ -1285,7 +1294,7 @@ class ServerServiceV1:
                     "grant_types_supported": ["authorization_code", "refresh_token"],
                     "response_types_supported": ["code"],
                 }
-                await token_service.store_oauth_tokens(
+                await self.token_service.store_oauth_tokens(
                     user_id=user_id,
                     service_name=server.serverName,
                     tokens=new_tokens,
@@ -1645,7 +1654,3 @@ class ServerServiceV1:
         Get service config for a specific MCP server
         """
         pass
-
-
-# Singleton instance
-server_service_v1 = ServerServiceV1()

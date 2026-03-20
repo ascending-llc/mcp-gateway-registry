@@ -476,7 +476,3 @@ class A2AAgentService:
 
             logger.error(f"Error syncing agent {agent_id}: {e}", exc_info=True)
             raise ValueError(f"Failed to sync well-known configuration: {str(e)}")
-
-
-# Singleton instance
-a2a_agent_service = A2AAgentService()

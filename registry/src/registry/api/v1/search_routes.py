@@ -3,19 +3,20 @@ import logging
 import time
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from registry_pkgs.models.enums import ServerEntityType
-from registry_pkgs.vector.client import get_db_client
 from registry_pkgs.vector.enum.enums import SearchType
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
 from ...auth.dependencies import CurrentUser
 from ...core.telemetry_decorators import track_registry_operation
+from ...deps import get_mcp_server_repo as get_mcp_server_repo_dep
+from ...deps import get_server_service, get_vector_service
 from ...schemas.case_conversion import APIBaseModel
-from ...services.search.service import faiss_service
-from ...services.server_service import server_service_v1
+from ...services.search.base import VectorSearchService
+from ...services.server_service import ServerServiceV1
 from ...utils.otel_metrics import record_tool_discovery
 
 logger = logging.getLogger(__name__)
@@ -23,21 +24,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 EntityType = Literal["mcp_server", "tool", "a2a_agent"]
-
-
-def _get_mcp_server_repo():
-    return get_mcp_server_repo(get_db_client())
-
-
-class _MCPServerRepoProxy:
-    async def asearch_with_rerank(self, *args, **kwargs):
-        return await _get_mcp_server_repo().asearch_with_rerank(*args, **kwargs)
-
-    def __getattr__(self, name: str):
-        return getattr(_get_mcp_server_repo(), name)
-
-
-mcp_server_repo = _MCPServerRepoProxy()
 
 
 class MatchingToolResult(APIBaseModel):
@@ -107,6 +93,7 @@ class SemanticSearchResponse(APIBaseModel):
 async def semantic_search(
     request: Request,
     search_request: SemanticSearchRequest,
+    vector_service: VectorSearchService = Depends(get_vector_service),
 ) -> SemanticSearchResponse:
     """
     Run a semantic search against MCP servers (and their tools) using FAISS embeddings.
@@ -129,7 +116,7 @@ async def semantic_search(
 
     try:
         try:
-            raw_results = await faiss_service.search_mixed(
+            raw_results = await vector_service.search_mixed(
                 query=search_request.query,
                 entity_types=search_request.entityTypes,
                 max_results=search_request.maxResults,
@@ -279,10 +266,10 @@ def _serialize_search_results(results: list) -> list:
     return [result.model_dump(mode="json") if hasattr(result, "model_dump") else result for result in results]
 
 
-async def _fetch_servers_by_ids(server_ids: list[str]) -> list:
+async def _fetch_servers_by_ids(server_ids: list[str], server_service: ServerServiceV1) -> list:
     """Load full server documents from Mongo for the matched server ids."""
     async with asyncio.TaskGroup() as tg:
-        tasks = [tg.create_task(server_service_v1.get_server_by_id(server_id)) for server_id in server_ids]
+        tasks = [tg.create_task(server_service.get_server_by_id(server_id)) for server_id in server_ids]
     return [server for task in tasks if (server := task.result()) is not None]
 
 
@@ -299,11 +286,16 @@ def _extract_unique_server_ids(results: list[dict[str, object]]) -> list[str]:
     return server_ids
 
 
-async def _search_server_documents(search: SearchRequest, query: str) -> list:
+async def _search_server_documents(
+    search: SearchRequest,
+    query: str,
+    server_service: ServerServiceV1,
+    mcp_server_repo: MCPServerRepository,
+) -> list:
     """Run the full-server discovery path using Mongo fallback for empty queries."""
     if not query:
         status = None if search.include_disabled else "active"
-        raw_servers, _ = await server_service_v1.list_servers(
+        raw_servers, _ = await server_service.list_servers(
             query=None,
             status=status,
             page=1,
@@ -319,10 +311,14 @@ async def _search_server_documents(search: SearchRequest, query: str) -> list:
         k=search.top_n,
     )
     server_ids = _extract_unique_server_ids(results)
-    return await _fetch_servers_by_ids(server_ids)
+    return await _fetch_servers_by_ids(server_ids, server_service)
 
 
-async def _search_non_server_documents(search: SearchRequest, query: str) -> list:
+async def _search_non_server_documents(
+    search: SearchRequest,
+    query: str,
+    mcp_server_repo: MCPServerRepository,
+) -> list:
     """Run tool/resource/prompt discovery, using metadata filtering for empty queries."""
     filters = _build_search_filters(search)
     if not query:
@@ -373,7 +369,12 @@ def _record_discovery_metrics(
 
 @router.post("/search/servers")
 @track_registry_operation("search", resource_type="server")
-async def search_servers(search: SearchRequest, user_context: CurrentUser):
+async def search_servers(
+    search: SearchRequest,
+    user_context: CurrentUser,
+    server_service: ServerServiceV1 = Depends(get_server_service),
+    mcp_server_repo: MCPServerRepository = Depends(get_mcp_server_repo_dep),
+):
     """
     Search for MCP servers with their tools, resources, and prompts.
     POC endpoint returning raw JSON with dual-format tool definitions.
@@ -403,11 +404,11 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
 
     try:
         if _is_server_only_search(search.type_list):
-            raw_servers = await _search_server_documents(search, query)
+            raw_servers = await _search_server_documents(search, query, server_service, mcp_server_repo)
             search_results = _serialize_search_results(raw_servers)
             logger.info(f"Found {len(search_results)} servers with full details")
         else:
-            search_results = await _search_non_server_documents(search, query)
+            search_results = await _search_non_server_documents(search, query, mcp_server_repo)
             logger.info(f"✅ Found {len(search_results)} servers")
 
         success = True

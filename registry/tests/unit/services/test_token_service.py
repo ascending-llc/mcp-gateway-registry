@@ -19,7 +19,7 @@ class TestTokenServiceBasicMethods:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     @pytest.fixture
     def mock_user(self):
@@ -32,22 +32,24 @@ class TestTokenServiceBasicMethods:
     @pytest.mark.asyncio
     async def test_get_user(self, token_service, mock_user):
         """Test getting user by user_id"""
-        with patch("registry.services.oauth.token_service.user_service") as mock_user_service:
-            mock_user_service.get_user_by_user_id = AsyncMock(return_value=mock_user)
+        mock_user_service = Mock()
+        mock_user_service.get_user_by_user_id = AsyncMock(return_value=mock_user)
+        token_service.user_service = mock_user_service
 
-            result = await token_service.get_user("test_user")
+        result = await token_service.get_user("test_user")
 
-            assert result == mock_user
-            mock_user_service.get_user_by_user_id.assert_awaited_once_with("test_user")
+        assert result == mock_user
+        mock_user_service.get_user_by_user_id.assert_awaited_once_with("test_user")
 
     @pytest.mark.asyncio
     async def test_get_user_not_found(self, token_service):
         """Test get_user raises exception when user not found"""
-        with patch("registry.services.oauth.token_service.user_service") as mock_user_service:
-            mock_user_service.get_user_by_user_id = AsyncMock(return_value=None)
+        mock_user_service = Mock()
+        mock_user_service.get_user_by_user_id = AsyncMock(return_value=None)
+        token_service.user_service = mock_user_service
 
-            with pytest.raises(Exception, match="User test_user not found"):
-                await token_service.get_user("test_user")
+        with pytest.raises(Exception, match="User test_user not found"):
+            await token_service.get_user("test_user")
 
     @pytest.mark.asyncio
     async def test_get_user_by_user_id(self, token_service, mock_user):
@@ -88,7 +90,7 @@ class TestTokenServiceStoreTokens:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     @pytest.fixture
     def mock_user(self):
@@ -194,7 +196,7 @@ class TestTokenServiceGetTokens:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     @pytest.fixture
     def mock_access_token(self):
@@ -258,7 +260,7 @@ class TestTokenServiceDeleteTokens:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     @pytest.mark.asyncio
     async def test_delete_oauth_tokens_all_three_types(self, token_service):
@@ -306,7 +308,7 @@ class TestTokenServiceTokenStatus:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     @pytest.mark.asyncio
     async def test_is_access_token_expired_true(self, token_service):
@@ -382,7 +384,7 @@ class TestTokenServiceHelperMethods:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     def test_calculate_expiration(self, token_service):
         """Test calculating expiration datetime from expires_in"""
@@ -446,7 +448,7 @@ class TestTokenServiceClientCredentials:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     @pytest.fixture
     def mock_user(self):
@@ -704,7 +706,7 @@ class TestTokenServiceEncryption:
     @pytest.fixture
     def token_service(self):
         """Create TokenService instance"""
-        return TokenService()
+        return TokenService(user_service=Mock())
 
     @pytest.mark.asyncio
     async def test_encrypt_uses_encrypt_value_not_encrypt_auth_fields(self, token_service):
