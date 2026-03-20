@@ -2,19 +2,20 @@
 Unit tests for Anthropic MCP Registry API endpoints.
 """
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
 from registry.core.config import Settings, settings
-from registry.health.service import health_service
+from registry.health.service import HealthMonitoringService
 from registry.main import app
-from registry.services.server_service import server_service_v1
+from registry.services.server_service import ServerServiceV1
 
 # Alias for tests
-server_service = server_service_v1
+server_service = ServerServiceV1(user_service=Mock(), token_service=Mock(), oauth_service=Mock())
+health_service = HealthMonitoringService(server_service=Mock())
 
 
 @pytest.fixture

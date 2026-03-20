@@ -445,15 +445,3 @@ class FlowStateManager:
                 logger.info(f"Cleaned up {cleaned_count} expired flows from memory")
 
             return cleaned_count
-
-
-_flow_state_manager_instance: FlowStateManager | None = None
-
-
-def get_flow_state_manager() -> FlowStateManager:
-    """Get flow state manager"""
-    global _flow_state_manager_instance
-    if _flow_state_manager_instance is None:
-        _flow_state_manager_instance = FlowStateManager()
-        logger.info("Initialized global FlowStateManager singleton")
-    return _flow_state_manager_instance

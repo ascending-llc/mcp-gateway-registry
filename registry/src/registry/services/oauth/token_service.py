@@ -10,15 +10,18 @@ from registry_pkgs.models._generated.token import Token
 
 from ...schemas.enums import TokenType
 from ...schemas.oauth_schema import OAuthClientInformation, OAuthTokens
-from ...services.user_service import user_service
+from ...services.user_service import UserService
 from ...utils.crypto_utils import decrypt_auth_fields, encrypt_value
 
 logger = logging.getLogger(__name__)
 
 
 class TokenService:
+    def __init__(self, user_service: UserService):
+        self.user_service = user_service
+
     async def get_user(self, user_id: str) -> IUser | None:
-        user = await user_service.get_user_by_user_id(user_id)
+        user = await self.user_service.get_user_by_user_id(user_id)
         if not user:
             raise Exception(f"OAuth operation failed: User {user_id} not found")
         return user
@@ -623,6 +626,3 @@ class TokenService:
 
         logger.debug(f"Retrieved client credentials for user={user_id}, service={service_name}")
         return client_info, token_doc.metadata
-
-
-token_service = TokenService()

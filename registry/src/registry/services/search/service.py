@@ -36,10 +36,4 @@ def create_vector_search_service() -> VectorSearchService:
         return EmbeddedFaissService(settings)
 
 
-# Global service instance - created based on configuration
-# This maintains backward compatibility with existing code that imports vector_service
-faiss_service = create_vector_search_service()
-vector_service = faiss_service
-
-# Backward compatibility: expose the service with its original name
-__all__ = ["faiss_service", "create_vector_search_service"]
+__all__ = ["create_vector_search_service"]

@@ -1,18 +1,19 @@
 import logging
 from typing import Any
 
-from ...auth.oauth.flow_state_manager import get_flow_state_manager
-from ...auth.oauth.reconnection import get_reconnection_manager
 from ...schemas.enums import ConnectionState
-from ..server_service import server_service_v1
-from .mcp_service import MCPService, get_mcp_service
-from .status_resolver import ConnectionStateContext, get_status_resolver
+from ..server_service import ServerServiceV1
+from .mcp_service import MCPService
+from .status_resolver import ConnectionStateContext, ConnectionStatusResolver
 
 logger = logging.getLogger(__name__)
 
 
 async def get_servers_connection_status(
-    user_id: str, servers: list[Any], mcp_service: MCPService | None = None
+    user_id: str,
+    servers: list[Any],
+    mcp_service: MCPService,
+    status_resolver: ConnectionStatusResolver,
 ) -> dict[str, dict[str, Any]]:
     """
     Get connection status for multiple servers.
@@ -20,15 +21,6 @@ async def get_servers_connection_status(
     """
     if not servers:
         return {}
-
-    if not mcp_service:
-        mcp_service = await get_mcp_service()
-
-    # Retrieve the status resolver
-    flow_manager = get_flow_state_manager()
-    reconnection_mgr = get_reconnection_manager(mcp_service=mcp_service, oauth_service=mcp_service.oauth_service)
-
-    status_resolver = get_status_resolver(flow_state_manager=flow_manager, reconnection_manager=reconnection_mgr)
 
     # Retrieve application-level and user-level connections
     app_connections = mcp_service.connection_service.app_connections
@@ -73,22 +65,18 @@ async def get_servers_connection_status(
 
 
 async def get_single_server_connection_status(
-    user_id: str, server_id: str, mcp_service: MCPService | None = None
+    user_id: str,
+    server_id: str,
+    mcp_service: MCPService,
+    server_service: ServerServiceV1,
+    status_resolver: ConnectionStatusResolver,
 ) -> dict[str, Any]:
     """
     Get connection status for a single server.
     """
-    server_docs = await server_service_v1.get_server_by_id(server_id)
+    server_docs = await server_service.get_server_by_id(server_id)
     if not server_docs or not server_docs.config:
         raise ValueError(f"Server '{server_id}' not found")
-
-    if mcp_service is None:
-        mcp_service = await get_mcp_service()
-
-    flow_manager = get_flow_state_manager()
-    reconnection_mgr = get_reconnection_manager(mcp_service=mcp_service, oauth_service=mcp_service.oauth_service)
-
-    status_resolver = get_status_resolver(flow_state_manager=flow_manager, reconnection_manager=reconnection_mgr)
 
     app_connections = mcp_service.connection_service.app_connections
     user_connections = mcp_service.connection_service.get_user_connections(user_id)

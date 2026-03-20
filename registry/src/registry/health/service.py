@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 class HighPerformanceWebSocketManager:
     """High-performance WebSocket manager for 400-1000+ concurrent connections."""
 
-    def __init__(self):
+    def __init__(self, health_service=None):
+        self.health_service = health_service
         self.connections: set[WebSocket] = set()
         self.connection_metadata: dict[WebSocket, dict] = {}
 
@@ -75,7 +76,7 @@ class HighPerformanceWebSocketManager:
         """Send initial status using cached data to avoid blocking."""
         try:
             # Use cached health data to avoid blocking on service calls
-            cached_data = health_service._get_cached_health_data()
+            cached_data = self.health_service._get_cached_health_data() if self.health_service is not None else {}
             if cached_data:
                 await websocket.send_text(json.dumps(cached_data))
         except Exception as e:
@@ -111,7 +112,9 @@ class HighPerformanceWebSocketManager:
                     self.pending_updates.pop(key, None)
             else:
                 # Full status update (avoid this when possible)
-                broadcast_data = health_service._get_cached_health_data()
+                broadcast_data = (
+                    self.health_service._get_cached_health_data() if self.health_service is not None else {}
+                )
 
         if broadcast_data:
             await self._send_to_connections_optimized(broadcast_data)
@@ -183,12 +186,13 @@ class HighPerformanceWebSocketManager:
 class HealthMonitoringService:
     """Optimized health monitoring service for high-scale WebSocket operations."""
 
-    def __init__(self):
+    def __init__(self, server_service):
         self.server_health_status: dict[str, str] = {}
         self.server_last_check_time: dict[str, datetime] = {}
+        self.server_service = server_service
 
         # High-performance WebSocket manager
-        self.websocket_manager = HighPerformanceWebSocketManager()
+        self.websocket_manager = HighPerformanceWebSocketManager(health_service=self)
 
         # Background task management
         self.health_check_task: asyncio.Task | None = None
@@ -252,7 +256,7 @@ class HealthMonitoringService:
         if not self.websocket_manager.connections:
             return
 
-        from ..services.server_service import server_service_v1 as server_service
+        server_service = self.server_service
 
         if service_path:
             # Single service update - get data efficiently
@@ -273,9 +277,7 @@ class HealthMonitoringService:
             return self._cached_health_data
 
         # Rebuild cache
-        from ..services.server_service import server_service_v1 as server_service
-
-        all_servers = server_service.get_all_servers()
+        all_servers = self.server_service.get_all_servers()
 
         data = {}
         for path, server_info in all_servers.items():
@@ -308,9 +310,7 @@ class HealthMonitoringService:
         """Perform health checks on all enabled services."""
         import httpx
 
-        from ..services.server_service import server_service_v1 as server_service
-
-        enabled_services = server_service.get_enabled_services()
+        enabled_services = self.server_service.get_enabled_services()
         if not enabled_services:
             return
 
@@ -326,7 +326,7 @@ class HealthMonitoringService:
             # Batch process enabled services
             check_tasks = []
             for service_path in enabled_services:
-                server_info = server_service.get_server_info(service_path)
+                server_info = self.server_service.get_server_info(service_path)
                 if server_info and server_info.get("proxy_pass_url"):
                     check_tasks.append(self._check_single_service(client, service_path, server_info))
 
@@ -873,7 +873,8 @@ class HealthMonitoringService:
         try:
             logger.info(f"Starting background tool update for {service_path}")
             from ..core.mcp_client import mcp_client_service
-            from ..services.server_service import server_service_v1 as server_service
+
+            server_service = self.server_service
 
             # Wait a moment to ensure health check session is fully closed
             # This prevents connection conflicts with servers like currenttime and realserverfaketools
@@ -909,8 +910,7 @@ class HealthMonitoringService:
 
     def get_all_health_status(self) -> dict:
         """Get health status for all services."""
-        from ..services.server_service import server_service_v1 as server_service
-
+        server_service = self.server_service
         all_servers = server_service.get_all_servers()
 
         data = {}
@@ -923,8 +923,7 @@ class HealthMonitoringService:
         """Perform an immediate health check for a single service."""
         import httpx
 
-        from ..services.server_service import server_service_v1 as server_service
-
+        server_service = self.server_service
         server_info = server_service.get_server_info(service_path)
         if not server_info:
             return "error: server not registered", None
@@ -995,15 +994,13 @@ class HealthMonitoringService:
 
     def _get_service_health_data(self, service_path: str) -> dict:
         """Get health data for a specific service - legacy method, use _get_service_health_data_fast for better performance."""
-        from ..services.server_service import server_service_v1 as server_service
-
+        server_service = self.server_service
         server_info = server_service.get_server_info(service_path)
         return self._get_service_health_data_fast(service_path, server_info or {})
 
     def _get_service_health_data_fast(self, service_path: str, server_info: dict) -> dict:
         """Get health data for a specific service - optimized version."""
-        from ..services.server_service import server_service_v1 as server_service
-
+        server_service = self.server_service
         # Quick enabled check using cached server_info if possible
         is_enabled = server_service.is_service_enabled(service_path)
 
@@ -1025,7 +1022,3 @@ class HealthMonitoringService:
         num_tools = server_info.get("num_tools", 0) if server_info else 0
 
         return {"status": status, "last_checked_iso": last_checked_iso, "num_tools": num_tools}
-
-
-# Global health monitoring service instance
-health_service = HealthMonitoringService()

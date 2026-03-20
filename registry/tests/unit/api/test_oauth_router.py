@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from bson import ObjectId
@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from registry.api.v1.mcp.oauth_router import router
+from registry.deps import get_container
 from registry.services.oauth.mcp_service import MCPService
 
 # Valid MongoDB ObjectId for testing (24 hex characters)
@@ -21,6 +22,10 @@ mock_mcp_service.oauth_service = mock_oauth_service
 # Create a mock Connection service and attach it to MCP service
 mock_connection_service = Mock()
 mock_mcp_service.connection_service = mock_connection_service
+
+mock_token_service = Mock()
+mock_container = Mock()
+mock_container.reconnection_manager = Mock()
 
 
 # Wrap all mock methods to make them async
@@ -88,12 +93,6 @@ def client():
         response = await call_next(request)
         return response
 
-    # Note: We need to override the actual get_mcp_service function from the module
-    from registry.services.oauth.mcp_service import get_mcp_service
-
-    # Override the get_mcp_service dependency
-    app.dependency_overrides[get_mcp_service] = lambda: mock_mcp_service
-
     # Mock server config
     mock_server = Mock()
     mock_server.id = ObjectId(TEST_SERVER_ID)
@@ -101,9 +100,14 @@ def client():
     mock_server.path = "/test_server"  # Path stored in DB includes leading slash
     mock_server.config = {"oauth": {"provider": "github", "client_id": "test_client_id"}}
 
-    with patch("registry.api.v1.mcp.oauth_router.server_service_v1") as mock_server_service:
-        mock_server_service.get_server_by_id = AsyncMock(return_value=mock_server)
-        yield TestClient(app)
+    mock_server_service = Mock()
+    mock_server_service.get_server_by_id = AsyncMock(return_value=mock_server)
+    mock_container.server_service = mock_server_service
+    mock_container.token_service = AsyncMock()
+    mock_container.token_service.delete_oauth_tokens = AsyncMock(return_value=True)
+    mock_container.mcp_service = mock_mcp_service
+    app.dependency_overrides[get_container] = lambda: mock_container
+    yield TestClient(app)
 
 
 class TestOAuthRouter:
@@ -339,35 +343,31 @@ class TestOAuthRouter:
         """Test successful deletion of OAuth tokens"""
 
         mock_mcp_service.connection_service.disconnect_user_connection = AsyncMock(return_value=True)
+        mock_token_service.delete_oauth_tokens = AsyncMock(return_value=True)
 
-        with patch("registry.api.v1.mcp.oauth_router.token_service") as mock_token_service:
-            mock_token_service.delete_oauth_tokens = AsyncMock(return_value=True)
+        response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")
 
-            response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")
-
-            assert response.status_code == 200
-            response_data = response.json()
-            assert response_data["success"]
-            assert response_data["serverId"] == TEST_SERVER_ID
-            assert response_data["userId"] == "test_user"
-            assert "oauth delete successfully" in response_data["message"]
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["success"]
+        assert response_data["serverId"] == TEST_SERVER_ID
+        assert response_data["userId"] == "test_user"
+        assert "oauth delete successfully" in response_data["message"]
 
     def test_delete_oauth_tokens_failure(self, client):
         """Test failed deletion of OAuth tokens"""
 
         mock_mcp_service.connection_service.disconnect_user_connection = AsyncMock(return_value=False)
+        mock_container.token_service.delete_oauth_tokens = AsyncMock(return_value=False)
 
-        with patch("registry.api.v1.mcp.oauth_router.token_service") as mock_token_service:
-            mock_token_service.delete_oauth_tokens = AsyncMock(return_value=False)
+        response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")
 
-            response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")
-
-            assert response.status_code == 200  # Note: The endpoint returns 200 even when delete returns False
-            response_data = response.json()
-            assert not response_data["success"]
-            assert response_data["serverId"] == TEST_SERVER_ID
-            assert response_data["userId"] == "test_user"
-            assert "oauth delete failed" in response_data["message"]
+        assert response.status_code == 200  # Note: The endpoint returns 200 even when delete returns False
+        response_data = response.json()
+        assert not response_data["success"]
+        assert response_data["serverId"] == TEST_SERVER_ID
+        assert response_data["userId"] == "test_user"
+        assert "oauth delete failed" in response_data["message"]
 
 
 if __name__ == "__main__":

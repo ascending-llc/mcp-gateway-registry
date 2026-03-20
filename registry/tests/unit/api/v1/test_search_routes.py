@@ -36,11 +36,11 @@ async def test_semantic_search_uses_injected_vector_service():
         }
     )
 
-    with patch("registry.api.v1.search_routes.faiss_service", new=vector_service):
-        response = await semantic_search(
-            request=request,
-            search_request=SemanticSearchRequest(query="test", entityTypes=["mcp_server"], maxResults=5),
-        )
+    response = await semantic_search(
+        request=request,
+        search_request=SemanticSearchRequest(query="test", entityTypes=["mcp_server"], maxResults=5),
+        container=SimpleNamespace(vector_service=vector_service),
+    )
 
     vector_service.search_mixed.assert_awaited_once_with(
         query="test",
@@ -61,7 +61,6 @@ async def test_search_servers_uses_injected_server_service():
             "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
             new=AsyncMock(return_value=[{"server_id": "id-1"}, {"server_id": "id-2"}]),
         ),
-        patch("registry.api.v1.search_routes.server_service_v1", new=server_service),
     ):
         response = await search_servers(
             search=SearchRequest(
@@ -72,6 +71,7 @@ async def test_search_servers_uses_injected_server_service():
                 include_disabled=False,
             ),
             user_context={"username": "tester"},
+            container=SimpleNamespace(server_service=server_service),
         )
 
     assert server_service.get_server_by_id.await_count == 2
@@ -93,10 +93,7 @@ async def test_search_servers_serializes_server_models_to_dicts():
             "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
             new=AsyncMock(return_value=[{"server_id": "id-1"}]),
         ),
-        patch(
-            "registry.api.v1.search_routes.server_service_v1.get_server_by_id",
-            new=AsyncMock(return_value=fake_server),
-        ),
+        patch.object(server_service := MagicMock(), "get_server_by_id", new=AsyncMock(return_value=fake_server)),
     ):
         response = await search_servers(
             search=SearchRequest(
@@ -107,6 +104,7 @@ async def test_search_servers_serializes_server_models_to_dicts():
                 include_disabled=False,
             ),
             user_context={"username": "tester"},
+            container=SimpleNamespace(server_service=server_service),
         )
 
     assert response["total"] == 1
@@ -119,7 +117,6 @@ async def test_search_servers_lists_servers_when_query_is_empty():
     list_servers = AsyncMock(return_value=([fake_server], 1))
 
     with (
-        patch("registry.api.v1.search_routes.server_service_v1.list_servers", new=list_servers),
         patch(
             "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
             new=AsyncMock(side_effect=AssertionError("vector search should not run for empty server query")),
@@ -134,6 +131,7 @@ async def test_search_servers_lists_servers_when_query_is_empty():
                 include_disabled=False,
             ),
             user_context={"username": "tester"},
+            container=SimpleNamespace(server_service=SimpleNamespace(list_servers=list_servers)),
         )
 
     list_servers.assert_awaited_once_with(query=None, status="active", page=1, per_page=5)
@@ -165,6 +163,7 @@ async def test_search_servers_filters_metadata_when_non_server_query_is_empty():
                 include_disabled=False,
             ),
             user_context={"username": "tester"},
+            container=SimpleNamespace(server_service=MagicMock()),
         )
 
     afilter.assert_awaited_once_with(filters={"enabled": True, "entity_type": ["tool"]}, limit=5)

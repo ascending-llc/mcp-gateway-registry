@@ -1,10 +1,11 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from ..container import RegistryContainer
 from ..core.config import settings
-from ..services.server_service import server_service_v1 as server_service
+from ..deps import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +51,16 @@ def _get_required_env_vars() -> tuple[str, str, str]:
 
 
 # @router.get("/mcp-servers")
-async def get_wellknown_mcp_servers(request: Request, user_context: dict | None = None) -> JSONResponse:
+async def get_wellknown_mcp_servers(
+    request: Request,
+    user_context: dict | None = None,
+    container: RegistryContainer = Depends(get_container),
+) -> JSONResponse:
     """
     Main endpoint handler for /.well-known/mcp-servers
     Returns JSON with all discoverable MCP servers
     """
+    server_service = container.server_service
     # Step 1: Check if discovery is enabled
     if not settings.enable_wellknown_discovery:
         raise HTTPException(status_code=404, detail="Well-known discovery is disabled")

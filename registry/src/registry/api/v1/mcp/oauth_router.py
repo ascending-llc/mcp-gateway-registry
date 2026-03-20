@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from ....auth.dependencies import CurrentUser
-from ....auth.oauth.reconnection import get_reconnection_manager
 from ....auth.oauth.types import ClientBranding
+from ....container import RegistryContainer
 from ....core.config import settings
 from ....core.mcp_client import get_oauth_metadata_from_server
+from ....deps import get_container
 from ....mcpgw.tools.utils import session_store
 from ....schemas.common_api_schemas import (
     OAuthInitiateResponse,
@@ -19,9 +20,6 @@ from ....schemas.common_api_schemas import (
     OAuthTokensResponse,
 )
 from ....schemas.enums import ConnectionState, OAuthFlowStatus
-from ....services.oauth.mcp_service import MCPService, get_mcp_service
-from ....services.oauth.token_service import token_service
-from ....services.server_service import server_service_v1
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +101,9 @@ async def discover_oauth_metadata(
 
 @router.get("/{server_id}/oauth/initiate", response_model=OAuthInitiateResponse, response_model_by_alias=True)
 async def initiate_oauth_flow(
-    server_id: str, user_context: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str,
+    user_context: CurrentUser,
+    container: RegistryContainer = Depends(get_container),
 ) -> OAuthInitiateResponse:
     """
     Initialize OAuth flow
@@ -111,10 +111,12 @@ async def initiate_oauth_flow(
     Notes: GET /:serverName/oauth/initiate
     TypeScript implementation: Directly call MCPOAuthHandler.initiateOAuthFlow()
     """
+    mcp_service = container.mcp_service
+    server_service = container.server_service
     try:
         user_id = user_context.get("user_id")
         logger.info(f"Oauth initiate for user id : {user_id}")
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await server_service.get_server_by_id(server_id)
         if not server:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
@@ -151,7 +153,7 @@ async def oauth_callback(
     code: str | None = Query(None, description="OAuth authorization code"),
     state: str | None = Query(None, description="State parameter (format: flow_id##security_token)"),
     error: str | None = Query(None, description="OAuth error message"),
-    mcp_service: MCPService = Depends(get_mcp_service),
+    container: RegistryContainer = Depends(get_container),
 ) -> RedirectResponse:
     """
     OAuth callback handler
@@ -165,6 +167,7 @@ async def oauth_callback(
     4. Complete OAuth flow (validation + token exchange)
     5. Redirect to success/failure page
     """
+    mcp_service = container.mcp_service
     try:
         # 1. Check for errors returned by OAuth provider
         if error:
@@ -235,9 +238,7 @@ async def oauth_callback(
 
                 # Clear any reconnection attempts
                 try:
-                    reconnection_manager = get_reconnection_manager(
-                        mcp_service=mcp_service, oauth_service=mcp_service.oauth_service
-                    )
+                    reconnection_manager = container.reconnection_manager
                     reconnection_manager.clear_reconnection(user_id, server_id)  # Use server_id instead of server_name
                     logger.debug(
                         f"[MCP OAuth] Cleared reconnection attempts for {server_path} (server_id: {server_id})"
@@ -281,7 +282,7 @@ async def oauth_callback(
 
 @router.get("/oauth/tokens/{flow_id}", response_model=OAuthTokensResponse, response_model_by_alias=True)
 async def get_oauth_tokens(
-    flow_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
+    flow_id: str, current_user: CurrentUser, container: RegistryContainer = Depends(get_container)
 ) -> OAuthTokensResponse:
     """
     Get OAuth tokens
@@ -296,6 +297,7 @@ async def get_oauth_tokens(
     Returns:
     - OAuth tokens
     """
+    mcp_service = container.mcp_service
     try:
         user_id = current_user.get("user_id")
 
@@ -319,7 +321,7 @@ async def get_oauth_tokens(
 
 
 @router.get("/oauth/status/{flow_id}")
-async def get_oauth_status(flow_id: str, mcp_service: MCPService = Depends(get_mcp_service)) -> dict[str, Any]:
+async def get_oauth_status(flow_id: str, container: RegistryContainer = Depends(get_container)) -> dict[str, Any]:
     """
     Check OAuth flow status
 
@@ -327,6 +329,7 @@ async def get_oauth_status(flow_id: str, mcp_service: MCPService = Depends(get_m
     TypeScript implementation: Get status via flowManager.getFlowState()
 
     """
+    mcp_service = container.mcp_service
     try:
         # Get flow status
         flow_status = await mcp_service.oauth_service.get_flow_status(flow_id)
@@ -342,7 +345,9 @@ async def get_oauth_status(flow_id: str, mcp_service: MCPService = Depends(get_m
 
 @router.post("/oauth/cancel/{server_id}", response_model=OAuthOperationResponse, response_model_by_alias=True)
 async def cancel_oauth_flow(
-    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str,
+    current_user: CurrentUser,
+    container: RegistryContainer = Depends(get_container),
 ) -> OAuthOperationResponse:
     """
     Cancel OAuth flow
@@ -354,11 +359,13 @@ async def cancel_oauth_flow(
     1. Cancel the OAuth flow
     2. Update user connection state to DISCONNECTED
     """
+    mcp_service = container.mcp_service
+    server_service = container.server_service
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_id} by user {user_id}")
 
-        mcp_server = await server_service_v1.get_server_by_id(server_id)
+        mcp_server = await server_service.get_server_by_id(server_id)
         if not mcp_server:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
@@ -400,7 +407,9 @@ async def cancel_oauth_flow(
 
 @router.post("/oauth/refresh/{server_id}", response_model=OAuthOperationResponse, response_model_by_alias=True)
 async def refresh_oauth_tokens(
-    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str,
+    current_user: CurrentUser,
+    container: RegistryContainer = Depends(get_container),
 ) -> OAuthOperationResponse:
     """
     Refresh OAuth tokens
@@ -413,10 +422,12 @@ async def refresh_oauth_tokens(
     2. Update user connection state to CONNECTED
     3. Clear any reconnection attempts
     """
+    mcp_service = container.mcp_service
+    server_service = container.server_service
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_id} by user {user_id}")
-        mcp_server = await server_service_v1.get_server_by_id(server_id)
+        mcp_server = await server_service.get_server_by_id(server_id)
         if not mcp_server:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
@@ -454,9 +465,7 @@ async def refresh_oauth_tokens(
 
         # 3. Clear any reconnection attempts
         try:
-            reconnection_manager = get_reconnection_manager(
-                mcp_service=mcp_service, oauth_service=mcp_service.oauth_service
-            )
+            reconnection_manager = container.reconnection_manager
             reconnection_manager.clear_reconnection(user_id, server_id)
             logger.debug(f"[OAuth Refresh] Cleared reconnection attempts for {server_id}")
         except Exception as e:
@@ -481,13 +490,18 @@ async def refresh_oauth_tokens(
 
 @router.delete("/oauth/token/{server_id}", response_model=OAuthOperationResponse, response_model_by_alias=True)
 async def delete_oauth_tokens(
-    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str,
+    current_user: CurrentUser,
+    container: RegistryContainer = Depends(get_container),
 ) -> OAuthOperationResponse:
     """
     Delete the OAuth token for this user
 
     """
-    server = await server_service_v1.get_server_by_id(server_id)
+    mcp_service = container.mcp_service
+    server_service = container.server_service
+    token_service = container.token_service
+    server = await server_service.get_server_by_id(server_id)
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
     user_id = current_user.get("user_id")

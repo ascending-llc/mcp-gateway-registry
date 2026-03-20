@@ -32,7 +32,6 @@ from ...auth.dependencies import UserContextDict
 from ...auth.oauth.flow_state_manager import FlowStateManager
 from ...auth.oauth.types import ClientBranding, StateMetadata
 from ...core.mcp_client import get_session, initialize_mcp_session
-from ...services.server_service import server_service_v1
 from ...utils.otel_metrics import record_server_request
 from ..core.types import McpAppContext
 from ..exceptions import (
@@ -46,6 +45,10 @@ from .types import get_meta_field
 from .utils import build_authenticated_headers, build_target_url, forward_notification, parse_data_field, session_store
 
 logger = logging.getLogger(__name__)
+
+
+def _get_server_service(ctx: Context[ServerSession, McpAppContext]):
+    return ctx.request_context.lifespan_context.server_service
 
 
 async def _downstream_tool_call(
@@ -261,7 +264,7 @@ async def execute_tool_impl(
         user_id = user_context.get("user_id", "unknown")
         logger.info(f"Tool execution from user '{username}:{user_id}': {tool_name} on {server_id}")
 
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await _get_server_service(ctx).get_server_by_id(server_id)
         if server is None:
             # Invalid input. Return a JSON-RPC **result response** with `isError=True` so that LLM can try another request.
             return CallToolResult(
@@ -410,7 +413,12 @@ async def execute_tool_impl(
         raise InternalServerException(msg) from exc
 
 
-async def read_resource_impl(user_context: UserContextDict, server_id: str, resource_uri: str) -> CallToolResult:
+async def read_resource_impl(
+    user_context: UserContextDict,
+    server_id: str,
+    resource_uri: str,
+    ctx: Context[ServerSession, McpAppContext],
+) -> CallToolResult:
     """
     Read/access a resource from an MCP server.
 
@@ -433,7 +441,7 @@ async def read_resource_impl(user_context: UserContextDict, server_id: str, reso
         username = user_context.get("username", "unknown")
         logger.info(f"resource read request from user '{username}' - {resource_uri} on {server_id}")
 
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await _get_server_service(ctx).get_server_by_id(server_id)
         if server is None:
             # Invalid input. Return a JSON-RPC **result response** with `isError=True` so that LLM can try another request.
             return CallToolResult(
@@ -481,7 +489,11 @@ async def read_resource_impl(user_context: UserContextDict, server_id: str, reso
 
 
 async def execute_prompt_impl(
-    user_context: UserContextDict, server_id: str, prompt_name: str, arguments: dict[str, Any] | None = None
+    user_context: UserContextDict,
+    server_id: str,
+    prompt_name: str,
+    arguments: dict[str, Any] | None,
+    ctx: Context[ServerSession, McpAppContext],
 ) -> CallToolResult:
     """
     Execute a prompt from an MCP server.
@@ -509,7 +521,7 @@ async def execute_prompt_impl(
         username = user_context.get("username", "unknown")
         logger.info(f"Prompt execution request from user '{username}': {prompt_name} on {server_id}")
 
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await _get_server_service(ctx).get_server_by_id(server_id)
         if server is None:
             # Invalid input. Return a JSON-RPC **result response** with `isError=True` so that LLM can try another request.
             return CallToolResult(
@@ -711,7 +723,12 @@ def get_tools() -> list[tuple[str, Callable]]:
 
         Returns: Resource contents (format varies: text, JSON, binary, etc.)
         """
-        return await read_resource_impl(ctx.request_context.request.state.user, server_id, resource_uri)  # type: ignore[union-attr]
+        return await read_resource_impl(
+            ctx.request_context.request.state.user,  # type: ignore[union-attr]
+            server_id,
+            resource_uri,
+            ctx,
+        )
 
     async def execute_prompt(
         ctx: Context[ServerSession, McpAppContext],
@@ -759,7 +776,13 @@ def get_tools() -> list[tuple[str, Callable]]:
 
         Returns: Prompt messages ready for LLM consumption (role, content pairs)
         """
-        return await execute_prompt_impl(ctx.request_context.request.state.user, server_id, prompt_name, arguments)  # type: ignore[union-attr]
+        return await execute_prompt_impl(
+            ctx.request_context.request.state.user,  # type: ignore[union-attr]
+            server_id,
+            prompt_name,
+            arguments,
+            ctx,
+        )
 
     # Return list of (name, function) tuples
     return [

@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 from ....schemas.enums import ConnectionState
 from ....schemas.oauth_schema import OAuthTokens
-from ....services.server_service import server_service_v1
-from ..flow_state_manager import get_flow_state_manager
+from ....services.server_service import ServerServiceV1
+from ..flow_state_manager import FlowStateManager
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,8 @@ class OAuthReconnectionManager:
         self,
         mcp_service: Any,  # MCPService instance
         oauth_service: Any,  # OAuthService instance
+        flow_state_manager: FlowStateManager,
+        server_service: ServerServiceV1,
         tracker: OAuthReconnectionTracker | None = None,
         connection_timeout_ms: int | None = None,
     ):
@@ -42,6 +44,8 @@ class OAuthReconnectionManager:
         self.mcp_service = mcp_service
         self.oauth_service = oauth_service
         self.tracker = tracker or OAuthReconnectionTracker()
+        self.flow_state_manager = flow_state_manager
+        self.server_service = server_service
         self.connection_timeout_ms = connection_timeout_ms or self.DEFAULT_CONNECTION_TIMEOUT_MS
 
         logger.debug(f"Initialized with timeout: {self.connection_timeout_ms}ms")
@@ -116,7 +120,7 @@ class OAuthReconnectionManager:
 
         try:
             # Get server configuration
-            server = await server_service_v1.get_server_by_id(server_id)
+            server = await self.server_service.get_server_by_id(server_id)
             if not server:
                 raise ValueError("Server not found")
             config = server.config
@@ -231,7 +235,7 @@ class OAuthReconnectionManager:
             Optional[str]: "active", "failed", or None
         """
         try:
-            flow_manager = get_flow_state_manager()
+            flow_manager = self.flow_state_manager
             flow_id = flow_manager.generate_flow_id(user_id, server_id)
             flow_state = flow_manager.get_flow(flow_id)
 
@@ -275,7 +279,7 @@ class OAuthReconnectionManager:
             bool: Whether the flow is active
         """
         try:
-            flow_manager = get_flow_state_manager()
+            flow_manager = self.flow_state_manager
             flow_id = flow_manager.generate_flow_id(user_id, server_id)
             flow_state = flow_manager.get_flow(flow_id)
 
@@ -304,7 +308,7 @@ class OAuthReconnectionManager:
             bool: Whether the flow has failed
         """
         try:
-            flow_manager = get_flow_state_manager()
+            flow_manager = self.flow_state_manager
             flow_id = flow_manager.generate_flow_id(user_id, server_id)
             flow_state = flow_manager.get_flow(flow_id)
 
@@ -354,7 +358,7 @@ class OAuthReconnectionManager:
     async def _get_oauth_servers(self) -> list[str]:
         """Get all OAuth servers"""
         try:
-            servers, _ = await server_service_v1.list_servers(page=1, per_page=1000, status="active")
+            servers, _ = await self.server_service.list_servers(page=1, per_page=1000, status="active")
 
             oauth_servers = [server.serverName for server in servers if server.config.get("requires_oauth", False)]
             return oauth_servers
@@ -384,7 +388,7 @@ class OAuthReconnectionManager:
 
     async def _get_user_tokens(self, user_id: str, server_id: str) -> OAuthTokens | None:
         """Get user tokens"""
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await self.server_service.get_server_by_id(server_id)
         if not server:
             raise Exception(f"Failed to get server info: {server_id}")
         try:
@@ -406,26 +410,3 @@ class OAuthReconnectionManager:
     def __str__(self) -> str:
         """String representation"""
         return f"OAuthReconnectionManager(timeout={self.connection_timeout_ms}ms)"
-
-
-_reconnection_manager_instance: Optional = None
-
-
-def get_reconnection_manager(mcp_service: Any = None, oauth_service: Any = None) -> OAuthReconnectionManager:
-    """
-    Get reconnection manager instance
-
-    Note: This is a simplified singleton pattern for compatibility
-    In production, consider using dependency injection
-    """
-    global _reconnection_manager_instance
-
-    if _reconnection_manager_instance is None:
-        if mcp_service is None or oauth_service is None:
-            raise RuntimeError(
-                "OAuthReconnectionManager not initialized. Call with mcp_service and oauth_service first."
-            )
-        _reconnection_manager_instance = OAuthReconnectionManager(mcp_service=mcp_service, oauth_service=oauth_service)
-        logger.info("Initialized global OAuthReconnectionManager singleton")
-
-    return _reconnection_manager_instance

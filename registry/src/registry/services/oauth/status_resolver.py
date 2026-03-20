@@ -125,15 +125,3 @@ class ConnectionStatusResolver:
             logger.error(f"Error applying OAuth overrides for {server_id}: {e}", exc_info=True)
 
         return base_state
-
-
-_status_resolver_instance: ConnectionStatusResolver | None = None
-
-
-def get_status_resolver(flow_state_manager=None, reconnection_manager=None) -> ConnectionStatusResolver:
-    global _status_resolver_instance
-    if _status_resolver_instance is None:
-        _status_resolver_instance = ConnectionStatusResolver(
-            flow_state_manager=flow_state_manager, reconnection_manager=reconnection_manager
-        )
-    return _status_resolver_instance

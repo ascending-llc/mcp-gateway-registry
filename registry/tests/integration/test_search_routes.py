@@ -2,12 +2,14 @@
 Integration tests for semantic search routes.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
 
+from registry.deps import get_container
 from registry.main import app
 
 
@@ -39,6 +41,11 @@ class TestSearchRoutes:
             return user_context
 
         app.dependency_overrides[get_current_user] = _mock_auth
+        app.state.container = SimpleNamespace(
+            server_service=AsyncMock(),
+            vector_service=AsyncMock(),
+            status_resolver=AsyncMock(),
+        )
 
     def teardown_method(self):
         """Clean up dependency overrides."""
@@ -93,17 +100,18 @@ class TestSearchRoutes:
             ],
         }
 
-        with patch("registry.api.v1.search_routes.faiss_service") as mock_faiss:
-            mock_faiss.search_mixed = AsyncMock(return_value=mock_results)
+        mock_container = AsyncMock()
+        mock_container.vector_service.search_mixed = AsyncMock(return_value=mock_results)
+        app.dependency_overrides[get_container] = lambda: mock_container
 
-            response = test_client.post(
-                "/api/v1/search/semantic",
-                json={
-                    "query": "alpha",
-                    "entity_types": ["mcp_server", "tool", "a2a_agent"],
-                    "max_results": 5,
-                },
-            )
+        response = test_client.post(
+            "/api/v1/search/semantic",
+            json={
+                "query": "alpha",
+                "entity_types": ["mcp_server", "tool", "a2a_agent"],
+                "max_results": 5,
+            },
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -116,10 +124,11 @@ class TestSearchRoutes:
 
     def test_semantic_search_handles_service_errors(self, test_client: TestClient):
         """Service-level errors propagate as 503."""
-        with patch("registry.api.v1.search_routes.faiss_service") as mock_faiss:
-            mock_faiss.search_mixed = AsyncMock(side_effect=RuntimeError("offline"))
+        mock_container = AsyncMock()
+        mock_container.vector_service.search_mixed = AsyncMock(side_effect=RuntimeError("offline"))
+        app.dependency_overrides[get_container] = lambda: mock_container
 
-            response = test_client.post("/api/v1/search/semantic", json={"query": "alpha"})
+        response = test_client.post("/api/v1/search/semantic", json={"query": "alpha"})
 
         assert response.status_code == 503
         assert "temporarily unavailable" in response.json()["detail"]
@@ -153,6 +162,14 @@ class TestServerSearchRoutes:
             return user_context
 
         app.dependency_overrides[get_current_user] = _mock_auth
+        app.state.container = SimpleNamespace(
+            server_service=SimpleNamespace(
+                get_server_by_id=AsyncMock(),
+                list_servers=AsyncMock(return_value=([], 0)),
+            ),
+            vector_service=AsyncMock(),
+            status_resolver=AsyncMock(),
+        )
 
     def teardown_method(self):
         """Clean up dependency overrides."""

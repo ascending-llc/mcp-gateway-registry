@@ -3,7 +3,7 @@ from typing import Any
 
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
-from ...auth.oauth import FlowStateManager, get_flow_state_manager, parse_scope
+from ...auth.oauth import FlowStateManager, parse_scope
 from ...auth.oauth.oauth_client import OAuthClient
 from ...auth.oauth.oauth_utils import get_default_redirect_uri
 from ...auth.oauth.types import StateMetadata
@@ -11,7 +11,7 @@ from ...schemas.enums import OAuthFlowStatus
 from ...schemas.oauth_schema import (
     OAuthTokens,
 )
-from ...services.oauth.token_service import token_service
+from ...services.oauth.token_service import TokenService
 from ...utils.crypto_utils import decrypt_auth_fields
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,13 @@ class MCPOAuthService:
 
     """
 
-    def __init__(self, flow_manager: FlowStateManager | None = None):
-        self.flow_manager = flow_manager or get_flow_state_manager()
+    def __init__(
+        self,
+        flow_manager: FlowStateManager,
+        token_service_instance: TokenService,
+    ):
+        self.flow_manager = flow_manager
+        self.token_service = token_service_instance
         self.oauth_client = OAuthClient()
 
     def _merge_oauth_config(
@@ -215,7 +220,7 @@ class MCPOAuthService:
                         "response_types_supported": oauth_metadata.get("response_types_supported", ["code"]),
                     }
 
-                    await token_service.store_oauth_client_credentials(
+                    await self.token_service.store_oauth_client_credentials(
                         user_id=user_id,
                         service_name=server.serverName,
                         client_info=client_info,
@@ -253,11 +258,12 @@ class MCPOAuthService:
             # Generate PKCE parameters using Authlib
             code_verifier = self.oauth_client.generate_code_verifier()
             code_challenge = self.oauth_client.generate_code_challenge(code_verifier)
-            flow_id = self.flow_manager.generate_flow_id(user_id, server_id)
+            flow_manager = self.flow_manager
+            flow_id = flow_manager.generate_flow_id(user_id, server_id)
 
             # Create OAuth flow metadata (using flow_id as state)
             authorization_url = oauth_config.get("authorization_url")
-            flow_metadata = self.flow_manager.create_flow_metadata(
+            flow_metadata = flow_manager.create_flow_metadata(
                 server_id=server_id,
                 server_name=server.serverName,
                 server_path=server.path,
@@ -270,7 +276,7 @@ class MCPOAuthService:
             )
 
             # Create OAuth flow
-            self.flow_manager.create_flow(
+            flow_manager.create_flow(
                 flow_id=flow_id,
                 server_id=server_id,
                 user_id=user_id,
@@ -322,8 +328,9 @@ class MCPOAuthService:
             logger.info(f"State validation passed for flow {flow_id} (with security token)")
 
             # Check if flow has expired
-            if self.flow_manager.is_flow_expired(flow):
-                self.flow_manager.delete_flow(flow_id)
+            flow_manager = self.flow_manager
+            if flow_manager.is_flow_expired(flow):
+                flow_manager.delete_flow(flow_id)
                 return False, "Flow expired"
 
             # Get flow metadata
@@ -364,7 +371,7 @@ class MCPOAuthService:
             # Store client credentials separately (for DCR or static config)
             if flow.metadata and flow.metadata.client_info:
                 try:
-                    await token_service.store_oauth_client_credentials(
+                    await self.token_service.store_oauth_client_credentials(
                         user_id=flow.user_id,
                         service_name=flow.server_name,
                         client_info=flow.metadata.client_info,
@@ -376,7 +383,7 @@ class MCPOAuthService:
                     # Don't fail the flow - credentials can be retrieved from config
 
             # Store access/refresh tokens
-            await token_service.store_oauth_tokens(
+            await self.token_service.store_oauth_tokens(
                 user_id=flow.user_id, service_name=flow.server_name, tokens=tokens, metadata=metadata
             )
             logger.info(f"Persisted OAuth tokens to database for {flow.user_id}/{flow.server_id}")
@@ -417,10 +424,10 @@ class MCPOAuthService:
             server_name = server.serverName
 
             # 1. Check if access token exists and is not expired
-            is_expired = await token_service.is_access_token_expired(user_id, server_name)
+            is_expired = await self.token_service.is_access_token_expired(user_id, server_name)
 
             if not is_expired:
-                tokens = await token_service.get_oauth_tokens(user_id, server_name)
+                tokens = await self.token_service.get_oauth_tokens(user_id, server_name)
                 if tokens and tokens.access_token:
                     logger.debug(f"Using existing valid access token for {user_id}/{server_name}")
                     return tokens.access_token, None, None
@@ -428,13 +435,13 @@ class MCPOAuthService:
             logger.info(f"Access token expired or missing for {user_id}/{server_name}, attempting refresh")
 
             # 2. Try refresh token if access token is expired/missing
-            has_refresh = await token_service.has_refresh_token(user_id, server_name)
+            has_refresh = await self.token_service.has_refresh_token(user_id, server_name)
 
             if has_refresh:
                 success, error = await self.validate_and_refresh_tokens(user_id, server)
 
                 if success:
-                    tokens = await token_service.get_oauth_tokens(user_id, server_name)
+                    tokens = await self.token_service.get_oauth_tokens(user_id, server_name)
                     if tokens and tokens.access_token:
                         logger.info(f"Successfully refreshed access token for {user_id}/{server_name}")
                         return tokens.access_token, None, None
@@ -469,7 +476,7 @@ class MCPOAuthService:
         Returns:
             OAuthTokens对象或None
         """
-        tokens = await token_service.get_oauth_tokens(user_id, server_name)
+        tokens = await self.token_service.get_oauth_tokens(user_id, server_name)
         if tokens:
             logger.debug(f"Retrieved tokens from database for {user_id}/{server_name}")
         else:
@@ -543,7 +550,7 @@ class MCPOAuthService:
             logger.info(f"[OAuth] Refreshing token for user={user_id}, server={server_id}")
 
             # NEW: Try to load stored client credentials first
-            stored_client_info, stored_metadata = await token_service.get_oauth_client_credentials(
+            stored_client_info, stored_metadata = await self.token_service.get_oauth_client_credentials(
                 user_id=user_id, service_name=server_name
             )
 
@@ -605,7 +612,7 @@ class MCPOAuthService:
                 "grant_types_supported": ["authorization_code", "refresh_token"],
                 "response_types_supported": ["code"],
             }
-            await token_service.store_oauth_tokens(
+            await self.token_service.store_oauth_tokens(
                 user_id=user_id, service_name=server_name, tokens=new_tokens, metadata=metadata
             )
             logger.info(f"Persisted refreshed tokens to database for {user_id}/{server_name}")
@@ -628,7 +635,7 @@ class MCPOAuthService:
             server_id = str(mcp_server.id)
 
             # 2. Get current tokens
-            current_tokens = await token_service.get_oauth_tokens(user_id, server_name)
+            current_tokens = await self.token_service.get_oauth_tokens(user_id, server_name)
             if not current_tokens or not current_tokens.refresh_token:
                 return False, "No refresh token available"
 
@@ -692,8 +699,8 @@ class MCPOAuthService:
         server_name = server.serverName
 
         # Check token status
-        access_token_doc, access_valid = await token_service.get_access_token_status(user_id, server_name)
-        refresh_token_doc, refresh_valid = await token_service.get_refresh_token_status(user_id, server_name)
+        access_token_doc, access_valid = await self.token_service.get_access_token_status(user_id, server_name)
+        refresh_token_doc, refresh_valid = await self.token_service.get_refresh_token_status(user_id, server_name)
 
         logger.debug(
             f"[Reinitialize] Token status for {server_name}({server_id}): "
@@ -752,7 +759,7 @@ class MCPOAuthService:
 
         try:
             # Get refresh token value (already validated by caller)
-            refresh_token_doc, _ = await token_service.get_refresh_token_status(user_id, server_name)
+            refresh_token_doc, _ = await self.token_service.get_refresh_token_status(user_id, server_name)
             if not refresh_token_doc:
                 logger.error(f"[Reinitialize] Refresh token disappeared for {server_name}({server_id})")
                 return await self._build_oauth_required_response(user_id, server)
@@ -834,13 +841,3 @@ class MCPOAuthService:
             "server_name": server.serverName,
             "requires_oauth": server.config.get("requiresOAuth", False),
         }
-
-
-_oauth_service_instance: MCPOAuthService | None = None
-
-
-async def get_oauth_service() -> MCPOAuthService:
-    global _oauth_service_instance
-    if _oauth_service_instance is None:
-        _oauth_service_instance = MCPOAuthService()
-    return _oauth_service_instance

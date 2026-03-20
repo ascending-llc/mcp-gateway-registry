@@ -100,9 +100,13 @@ class TestAgentCoreImportService:
 
     @pytest.fixture
     def service(self, repo, acl, a2a_repo):
+        server_service = SimpleNamespace(create_server=AsyncMock())
+        user_service = SimpleNamespace(get_user_by_user_id=AsyncMock())
         return AgentCoreImportService(
             federation_client=SimpleNamespace(),
             acl_service_instance=acl,
+            server_service=server_service,
+            user_service_instance=user_service,
             mcp_server_repo=repo,
             a2a_agent_repo=a2a_repo,
         )
@@ -151,10 +155,7 @@ class TestAgentCoreImportService:
         created_server.save = AsyncMock()
 
         create_mock = AsyncMock(return_value=created_server)
-        monkeypatch.setattr(
-            "registry.services.agentcore_import_service.server_service_v1.create_server",
-            create_mock,
-        )
+        service.server_service = SimpleNamespace(create_server=create_mock)
 
         await service._create_server(
             discovered_server=discovered,

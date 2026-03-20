@@ -172,20 +172,32 @@ class TestAuthRoutes:
         # Mock httpx AsyncClient for OAuth token exchange
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzNDUiLCJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
-        }
+        mock_response.json.return_value = {"access_token": "test-access-token"}
+        mock_user_service = Mock()
+        mock_user_service.get_user_by_user_id = AsyncMock(return_value=mock_user)
 
         with (
             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client,
             patch(
-                "registry.api.redirect_routes.user_service.get_user_by_user_id", new=AsyncMock(return_value=mock_user)
+                "jwt.decode",
+                return_value={
+                    "user_id": mock_user.id,
+                    "sub": mock_user.username,
+                    "email": mock_user.email,
+                    "name": "Test User",
+                    "groups": [],
+                    "provider": "keycloak",
+                },
             ),
         ):
             mock_client_instance = mock_client.return_value.__aenter__.return_value
             mock_client_instance.post = AsyncMock(return_value=mock_response)
 
-            response = await oauth2_callback(mock_request, code=mock_code)
+            response = await oauth2_callback(
+                mock_request,
+                code=mock_code,
+                container=Mock(user_service=mock_user_service),
+            )
 
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -198,9 +210,7 @@ class TestAuthRoutes:
         # Mock httpx AsyncClient to return a token without user_id
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
-        }
+        mock_response.json.return_value = {"access_token": "test-access-token-no-user-id"}
 
         # User claims without user_id to trigger create_user
         user_claims = {
@@ -214,9 +224,9 @@ class TestAuthRoutes:
         mock_user = Mock()
         mock_user.id = ObjectId("507f1f77bcf86cd799439013")
 
+        mock_user_service = Mock()
         with (
             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client,
-            patch("registry.api.redirect_routes.user_service") as mock_user_service,
             patch("jwt.decode", return_value=user_claims),
         ):
             mock_client_instance = mock_client.return_value.__aenter__.return_value
@@ -226,7 +236,11 @@ class TestAuthRoutes:
             mock_user_service.create_user = AsyncMock(return_value=mock_user)
             mock_user_service.get_user_by_user_id = AsyncMock(return_value=mock_user)
 
-            response = await oauth2_callback(mock_request, code=mock_code)
+            response = await oauth2_callback(
+                mock_request,
+                code=mock_code,
+                container=Mock(user_service=mock_user_service),
+            )
 
             assert isinstance(response, RedirectResponse)
             assert response.status_code == 302
@@ -235,7 +249,12 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_oauth2_callback_with_error(self, mock_request):
         """Test OAuth2 callback with error parameter."""
-        response = await oauth2_callback(mock_request, error="oauth2_error", details="Provider error")
+        response = await oauth2_callback(
+            mock_request,
+            error="oauth2_error",
+            details="Provider error",
+            container=Mock(user_service=Mock()),
+        )
 
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -245,7 +264,11 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_oauth2_callback_oauth2_init_failed(self, mock_request):
         """Test OAuth2 callback with init failed error."""
-        response = await oauth2_callback(mock_request, error="oauth2_init_failed")
+        response = await oauth2_callback(
+            mock_request,
+            error="oauth2_init_failed",
+            container=Mock(user_service=Mock()),
+        )
 
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -254,7 +277,11 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_oauth2_callback_oauth2_callback_failed(self, mock_request):
         """Test OAuth2 callback with callback failed error."""
-        response = await oauth2_callback(mock_request, error="oauth2_callback_failed")
+        response = await oauth2_callback(
+            mock_request,
+            error="oauth2_callback_failed",
+            container=Mock(user_service=Mock()),
+        )
 
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -272,7 +299,11 @@ class TestAuthRoutes:
                 mock_client_instance = mock_client.return_value.__aenter__.return_value
                 mock_client_instance.post = AsyncMock(return_value=mock_response)
 
-                response = await oauth2_callback(mock_request, code=mock_code)
+                response = await oauth2_callback(
+                    mock_request,
+                    code=mock_code,
+                    container=Mock(user_service=Mock()),
+                )
 
                 assert isinstance(response, RedirectResponse)
                 assert response.status_code == 302

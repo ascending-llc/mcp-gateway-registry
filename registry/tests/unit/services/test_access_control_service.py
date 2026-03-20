@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from beanie import PydanticObjectId
@@ -15,7 +15,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_grant_permission_new_entry(self, mock_acl_entry, mock_get_session):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         mock_get_session.return_value = AsyncMock()  # Mock session
         mock_acl_entry.find_one = AsyncMock(return_value=None)
 
@@ -46,7 +46,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_grant_permission_update_existing(self, mock_acl_entry, mock_get_session):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         mock_get_session.return_value = AsyncMock()  # Mock session
         existing_entry = MagicMock()
         existing_entry.save = AsyncMock()
@@ -64,7 +64,7 @@ class TestACLService:
 
     @pytest.mark.asyncio
     async def test_grant_permission_missing_principal_id(self):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         with pytest.raises(ValueError):
             await service.grant_permission(
                 principal_type="user",
@@ -76,7 +76,7 @@ class TestACLService:
 
     @pytest.mark.asyncio
     async def test_grant_permission_missing_perm_bits_and_role(self):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         with pytest.raises(ValueError):
             await service.grant_permission(
                 principal_type="user",
@@ -89,7 +89,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_delete_acl_entries_for_resource(self, mock_acl_entry, mock_get_session):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         mock_get_session.return_value = AsyncMock()  # Mock session
         mock_result = MagicMock()
         mock_result.deleted_count = 2
@@ -102,7 +102,7 @@ class TestACLService:
     @pytest.mark.asyncio
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_delete_acl_entries_for_resource_exception(self, mock_acl_entry):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         mock_acl_entry.find.return_value.delete = AsyncMock(side_effect=Exception("fail"))
         deleted = await service.delete_acl_entries_for_resource(
             resource_type=ResourceType.MCPSERVER.value, resource_id=PydanticObjectId()
@@ -113,7 +113,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_get_user_permissions_for_resource_edit_only(self, mock_acl_entry):
         """EDIT bit (2) should only grant EDIT, not VIEW."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         entry = MagicMock()
         entry.permBits = PermissionBits.EDIT
 
@@ -139,7 +139,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.get_current_session")
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_delete_permission(self, mock_acl_entry, mock_get_session):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         mock_get_session.return_value = AsyncMock()  # Mock session
         mock_result = MagicMock()
         mock_result.deleted_count = 1
@@ -155,7 +155,7 @@ class TestACLService:
     @pytest.mark.asyncio
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_delete_permission_exception(self, mock_acl_entry):
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         mock_acl_entry.find.return_value.delete = AsyncMock(side_effect=Exception("fail"))
         deleted = await service.delete_permission(
             resource_type=ResourceType.MCPSERVER.value,
@@ -169,7 +169,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_get_user_permissions_for_resource_owner(self, mock_acl_entry):
         """User with OWNER bits should resolve all permissions."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         entry = MagicMock()
         entry.permBits = RoleBits.OWNER  # 15
 
@@ -195,7 +195,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_get_user_permissions_for_resource_no_match(self, mock_acl_entry):
         """No ACL entry should return all-False permissions."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
 
         # Mock the chained methods: find().sort().to_list() returning empty list
         mock_find_result = MagicMock()
@@ -218,7 +218,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_get_user_permissions_for_resource_exception(self, mock_acl_entry):
         """Exception should return all-False permissions."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
 
         # Mock find() to raise exception
         mock_acl_entry.find = MagicMock(side_effect=Exception("db error"))
@@ -234,7 +234,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_check_user_permission_allowed(self, mock_acl_entry):
         """User with VIEW should pass the VIEW check."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         entry = MagicMock()
         entry.permBits = RoleBits.VIEWER  # 1
 
@@ -257,7 +257,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_check_user_permission_denied(self, mock_acl_entry):
         """User with VIEW-only should be denied EDIT."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         entry = MagicMock()
         entry.permBits = RoleBits.VIEWER  # 1 = VIEW only
 
@@ -281,7 +281,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_check_user_permission_no_entry(self, mock_acl_entry):
         """No ACL entry should raise 403."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
 
         # Mock the chained methods: find().sort().to_list() returning empty list
         mock_find_result = MagicMock()
@@ -303,7 +303,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_get_accessible_resource_ids(self, mock_acl_entry):
         """Should return deduplicated resource IDs with VIEW bit set."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         rid1 = PydanticObjectId()
         rid2 = PydanticObjectId()
 
@@ -332,7 +332,7 @@ class TestACLService:
     @patch("registry.services.access_control_service.IAclEntry")
     async def test_get_accessible_resource_ids_exception(self, mock_acl_entry):
         """Exception should return empty list."""
-        service = ACLService()
+        service = ACLService(user_service=Mock(), group_service=Mock())
         mock_acl_entry.find.return_value.to_list = AsyncMock(side_effect=Exception("fail"))
         result = await service.get_accessible_resource_ids(
             user_id=PydanticObjectId(),

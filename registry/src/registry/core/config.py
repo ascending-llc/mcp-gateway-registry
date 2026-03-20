@@ -182,7 +182,7 @@ class Settings(BaseSettings):
     asor_client_credentials: str | None = None
 
     # ==================== Build Metadata ====================
-    build_version: str = ""
+    build_version: str = "1.0.0"
 
     def model_post_init(self, __context: Any) -> None:
         if not self.secret_key:
