@@ -2,7 +2,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from beanie import PydanticObjectId
-from tests.conftest import make_container
 
 from registry.api.v1.acl_routes import (
     get_resource_permissions,
@@ -44,7 +43,7 @@ async def test_search_principals_uses_injected_acl_service():
         query="test",
         limit=5,
         principal_types=[PrincipalType.USER.value],
-        container=make_container(acl_service=acl_service),
+        acl_service=acl_service,
     )
 
     acl_service.search_principals.assert_awaited_once_with(
@@ -94,7 +93,7 @@ async def test_update_resource_permissions_uses_injected_acl_service(sample_user
             resource_type=ResourceType.MCPSERVER.value,
             data=request,
             user_context=sample_user_context,
-            container=make_container(acl_service=acl_service),
+            acl_service=acl_service,
         )
 
     acl_service.check_user_permission.assert_awaited_once()
@@ -114,7 +113,7 @@ async def test_get_resource_permissions_uses_injected_acl_service(sample_user_co
         resource_type=ResourceType.MCPSERVER.value,
         resource_id=resource_id,
         user_context=sample_user_context,
-        container=make_container(acl_service=acl_service),
+        acl_service=acl_service,
     )
 
     acl_service.check_user_permission.assert_awaited_once()

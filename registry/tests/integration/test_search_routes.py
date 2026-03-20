@@ -166,6 +166,10 @@ class TestServerSearchRoutes:
                 list_servers=AsyncMock(return_value=([], 0)),
             ),
             vector_service=AsyncMock(),
+            mcp_server_repo=make_container(
+                asearch_with_rerank=AsyncMock(return_value=[]),
+                afilter=AsyncMock(return_value=[]),
+            ),
             status_resolver=AsyncMock(),
         )
 
@@ -177,8 +181,8 @@ class TestServerSearchRoutes:
         """Successful server search with hybrid search type."""
         mock_search_results = [{"server_id": "test-server-1", "relevance_score": 0.95}]
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -207,8 +211,8 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -228,8 +232,8 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -249,8 +253,8 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -275,8 +279,8 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -302,8 +306,8 @@ class TestServerSearchRoutes:
         """Server search respects the top_n parameter."""
         mock_search_results = []
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -319,8 +323,8 @@ class TestServerSearchRoutes:
         """Server search uses reranking with candidate_k."""
         mock_search_results = []
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -336,8 +340,8 @@ class TestServerSearchRoutes:
         """Server search caps candidate_k at 100."""
         mock_search_results = []
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 
@@ -357,7 +361,7 @@ class TestServerSearchRoutes:
 
     def test_search_servers_empty_query(self, test_client: TestClient):
         """Server search accepts empty query and returns a valid response."""
-        with patch("registry.api.v1.search_routes.mcp_server_repo.afilter", new_callable=AsyncMock) as mock_filter:
+        with patch.object(app.state.container.mcp_server_repo, "afilter", new_callable=AsyncMock) as mock_filter:
             mock_filter.return_value = []
             response = test_client.post("/api/v1/search/servers", json={"query": "", "top_n": 10})
 
@@ -374,8 +378,8 @@ class TestServerSearchRoutes:
         """Server search returns search results."""
         mock_search_results = [{"server_id": "test-id-1", "server_name": "Test Server", "relevance_score": 0.9}]
 
-        with patch(
-            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock
+        with patch.object(
+            app.state.container.mcp_server_repo, "asearch_with_rerank", new_callable=AsyncMock
         ) as mock_search:
             mock_search.return_value = mock_search_results
 

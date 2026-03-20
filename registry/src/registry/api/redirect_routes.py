@@ -12,9 +12,9 @@ from itsdangerous import URLSafeTimedSerializer
 
 from registry_pkgs.core.scopes import map_groups_to_scopes
 
-from ..container import RegistryContainer
 from ..core.config import settings
-from ..deps import get_container
+from ..deps import get_user_service
+from ..services.user_service import UserService
 from ..utils.crypto_utils import generate_access_token, generate_token_pair, verify_refresh_token
 
 logger = logging.getLogger(__name__)
@@ -75,14 +75,12 @@ async def oauth2_callback(
     code: str = None,
     error: str = None,
     details: str = None,
-    container: RegistryContainer = Depends(get_container),
+    user_service: UserService = Depends(get_user_service),
 ):
     """Handle OAuth2 callback from auth server
     This endpoint receives an authorization code and exchanges it for a JWT access token.
     The user_id has already been resolved by auth_server from MongoDB and included in the JWT.
     """
-    user_service = container.user_service
-
     try:
         if error:
             logger.warning(f"OAuth2 callback received error: {error}, details: {details}")

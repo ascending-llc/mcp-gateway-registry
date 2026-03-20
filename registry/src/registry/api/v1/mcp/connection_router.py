@@ -5,8 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from ....auth.dependencies import CurrentUser
-from ....container import RegistryContainer
-from ....deps import get_container
+from ....deps import get_mcp_service, get_server_service, get_status_resolver
 from ....schemas.common_api_schemas import (
     ConnectionStatusMapResponse,
     ServerConnectionStatusResponse,
@@ -16,6 +15,9 @@ from ....services.oauth.connection_status_service import (
     get_servers_connection_status,
     get_single_server_connection_status,
 )
+from ....services.oauth.mcp_service import MCPService
+from ....services.oauth.status_resolver import ConnectionStatusResolver
+from ....services.server_service import ServerServiceV1
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,8 @@ router = APIRouter(prefix="/mcp", tags=["connection"])
 async def reinitialize_server(
     server_id: str,
     current_user: CurrentUser,
-    container: RegistryContainer = Depends(get_container),
+    mcp_service: MCPService = Depends(get_mcp_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
 ) -> JSONResponse:
     """
     Reinitialize MCP server connection
@@ -38,8 +41,6 @@ async def reinitialize_server(
 
     Notes: POST /:serverName/reinitialize (TypeScript reference)
     """
-    mcp_service = container.mcp_service
-    server_service = container.server_service
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[Reinitialize] User {user_id} reinitializing server: {server_id}")
@@ -87,7 +88,9 @@ async def reinitialize_server(
 @router.get("/connection/status", response_model=ConnectionStatusMapResponse, response_model_by_alias=True)
 async def get_all_connection_status(
     current_user: CurrentUser,
-    container: RegistryContainer = Depends(get_container),
+    mcp_service: MCPService = Depends(get_mcp_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
+    status_resolver: ConnectionStatusResolver = Depends(get_status_resolver),
 ) -> ConnectionStatusMapResponse:
     """
     Get connection status for all MCP servers
@@ -96,8 +99,6 @@ async def get_all_connection_status(
 
     Notes: GET /connection/status (TypeScript reference)
     """
-    mcp_service = container.mcp_service
-    server_service = container.server_service
     try:
         user_id = current_user.get("user_id")
         logger.debug(f"Fetching connection status for all servers (user: {user_id})")
@@ -110,7 +111,7 @@ async def get_all_connection_status(
             user_id=user_id,
             servers=all_services,
             mcp_service=mcp_service,
-            status_resolver=container.status_resolver,
+            status_resolver=status_resolver,
         )
         return ConnectionStatusMapResponse(success=True, connectionStatus=connection_status)
 
@@ -125,7 +126,9 @@ async def get_all_connection_status(
 async def get_server_connection_status(
     server_id: str,
     current_user: CurrentUser,
-    container: RegistryContainer = Depends(get_container),
+    mcp_service: MCPService = Depends(get_mcp_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
+    status_resolver: ConnectionStatusResolver = Depends(get_status_resolver),
 ) -> ServerConnectionStatusResponse:
     """
     Get connection status for a specific MCP server by server ID
@@ -133,8 +136,6 @@ async def get_server_connection_status(
     Returns detailed connection status including state, OAuth requirement, and details.
     Uses the same logic as /connection/status to ensure consistency.
     """
-    mcp_service = container.mcp_service
-    server_service = container.server_service
     try:
         user_id = current_user.get("user_id")
         logger.debug(f"Fetching status for {server_id} (user: {user_id})")
@@ -148,7 +149,7 @@ async def get_server_connection_status(
             server_id=server_id,
             mcp_service=mcp_service,
             server_service=server_service,
-            status_resolver=container.status_resolver,
+            status_resolver=status_resolver,
         )
         return ServerConnectionStatusResponse(
             success=True,
@@ -169,7 +170,7 @@ async def get_server_connection_status(
 @DeprecationWarning
 @router.get("/{server_name}/auth-values")
 async def check_auth_values(
-    server_name: str, current_user: CurrentUser, container: RegistryContainer = Depends(get_container)
+    server_name: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Check which authentication values are set for an MCP server
@@ -181,7 +182,6 @@ async def check_auth_values(
 
     Security: Only returns boolean flags, never actual credential values
     """
-    mcp_service = container.mcp_service
     try:
         user_id = current_user.get("user_id")
         logger.debug(f"Checking auth values for {server_name} (user: {user_id})")

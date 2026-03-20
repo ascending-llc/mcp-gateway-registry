@@ -74,12 +74,10 @@ async def test_create_server_route_creates_acl_entry(
         mock_get_client.return_value = mock_client
 
         await create_server(
-            sample_server_request,
-            sample_user_context,
-            MagicMock(
-                server_service=mock_server_service,
-                acl_service=mock_acl_service,
-            ),
+            data=sample_server_request,
+            user_context=sample_user_context,
+            server_service=mock_server_service,
+            acl_service=mock_acl_service,
         )
 
         # Verify server creation was called correctly

@@ -2,7 +2,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
-from tests.conftest import make_container
 
 from registry.api.v1.federation.agentcore_routes import (
     AgentCoreRuntimeSyncRequest,
@@ -42,7 +41,7 @@ async def test_sync_agentcore_runtime_uses_injected_service(sample_user_context)
     result = await sync_agentcore_runtime(
         data=AgentCoreRuntimeSyncRequest(dryRun=True),
         user_context=sample_user_context,
-        container=make_container(agentcore_import_service=agentcore_import_service),
+        agentcore_import_service=agentcore_import_service,
     )
 
     agentcore_import_service.import_from_runtime.assert_awaited_once_with(
@@ -62,7 +61,7 @@ async def test_sync_agentcore_runtime_maps_value_error(sample_user_context):
         await sync_agentcore_runtime(
             data=AgentCoreRuntimeSyncRequest(dryRun=False),
             user_context=sample_user_context,
-            container=make_container(agentcore_import_service=agentcore_import_service),
+            agentcore_import_service=agentcore_import_service,
         )
 
     assert exc_info.value.status_code == 400

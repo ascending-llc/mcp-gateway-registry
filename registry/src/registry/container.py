@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from registry_pkgs.vector.client import get_db_client
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository, get_mcp_server_repo
 
 from .auth.oauth.flow_state_manager import FlowStateManager
 from .auth.oauth.reconnection import OAuthReconnectionManager
@@ -17,6 +20,7 @@ from .services.oauth.mcp_service import MCPService
 from .services.oauth.oauth_service import MCPOAuthService
 from .services.oauth.status_resolver import ConnectionStatusResolver
 from .services.oauth.token_service import TokenService
+from .services.search.base import VectorSearchService
 from .services.search.service import create_vector_search_service
 from .services.server_service import ServerServiceV1
 from .services.user_service import UserService
@@ -39,51 +43,55 @@ class RegistryContainer:
         self.settings = settings
 
     @cached_property
-    def vector_service(self) -> Any:
+    def vector_service(self) -> VectorSearchService:
         return create_vector_search_service()
 
     @cached_property
-    def health_service(self) -> Any:
+    def mcp_server_repo(self) -> MCPServerRepository:
+        return get_mcp_server_repo(get_db_client())
+
+    @cached_property
+    def health_service(self) -> HealthMonitoringService:
         return HealthMonitoringService(server_service=self.server_service)
 
     @cached_property
-    def federation_service(self) -> Any:
+    def federation_service(self) -> FederationService:
         return FederationService()
 
     @cached_property
-    def user_service(self) -> Any:
+    def user_service(self) -> UserService:
         return UserService()
 
     @cached_property
-    def group_service(self) -> Any:
+    def group_service(self) -> GroupService:
         return GroupService()
 
     @cached_property
-    def acl_service(self) -> Any:
+    def acl_service(self) -> ACLService:
         return ACLService(user_service=self.user_service, group_service=self.group_service)
 
     @cached_property
-    def token_service(self) -> Any:
+    def token_service(self) -> TokenService:
         return TokenService(user_service=self.user_service)
 
     @cached_property
-    def flow_state_manager(self) -> Any:
+    def flow_state_manager(self) -> FlowStateManager:
         return FlowStateManager()
 
     @cached_property
-    def oauth_service(self) -> Any:
+    def oauth_service(self) -> MCPOAuthService:
         return MCPOAuthService(flow_manager=self.flow_state_manager, token_service_instance=self.token_service)
 
     @cached_property
-    def connection_service(self) -> Any:
+    def connection_service(self) -> MCPConnectionService:
         return MCPConnectionService(server_service=self.server_service)
 
     @cached_property
-    def mcp_service(self) -> Any:
+    def mcp_service(self) -> MCPService:
         return MCPService(connection_service=self.connection_service, oauth_service=self.oauth_service)
 
     @cached_property
-    def reconnection_manager(self) -> Any:
+    def reconnection_manager(self) -> OAuthReconnectionManager:
         return OAuthReconnectionManager(
             mcp_service=self.mcp_service,
             oauth_service=self.oauth_service,
@@ -92,14 +100,14 @@ class RegistryContainer:
         )
 
     @cached_property
-    def status_resolver(self) -> Any:
+    def status_resolver(self) -> ConnectionStatusResolver:
         return ConnectionStatusResolver(
             flow_state_manager=self.flow_state_manager,
             reconnection_manager=self.reconnection_manager,
         )
 
     @cached_property
-    def server_service(self) -> Any:
+    def server_service(self) -> ServerServiceV1:
         return ServerServiceV1(
             user_service=self.user_service,
             token_service=self.token_service,
@@ -107,21 +115,16 @@ class RegistryContainer:
         )
 
     @cached_property
-    def a2a_agent_service(self) -> Any:
+    def a2a_agent_service(self) -> A2AAgentService:
         return A2AAgentService()
 
     @cached_property
-    def agentcore_import_service(self) -> Any:
+    def agentcore_import_service(self) -> AgentCoreImportService:
         return AgentCoreImportService(
             acl_service_instance=self.acl_service,
             server_service=self.server_service,
             user_service_instance=self.user_service,
         )
-
-    @property
-    def server_service_v1(self) -> Any:
-        """Temporary compatibility alias for code paths not yet migrated off the old name."""
-        return self.server_service
 
     async def startup(self) -> None:
         """Warm root services while keeping compatibility with existing singletons."""

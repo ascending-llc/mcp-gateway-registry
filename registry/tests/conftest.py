@@ -243,8 +243,20 @@ def test_client(mock_auth_middleware) -> TestClient:
 
     Uses mock_auth_middleware to bypass authentication checks.
     """
+    app.state.container = make_container(
+        server_service=Mock(),
+        acl_service=Mock(),
+        mcp_service=Mock(),
+        status_resolver=Mock(),
+        vector_service=Mock(),
+        mcp_server_repo=Mock(),
+        health_service=Mock(),
+    )
     client = TestClient(app)
-    return client
+    yield client
+    app.dependency_overrides.clear()
+    if hasattr(app.state, "container"):
+        del app.state.container
 
 
 @pytest.fixture

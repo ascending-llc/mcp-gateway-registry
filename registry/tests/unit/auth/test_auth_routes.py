@@ -8,7 +8,6 @@ import pytest
 from bson import ObjectId
 from fastapi import Request
 from fastapi.responses import RedirectResponse
-from tests.conftest import make_container
 
 from registry.api.redirect_routes import get_oauth2_providers, oauth2_callback, oauth2_login_redirect
 
@@ -197,7 +196,7 @@ class TestAuthRoutes:
             response = await oauth2_callback(
                 mock_request,
                 code=mock_code,
-                container=make_container(user_service=mock_user_service),
+                user_service=mock_user_service,
             )
 
         assert isinstance(response, RedirectResponse)
@@ -240,7 +239,7 @@ class TestAuthRoutes:
             response = await oauth2_callback(
                 mock_request,
                 code=mock_code,
-                container=make_container(user_service=mock_user_service),
+                user_service=mock_user_service,
             )
 
             assert isinstance(response, RedirectResponse)
@@ -254,7 +253,7 @@ class TestAuthRoutes:
             mock_request,
             error="oauth2_error",
             details="Provider error",
-            container=make_container(user_service=Mock()),
+            user_service=Mock(),
         )
 
         assert isinstance(response, RedirectResponse)
@@ -268,7 +267,7 @@ class TestAuthRoutes:
         response = await oauth2_callback(
             mock_request,
             error="oauth2_init_failed",
-            container=make_container(user_service=Mock()),
+            user_service=Mock(),
         )
 
         assert isinstance(response, RedirectResponse)
@@ -281,7 +280,7 @@ class TestAuthRoutes:
         response = await oauth2_callback(
             mock_request,
             error="oauth2_callback_failed",
-            container=make_container(user_service=Mock()),
+            user_service=Mock(),
         )
 
         assert isinstance(response, RedirectResponse)
@@ -303,7 +302,7 @@ class TestAuthRoutes:
                 response = await oauth2_callback(
                     mock_request,
                     code=mock_code,
-                    container=make_container(user_service=Mock()),
+                    user_service=Mock(),
                 )
 
                 assert isinstance(response, RedirectResponse)

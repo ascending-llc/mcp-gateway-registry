@@ -18,10 +18,9 @@ from registry_pkgs.models._generated import PrincipalType, ResourceType
 from registry_pkgs.models.enums import RoleBits
 
 from ....auth.dependencies import CurrentUser
-from ....container import RegistryContainer
 from ....core.mcp_client import perform_health_check
 from ....core.telemetry_decorators import track_registry_operation
-from ....deps import get_container
+from ....deps import get_acl_service, get_mcp_service, get_server_service, get_status_resolver
 from ....schemas.acl_schema import ResourcePermissions
 from ....schemas.enums import ConnectionState
 from ....schemas.server_api_schemas import (
@@ -37,10 +36,14 @@ from ....schemas.server_api_schemas import (
     convert_to_detail,
     convert_to_list_item,
 )
+from ....services.access_control_service import ACLService
 from ....services.oauth.connection_status_service import (
     get_servers_connection_status,
     get_single_server_connection_status,
 )
+from ....services.oauth.mcp_service import MCPService
+from ....services.oauth.status_resolver import ConnectionStatusResolver
+from ....services.server_service import ServerServiceV1
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +89,10 @@ async def list_servers(
     page: int = 1,
     per_page: int = 20,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    acl_service: ACLService = Depends(get_acl_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
+    mcp_service: MCPService = Depends(get_mcp_service),
+    status_resolver: ConnectionStatusResolver = Depends(get_status_resolver),
 ):
     """
     List servers with optional filtering and pagination.
@@ -98,9 +104,6 @@ async def list_servers(
     - page: Page number (default: 1, min: 1)
     - per_page: Items per page (default: 20, min: 1, max: 100)
     """
-    acl_service = container.acl_service
-    server_service = container.server_service
-    mcp_service = container.mcp_service
     try:
         # Validate status if provided
         if status and status not in ["active", "inactive", "error"]:
@@ -140,7 +143,7 @@ async def list_servers(
                 user_id=user_id,
                 servers=servers,
                 mcp_service=mcp_service,
-                status_resolver=container.status_resolver,
+                status_resolver=status_resolver,
             )
             # Enrich each server item with connection status
             for server_item in server_items:
@@ -181,7 +184,7 @@ async def list_servers(
 @track_registry_operation("read", resource_type="stats")
 async def get_server_stats(
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    server_service: ServerServiceV1 = Depends(get_server_service),
 ):
     """
     Get system-wide statistics.
@@ -200,7 +203,6 @@ async def get_server_stats(
 
     Authorization is enforced by ScopePermissionMiddleware based on scopes.yml configuration.
     """
-    server_service = container.server_service
     try:
         # Get statistics from service
         stats = await server_service.get_stats()
@@ -322,12 +324,12 @@ async def check_server_connection(
 async def get_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    acl_service: ACLService = Depends(get_acl_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
+    mcp_service: MCPService = Depends(get_mcp_service),
+    status_resolver: ConnectionStatusResolver = Depends(get_status_resolver),
 ):
     """Get detailed information about a server by ID, including connection status"""
-    acl_service = container.acl_service
-    server_service = container.server_service
-    mcp_service = container.mcp_service
     try:
         user_id = user_context.get("user_id")
         permissions = await acl_service.check_user_permission(
@@ -352,7 +354,7 @@ async def get_server(
                 server_id=server.id,
                 mcp_service=mcp_service,
                 server_service=server_service,
-                status_resolver=container.status_resolver,
+                status_resolver=status_resolver,
             )
             apply_connection_status_to_server(server_detail, server_status)
 
@@ -387,11 +389,10 @@ async def get_server(
 async def create_server(
     data: ServerCreateRequest,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    server_service: ServerServiceV1 = Depends(get_server_service),
+    acl_service: ACLService = Depends(get_acl_service),
 ):
     """Create a new server"""
-    server_service = container.server_service
-    acl_service = container.acl_service
     try:
         user_id = user_context.get("user_id")
 
@@ -457,11 +458,10 @@ async def update_server(
     server_id: str,
     data: ServerUpdateRequest,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    acl_service: ACLService = Depends(get_acl_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
 ):
     """Update a server with partial data"""
-    acl_service = container.acl_service
-    server_service = container.server_service
     try:
         user_id = user_context.get("user_id")
         permissions = await acl_service.check_user_permission(
@@ -515,11 +515,10 @@ async def update_server(
 async def delete_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    acl_service: ACLService = Depends(get_acl_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
 ):
     """Delete a server"""
-    acl_service = container.acl_service
-    server_service = container.server_service
     try:
         user_id = user_context.get("user_id")
         await acl_service.check_user_permission(
@@ -580,11 +579,10 @@ async def toggle_server(
     server_id: str,
     data: ServerToggleRequest,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    acl_service: ACLService = Depends(get_acl_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
 ):
     """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
-    acl_service = container.acl_service
-    server_service = container.server_service
     try:
         user_id = user_context.get("user_id")
         permissions = await acl_service.check_user_permission(
@@ -636,11 +634,10 @@ async def toggle_server(
 async def get_server_tools(
     server_id: str,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    acl_service: ACLService = Depends(get_acl_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
 ):
     """Get server tools"""
-    acl_service = container.acl_service
-    server_service = container.server_service
     try:
         user_id = user_context.get("user_id")
         permissions = await acl_service.check_user_permission(
@@ -701,11 +698,10 @@ async def get_server_tools(
 async def refresh_server_health(
     server_id: str,
     user_context: dict = Depends(get_user_context),
-    container: RegistryContainer = Depends(get_container),
+    acl_service: ACLService = Depends(get_acl_service),
+    server_service: ServerServiceV1 = Depends(get_server_service),
 ):
     """Refresh server health status. Updates tools if server becomes active."""
-    acl_service = container.acl_service
-    server_service = container.server_service
     try:
         user_id = user_context.get("user_id")
 
