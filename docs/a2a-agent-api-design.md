@@ -171,41 +171,31 @@
 
 **Endpoint**: `POST /api/v1/agents`
 
+**Description**: Register a new A2A agent. Only 4 fields are required in the request body. All other agent information (version, capabilities, skills, etc.) is automatically fetched from the agent's `.well-known/agent-card.json` endpoint using the A2A SDK.
+
 **Request Body**:
 ```json
 {
   "path": "/code-reviewer",
   "name": "Code Review Agent",
   "description": "AI-powered code review assistant",
-  "url": "https://example.com/agents/code-reviewer",
-  "version": "1.0.0",
-  "protocolVersion": "1.0",
-  "capabilities": {
-    "streaming": true,
-    "pushNotifications": false
-  },
-  "skills": [
-    {
-      "id": "code-analysis",
-      "name": "Code Analysis",
-      "description": "Analyze code quality",
-      "tags": ["analysis"],
-      "inputModes": ["text/plain"],
-      "outputModes": ["application/json"]
-    }
-  ],
-  "securitySchemes": {},
-  "preferredTransport": "HTTP+JSON",
-  "defaultInputModes": ["text/plain"],
-  "defaultOutputModes": ["application/json"],
-  "provider": {
-    "organization": "AI Labs",
-    "url": "https://ailabs.com"
-  },
-  "tags": ["code", "review"],
-  "enabled": false
+  "url": "https://example.com/agents/code-reviewer"
 }
 ```
+
+**Request Fields**:
+- `path` (required, string): Unique registry path identifier (e.g., `/code-reviewer`)
+- `name` (required, string): Display name for the agent in the registry
+- `description` (optional, string): Description of the agent for the registry
+- `url` (required, string): Agent endpoint URL - the agent card will be automatically fetched from `{url}/.well-known/agent-card.json`
+
+**Auto-Fetch Behavior**:
+1. System fetches agent card from `{url}/.well-known/agent-card.json` using A2A SDK
+2. Validates the fetched agent card structure
+3. Uses fetched data for: `version`, `protocolVersion`, `capabilities`, `skills`, `securitySchemes`, `preferredTransport`, `defaultInputModes`, `defaultOutputModes`, `provider`
+4. Overrides `name` and `description` with values from request if provided
+5. Enables wellKnown sync automatically for future updates
+6. **Tags field**: Initialized as empty array `[]` - tags are registry-level metadata separate from skill tags, and can be managed manually if needed
 
 **Response**: `201 Created`
 ```json
@@ -230,7 +220,7 @@
     "organization": "AI Labs",
     "url": "https://ailabs.com"
   },
-  "tags": ["code", "review"],
+  "tags": [],
   "status": "active",
   "enabled": false,
   "permissions": {
@@ -240,7 +230,13 @@
     "SHARE": true
   },
   "author": "507f1f77bcf86cd799439012",
-  "wellKnown": null,
+  "wellKnown": {
+    "enabled": true,
+    "url": "https://example.com/agents/code-reviewer",
+    "lastSyncAt": "2024-01-15T10:30:00Z",
+    "lastSyncStatus": "success",
+    "lastSyncVersion": "1.0.0"
+  },
   "createdAt": "2024-01-15T10:30:00Z",
   "updatedAt": "2024-01-15T10:30:00Z"
 }
@@ -250,8 +246,12 @@
 - Uses `AgentDetailResponse` schema (not a separate create response)
 - Automatically grants OWNER permission to creator
 - ACL resource type is `ResourceType.AGENT`
+- Agent is created with `enabled: false` by default for safety
+- All agent metadata is auto-fetched from the provided URL
 
-**Error**: `400` Validation error, `409` Path already exists
+**Error**: 
+- `400` Validation error or failed to fetch agent card from URL
+- `409` Path already exists
 
 ---
 
@@ -259,26 +259,49 @@
 
 **Endpoint**: `PATCH /api/v1/agents/{agent_id}`
 
+**Description**: Update an existing agent. Only 4 fields can be updated via this endpoint. When the `url` field is updated, all other agent information is automatically fetched from the new URL's `.well-known/agent-card.json` endpoint.
+
 **Request Body** (all fields optional):
 ```json
 {
+  "path": "/new-code-reviewer",
   "name": "Updated Agent Name",
   "description": "Updated description",
-  "version": "1.1.0",
-  "skills": [...],
-  "tags": ["new", "tags"],
-  "enabled": true
+  "url": "https://example.com/agents/new-code-reviewer"
 }
 ```
+
+**Request Fields** (all optional):
+- `path` (string): Update the registry path
+- `name` (string): Update the display name
+- `description` (string): Update the description
+- `url` (string): Update the agent endpoint URL
+
+**Auto-Fetch Behavior**:
+1. **If `url` is updated**: 
+   - System fetches new agent card from `{new_url}/.well-known/agent-card.json`
+   - All card fields (version, capabilities, skills, etc.) are updated from fetched data
+   - `name` and `description` from request override the fetched values if provided
+   - Tags are re-extracted from new skills
+   - wellKnown sync is updated with new URL and sync status
+
+2. **If only `name` or `description` is updated** (no URL change):
+   - Only these fields are updated in the existing agent card
+   - No agent card re-fetch occurs
+   - Other fields remain unchanged
+
+3. **If only `path` is updated**:
+   - Registry path is updated (must be unique)
+   - Agent card remains unchanged
 
 **Response**: `200 OK`
 ```json
 {
   "id": "507f1f77bcf86cd799439011",
-  "path": "/code-reviewer",
+  "path": "/new-code-reviewer",
   "name": "Updated Agent Name",
   "description": "Updated description",
-  "url": "https://example.com/agents/code-reviewer",
+  "url": "https://example.com/agents/new-code-reviewer",
   "version": "1.1.0",
   "protocolVersion": "1.0",
   "capabilities": {...},
@@ -298,7 +321,13 @@
     "SHARE": true
   },
   "author": "507f1f77bcf86cd799439012",
-  "wellKnown": {...},
+  "wellKnown": {
+    "enabled": true,
+    "url": "https://example.com/agents/new-code-reviewer",
+    "lastSyncAt": "2024-01-20T15:45:00Z",
+    "lastSyncStatus": "success",
+    "lastSyncVersion": "1.1.0"
+  },
   "createdAt": "2024-01-15T10:30:00Z",
   "updatedAt": "2024-01-20T15:45:00Z"
 }
@@ -307,8 +336,13 @@
 **Note:**
 - Uses `AgentDetailResponse` schema (not a separate update response)
 - Returns complete agent details after update
+- If URL is changed, automatically re-fetches all agent metadata from new URL
 
-**Error**: `404` Agent not found, `403` Access denied
+**Error**: 
+- `400` Validation error or failed to fetch agent card from new URL
+- `404` Agent not found
+- `403` Access denied
+- `409` New path conflicts with existing agent
 
 **Permission**: Requires EDIT permission
 
