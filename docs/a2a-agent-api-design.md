@@ -195,7 +195,7 @@
 3. Uses fetched data for: `version`, `protocolVersion`, `capabilities`, `skills`, `securitySchemes`, `preferredTransport`, `defaultInputModes`, `defaultOutputModes`, `provider`
 4. Overrides `name` and `description` with values from request if provided
 5. Enables wellKnown sync automatically for future updates
-6. Extracts tags from skill tags
+6. **Tags field**: Initialized as empty array `[]` - tags are registry-level metadata separate from skill tags, and can be managed manually if needed
 
 **Response**: `201 Created`
 ```json
@@ -220,7 +220,7 @@
     "organization": "AI Labs",
     "url": "https://ailabs.com"
   },
-  "tags": ["code", "review"],
+  "tags": [],
   "status": "active",
   "enabled": false,
   "permissions": {

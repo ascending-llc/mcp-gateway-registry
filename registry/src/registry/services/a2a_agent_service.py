@@ -233,20 +233,11 @@ class A2AAgentService:
             # Recreate agent card with overridden values
             agent_card = AgentCard(**card_data)
 
-            # Extract tags from card skills if available
-            tags = []
-            if agent_card.skills:
-                for skill in agent_card.skills:
-                    if skill.tags:
-                        tags.extend(skill.tags)
-            # Remove duplicates
-            tags = list(set(tags))
-
             # Create agent document with wellKnown config
             agent = A2AAgent(
                 path=data.path,
                 card=agent_card,
-                tags=tags,
+                tags=[],  # Initialize as empty list - tags are registry metadata, not derived from skills
                 isEnabled=False,  # Default to disabled for safety
                 status=STATUS_ACTIVE,
                 author=PydanticObjectId(user_id),
@@ -320,13 +311,8 @@ class A2AAgentService:
                 # Recreate agent card
                 agent.card = AgentCard(**card_data)
 
-                # Extract and update tags from new card
-                tags = []
-                if agent.card.skills:
-                    for skill in agent.card.skills:
-                        if skill.tags:
-                            tags.extend(skill.tags)
-                agent.tags = list(set(tags))
+                # Note: tags are not updated from skills - they are separate registry metadata
+                # agent.tags remains unchanged during URL update
 
                 # Update wellKnown configuration
                 from registry_pkgs.models.a2a_agent import WellKnownConfig
