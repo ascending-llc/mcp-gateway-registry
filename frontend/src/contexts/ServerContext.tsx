@@ -2,7 +2,7 @@ import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { getBasePath } from '@/config';
 import SERVICES from '@/services';
-import type { Agent } from '@/services/agent/type';
+import type { Agent, AgentItem } from '@/services/agent/type';
 import { ServerConnection } from '@/services/mcp/type';
 import type { PermissionType, Server } from '@/services/server/type';
 
@@ -51,8 +51,8 @@ interface ServerContextType {
   serverError: string | null;
 
   // Agent state
-  agents: Agent[];
-  setAgents: React.Dispatch<React.SetStateAction<Agent[]>>;
+  agents: AgentItem[];
+  setAgents: React.Dispatch<React.SetStateAction<AgentItem[]>>;
   agentStats: AgentStats;
   agentLoading: boolean;
   agentError: string | null;
@@ -67,7 +67,7 @@ interface ServerContextType {
   refreshServerData: (notLoading?: boolean) => Promise<ServerInfo[]>;
   refreshAgentData: (notLoading?: boolean) => Promise<void>;
   handleServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
-  handleAgentUpdate: (id: string, updates: Partial<Agent>) => void;
+  handleAgentUpdate: (id: string, updates: Partial<AgentItem>) => void;
   getServerStatusByPolling: (serverId: string, callback?: (state: ServerConnection | undefined) => void) => void;
   cancelPolling: (serverId?: string) => void;
 }
@@ -88,7 +88,7 @@ interface ServerProviderProps {
 
 export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   const [servers, setServers] = useState<ServerInfo[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<AgentItem[]>([]);
   const [viewMode, setViewMode] = useState<'servers' | 'agents'>('servers');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [serverLoading, setServerLoading] = useState(true);
@@ -179,7 +179,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const handleAgentUpdate = (id: string, updates: Partial<Agent>) => {
+  const handleAgentUpdate = (id: string, updates: Partial<AgentItem>) => {
     setAgents(prevAgents => prevAgents.map(agent => (agent.id === id ? { ...agent, ...updates } : agent)));
   };
   const refreshAgentData = useCallback(async (notLoading?: boolean) => {
@@ -189,40 +189,27 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       const result = await SERVICES.AGENT.getAgentsList({});
       const agentsList = result?.agents || [];
 
-      const transformedAgents: Agent[] = agentsList.map((agentInfo: any) => ({
+      const transformedAgents: AgentItem[] = agentsList.map((agentInfo: any) => ({
         id: agentInfo.id,
+        path: agentInfo.path,
         name: agentInfo.display_name || agentInfo.name || 'Unknown Agent',
         description: agentInfo.description || '',
-        path: agentInfo.path,
-        url: agentInfo.url,
-        version: agentInfo.version,
+        url: agentInfo.url || '',
+        version: agentInfo.version || '',
         protocolVersion: agentInfo.protocolVersion || '',
-        capabilities: agentInfo.capabilities || { streaming: false, pushNotifications: false },
-        skills: agentInfo.skills || [],
-        securitySchemes: agentInfo.securitySchemes || { bearer: { type: '', scheme: '' } },
-        preferredTransport: agentInfo.preferredTransport || '',
-        defaultInputModes: agentInfo.defaultInputModes || [],
-        defaultOutputModes: agentInfo.defaultOutputModes || [],
-        provider: agentInfo.provider || { organization: '', url: '' },
-        permissions: agentInfo.permissions || { VIEW: false, EDIT: false, DELETE: false, SHARE: false },
-        author: agentInfo.author || '',
-        wellKnown: agentInfo.wellKnown || {
-          enabled: false,
-          url: '',
-          lastSyncAt: '',
-          lastSyncStatus: '',
-          lastSyncVersion: '',
-        },
-        createdAt: agentInfo.createdAt || '',
-        updatedAt: agentInfo.updatedAt || '',
+        tags: agentInfo.tags || [],
+        numSkills: agentInfo.numSkills || 0,
         enabled:
           agentInfo.is_enabled !== undefined
             ? agentInfo.is_enabled
             : agentInfo.enabled !== undefined
               ? agentInfo.enabled
               : false,
-        tags: agentInfo.tags || [],
         status: mapHealthStatus(agentInfo.health_status || agentInfo.status || 'unknown'),
+        permissions: agentInfo.permissions || { VIEW: false, EDIT: false, DELETE: false, SHARE: false },
+        author: agentInfo.author || '',
+        createdAt: agentInfo.createdAt || '',
+        updatedAt: agentInfo.updatedAt || '',
       }));
       setAgents(transformedAgents);
     } catch (error: any) {

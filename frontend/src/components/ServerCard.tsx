@@ -71,7 +71,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server }) => {
     }
   }, [requiresOauth, connectionState]);
 
-  const toEditPage = async (server: ServerInfo) => {
+  const toEditPage = (server: ServerInfo) => {
     navigate(`/server-edit?id=${server.id}`);
   };
 

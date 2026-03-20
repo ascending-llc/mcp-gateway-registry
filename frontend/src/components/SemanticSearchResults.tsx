@@ -2,9 +2,10 @@ import { ArrowPathIcon, CogIcon, InformationCircleIcon } from '@heroicons/react/
 import axios from 'axios';
 import type React from 'react';
 import { useState } from 'react';
+
 import type { ServerInfo } from '@/contexts/ServerContext';
-import type { SemanticAgentHit, SemanticServerHit, SemanticToolHit } from '../hooks/useSemanticSearch';
 import type { Agent as AgentType } from '@/services/agent/type';
+import type { SemanticAgentHit, SemanticServerHit, SemanticToolHit } from '../hooks/useSemanticSearch';
 import AgentDetailsModal from './AgentDetailsModal';
 import ServerConfigModal from './ServerConfigModal';
 
@@ -48,7 +49,7 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
   };
 
   const mapHitToAgent = (hit: SemanticAgentHit): AgentType => ({
-    id: '', 
+    id: hit.path || '',
     name: hit.agentName,
     path: hit.path,
     url: hit.url || (hit.agentCard as any)?.url || '',
