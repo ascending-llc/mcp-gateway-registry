@@ -9,6 +9,7 @@ import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import type { GetServersDetailResponse, Server } from '@/services/server/type';
 import MainConfigForm from './MainConfigForm';
+import McpPlaygroundModal from './McpPlaygroundModal';
 import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './types';
 
 const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', authorizationType: 'bearer' };
@@ -97,7 +98,7 @@ const INIT_DATA: ServerConfig = {
   description: '',
   path: '',
   url: '',
-  headers: { Authorization: '', 'x-jarvis-auth': '' },
+  headers: null,
   type: 'streamable-http',
   authConfig: DEFAULT_AUTH_CONFIG,
   trustServer: false,
@@ -112,6 +113,7 @@ const ServerRegistryOrEdit: React.FC = () => {
   const { refreshServerData, handleServerUpdate } = useServer();
 
   const [loading, setLoading] = useState(false);
+  const [playgroundOpen, setPlaygroundOpen] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [serverDetail, setServerDetail] = useState<GetServersDetailResponse | null>(null);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
@@ -176,10 +178,21 @@ const ServerRegistryOrEdit: React.FC = () => {
       newErrors.path = 'Path is required';
     } else if (!/^\//.test(formData.path)) {
       newErrors.path = 'Path must start with /';
+    } else if (!/^\/[a-zA-Z0-9\-._~%@!$&'()*+,;=:/]*$/.test(formData.path)) {
+      newErrors.path = 'Path contains invalid characters';
     }
 
     if (!formData.url?.trim()) {
       newErrors.url = 'MCP Server URL is required';
+    } else {
+      try {
+        const parsedUrl = new URL(formData.url);
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+          newErrors.url = 'URL must start with http:// or https://';
+        }
+      } catch (_) {
+        newErrors.url = 'Invalid URL format';
+      }
     }
 
     if (!formData.trustServer) {
@@ -232,8 +245,14 @@ const ServerRegistryOrEdit: React.FC = () => {
         return changed ? next : prev;
       });
     } else if (field === 'path') {
-      const isInvalid = value && !/^\//.test(value as string);
-      setErrors(prev => ({ ...prev, path: isInvalid ? 'Path must start with /' : undefined }));
+      const strVal = value as string | undefined;
+      let pathError: string | undefined;
+      if (strVal && !/^\//.test(strVal)) {
+        pathError = 'Path must start with /';
+      } else if (strVal && !/^\/[a-zA-Z0-9\-._~%@!$&'()*+,;=:/]*$/.test(strVal)) {
+        pathError = 'Path contains invalid characters';
+      }
+      setErrors(prev => ({ ...prev, path: pathError }));
     } else if (errors[field as string]) {
       setErrors(prev => ({ ...prev, [field as string]: undefined }));
     }
@@ -282,7 +301,14 @@ const ServerRegistryOrEdit: React.FC = () => {
   };
 
   return (
-    <div className='h-full overflow-y-auto custom-scrollbar -mr-4 sm:-mr-6 lg:-mr-8'>
+    <>
+      {playgroundOpen && (
+        <McpPlaygroundModal
+          serverPath={serverDetail?.serverName || formData.path}
+          onClose={() => setPlaygroundOpen(false)}
+        />
+      )}
+      <div className='h-full overflow-y-auto custom-scrollbar -mr-4 sm:-mr-6 lg:-mr-8'>
       <div className='mx-auto flex flex-col w-3/4 min-h-full bg-white dark:bg-gray-800 rounded-lg'>
         {/* Header */}
         <div className='px-6 py-6 flex items-center gap-4 border-b border-gray-100 dark:border-gray-700'>
@@ -336,6 +362,15 @@ const ServerRegistryOrEdit: React.FC = () => {
             >
               Cancel
             </button>
+            {isReadOnly && (
+              <button
+                onClick={() => setPlaygroundOpen(true)}
+                disabled={loading || loadingDetail}
+                className='min-w-[80px] sm:min-w-[120px] md:min-w-[160px] px-4 py-2 border border-purple-300 dark:border-purple-600 rounded-md shadow-sm text-sm font-medium text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-800 hover:bg-purple-50 dark:hover:bg-purple-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                Playground
+            </button>)
+            }
             {!isReadOnly && (
               <button
                 onClick={handleSave}
@@ -350,6 +385,7 @@ const ServerRegistryOrEdit: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 

@@ -29,6 +29,7 @@ from ....schemas.enums import ConnectionState, OAuthFlowStatus
 from ....services.oauth.mcp_service import MCPService
 from ....services.oauth.token_service import TokenService
 from ....services.server_service import ServerServiceV1
+from ....utils.schema_converter import convert_dict_keys_to_camel
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ async def discover_oauth_metadata(
 
         return OAuthMetadataDiscoverResponse(
             serverUrl=url,
-            metadata=metadata,
+            metadata=convert_dict_keys_to_camel(metadata),
             message="OAuth metadata discovered successfully.",
         )
 

@@ -70,46 +70,21 @@ class WellKnownInfo(APIBaseModel):
 
 
 class AgentCreateRequest(APIBaseModel):
-    """Request schema for creating a new agent"""
+    """Request schema for creating a new agent - only 4 required fields, other info auto-fetched from URL"""
 
     path: str = Field(description="Registry path (e.g., /code-reviewer)")
     name: str = Field(description="Agent name")
     description: str = Field(default="", description="Agent description")
-    url: HttpUrl | str = Field(description="Agent endpoint URL")
-    version: str = Field(description="Agent version")
-    protocolVersion: str = Field(default="1.0", description="A2A protocol version")
-    capabilities: dict[str, Any] = Field(
-        default_factory=dict, description="Feature declarations (e.g., {'streaming': true})"
-    )
-    skills: list[AgentSkillInput] = Field(default_factory=list, description="Agent capabilities (skills)")
-    securitySchemes: dict[str, Any] = Field(default_factory=dict, description="Supported authentication methods")
-    preferredTransport: str = Field(default="HTTP+JSON", description="Preferred transport protocol")
-    defaultInputModes: list[str] = Field(
-        default_factory=lambda: ["text/plain"], description="Supported input MIME types"
-    )
-    defaultOutputModes: list[str] = Field(
-        default_factory=lambda: ["application/json"], description="Supported output MIME types"
-    )
-    provider: AgentProviderInput | None = Field(None, description="Agent provider information")
-    tags: list[str] = Field(default_factory=list, description="Categorization tags")
-    enabled: bool = Field(default=False, description="Whether agent is enabled in registry")
+    url: HttpUrl | str = Field(description="Agent endpoint URL - agent card will be fetched from this URL")
 
 
 class AgentUpdateRequest(APIBaseModel):
-    """Request schema for updating an agent (partial update)"""
+    """Request schema for updating an agent - only 4 fields supported, other info auto-fetched from URL"""
 
-    name: str | None = None
-    description: str | None = None
-    version: str | None = None
-    skills: list[AgentSkillInput] | None = None
-    tags: list[str] | None = None
-    enabled: bool | None = None
-    capabilities: dict[str, Any] | None = None
-    securitySchemes: dict[str, Any] | None = None
-    preferredTransport: str | None = None
-    defaultInputModes: list[str] | None = None
-    defaultOutputModes: list[str] | None = None
-    provider: AgentProviderInput | None = None
+    path: str | None = Field(None, description="Registry path (e.g., /code-reviewer)")
+    name: str | None = Field(None, description="Agent name")
+    description: str | None = Field(None, description="Agent description")
+    url: HttpUrl | str | None = Field(None, description="Agent endpoint URL - agent card will be fetched from this URL")
 
 
 class AgentToggleRequest(APIBaseModel):
@@ -142,6 +117,7 @@ class AgentListItem(APIBaseModel):
     protocolVersion: str
     tags: list[str]
     numSkills: int
+    skills: list[AgentSkillOutput]
     enabled: bool
     status: str
     permissions: ResourcePermissions
@@ -189,6 +165,7 @@ class AgentDetailResponse(APIBaseModel):
     version: str
     protocolVersion: str
     capabilities: dict[str, Any]
+    numSkills: int
     skills: list[AgentSkillOutput]
     securitySchemes: dict[str, Any]
     preferredTransport: str
@@ -241,6 +218,18 @@ def convert_to_list_item(agent: Any, acl_permission: int | ResourcePermissions) 
             SHARE=bool(acl_permission & PermissionBits.SHARE),
         )
 
+    skills_output = [
+        AgentSkillOutput(
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            tags=skill.tags or [],
+            inputModes=skill.input_modes if hasattr(skill, "input_modes") else None,
+            outputModes=skill.output_modes if hasattr(skill, "output_modes") else None,
+        )
+        for skill in (agent.card.skills or [])
+    ]
+
     return AgentListItem(
         id=str(agent.id),
         path=agent.path,
@@ -251,6 +240,7 @@ def convert_to_list_item(agent: Any, acl_permission: int | ResourcePermissions) 
         protocolVersion=agent.card.protocol_version,
         tags=agent.tags,
         numSkills=len(agent.card.skills or []),
+        skills=skills_output,
         enabled=agent.isEnabled,
         status=agent.status,
         permissions=permissions,
@@ -329,6 +319,7 @@ def convert_to_detail(agent: Any, acl_permission: int | ResourcePermissions) -> 
         version=agent.card.version,
         protocolVersion=agent.card.protocol_version,
         capabilities=capabilities_dict,
+        numSkills=len(agent.card.skills or []),
         skills=skills_output,
         securitySchemes=security_schemes_dict,
         preferredTransport=agent.card.preferred_transport,

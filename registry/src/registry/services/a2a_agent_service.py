@@ -25,6 +25,44 @@ logger = logging.getLogger(__name__)
 class A2AAgentService:
     """Service for A2A Agent operations"""
 
+    async def _fetch_agent_card_from_url(self, url: str) -> AgentCard:
+        """
+        Fetch and validate agent card from URL using SDK.
+
+        Args:
+            url: Agent endpoint URL
+
+        Returns:
+            Validated AgentCard from remote endpoint
+
+        Raises:
+            ValueError: If fetching or validation fails
+        """
+        try:
+            logger.info(f"Fetching agent card from {url} using SDK")
+
+            timeout = httpx.Timeout(15.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resolver = A2ACardResolver(
+                    base_url=url,
+                    httpx_client=client,
+                )
+                # SDK handles fetching, parsing, and validation
+                agent_card = await resolver.get_agent_card()
+
+            if not agent_card:
+                raise ValueError(f"Failed to fetch agent card from {url}")
+
+            logger.info(f"Successfully fetched agent card from {url}: {agent_card.name}")
+            return agent_card
+
+        except (httpx.HTTPError, httpx.TimeoutException) as e:
+            logger.error(f"HTTP error fetching agent card from {url}: {e}", exc_info=True)
+            raise ValueError(f"Failed to fetch agent card from {url}: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error fetching agent card from {url}: {e}", exc_info=True)
+            raise ValueError(f"Failed to fetch agent card from {url}: {str(e)}")
+
     async def list_agents(
         self,
         query: str | None = None,
@@ -163,10 +201,10 @@ class A2AAgentService:
 
     async def create_agent(self, data: AgentCreateRequest, user_id: str) -> A2AAgent:
         """
-        Create a new agent using SDK for validation.
+        Create a new agent. Automatically fetches agent card from provided URL.
 
         Args:
-            data: Agent creation data
+            data: Agent creation data (path, name, description, url)
             user_id: User ID who creates the agent
 
         Returns:
@@ -181,49 +219,48 @@ class A2AAgentService:
             if existing:
                 raise ValueError(f"Agent with path '{data.path}' already exists")
 
-            # Build agent card data for SDK validation (path is NOT part of SDK AgentCard)
-            card_data = {
-                "name": data.name,
-                "description": data.description,
-                "url": str(data.url),
-                "version": data.version,
-                "protocolVersion": data.protocolVersion,
-                "capabilities": data.capabilities,
-                "skills": [skill.model_dump(by_alias=True, exclude_none=True) for skill in data.skills],
-                "securitySchemes": data.securitySchemes,
-                "preferredTransport": data.preferredTransport,
-                "defaultInputModes": data.defaultInputModes,
-                "defaultOutputModes": data.defaultOutputModes,
-            }
+            # Fetch agent card from URL using SDK
+            logger.info(f"Fetching agent card from URL for new agent: {data.url}")
+            agent_card = await self._fetch_agent_card_from_url(str(data.url))
 
-            # Add optional provider
-            if data.provider:
-                card_data["provider"] = {
-                    "organization": data.provider.organization,
-                    "url": data.provider.url,
-                }
+            # Override name and description from request if provided
+            # This allows user to customize these fields in registry
+            card_data = agent_card.model_dump(by_alias=False)
+            card_data["name"] = data.name
+            card_data["description"] = data.description or agent_card.description
+            card_data["url"] = str(data.url)  # Ensure URL matches the request
 
-            # SDK validates the entire card structure
-            try:
-                agent_card = AgentCard(**card_data)
-            except Exception as e:
-                raise ValueError(f"Invalid agent card: {str(e)}")
+            # Recreate agent card with overridden values
+            agent_card = AgentCard(**card_data)
 
-            # Create agent document (path is registry-specific, not in SDK card)
+            # Create agent document with wellKnown config
             agent = A2AAgent(
                 path=data.path,
                 card=agent_card,
-                tags=data.tags,
-                isEnabled=data.enabled,
+                tags=[],  # Initialize as empty list - tags are registry metadata, not derived from skills
+                isEnabled=False,  # Default to disabled for safety
                 status=STATUS_ACTIVE,
                 author=PydanticObjectId(user_id),
                 registeredBy=None,
                 registeredAt=datetime.now(UTC),
             )
 
+            # Configure wellKnown for future syncs
+            from registry_pkgs.models.a2a_agent import WellKnownConfig
+
+            agent.wellKnown = WellKnownConfig(
+                enabled=True,
+                url=str(data.url),
+                lastSyncAt=datetime.now(UTC),
+                lastSyncStatus="success",
+                lastSyncVersion=agent_card.version,
+            )
+
             # Save to database
             await agent.insert()
-            logger.info(f"Created agent: {agent.card.name} (ID: {agent.id}, path: {agent.path})")
+            logger.info(
+                f"Created agent: {agent.card.name} (ID: {agent.id}, path: {agent.path}) with wellKnown sync enabled"
+            )
             return agent
 
         except ValueError:
@@ -234,11 +271,11 @@ class A2AAgentService:
 
     async def update_agent(self, agent_id: str, data: AgentUpdateRequest) -> A2AAgent:
         """
-        Update an existing agent.
+        Update an existing agent. If URL is updated, automatically fetches new agent card.
 
         Args:
             agent_id: Agent ID
-            data: Agent update data (partial)
+            data: Agent update data (path, name, description, url - all optional)
 
         Returns:
             Updated agent document
@@ -251,52 +288,68 @@ class A2AAgentService:
             if not agent:
                 raise ValueError(f"Agent not found: {agent_id}")
 
-            # Get current card as dict
-            card_data = agent.card.model_dump(by_alias=False)
-
-            # Update card fields if provided
+            # Check what fields are being updated
             update_data = data.model_dump(exclude_unset=True, by_alias=False)
 
-            # Map request fields to card fields
-            card_field_mapping = {
-                "name": "name",
-                "description": "description",
-                "version": "version",
-                "capabilities": "capabilities",
-                "securitySchemes": "securitySchemes",
-                "preferredTransport": "preferredTransport",
-                "defaultInputModes": "defaultInputModes",
-                "defaultOutputModes": "defaultOutputModes",
-            }
+            # If URL is being updated, fetch new agent card
+            if "url" in update_data and update_data["url"]:
+                new_url = str(update_data["url"])
+                logger.info(f"URL changed, fetching new agent card from {new_url}")
 
-            # Update card fields
-            for request_field, card_field in card_field_mapping.items():
-                if request_field in update_data:
-                    card_data[card_field] = update_data[request_field]
+                # Fetch new agent card from URL
+                agent_card = await self._fetch_agent_card_from_url(new_url)
 
-            # Handle skills update
-            if "skills" in update_data and update_data["skills"] is not None:
-                card_data["skills"] = [skill.model_dump(by_alias=True, exclude_none=True) for skill in data.skills]
+                # Override with request fields if provided
+                card_data = agent_card.model_dump(by_alias=False)
+                card_data["url"] = new_url
 
-            # Handle provider update
-            if "provider" in update_data and update_data["provider"] is not None:
-                card_data["provider"] = {
-                    "organization": data.provider.organization,
-                    "url": data.provider.url,
-                }
+                if "name" in update_data:
+                    card_data["name"] = update_data["name"]
+                if "description" in update_data:
+                    card_data["description"] = update_data["description"]
 
-            # Validate updated card with SDK
-            try:
+                # Recreate agent card
                 agent.card = AgentCard(**card_data)
-            except Exception as e:
-                raise ValueError(f"Invalid agent card update: {str(e)}")
 
-            # Update registry-specific fields
-            if "tags" in update_data:
-                agent.tags = update_data["tags"]
+                # Note: tags are not updated from skills - they are separate registry metadata
+                # agent.tags remains unchanged during URL update
 
-            if "enabled" in update_data:
-                agent.isEnabled = update_data["enabled"]
+                # Update wellKnown configuration
+                from registry_pkgs.models.a2a_agent import WellKnownConfig
+
+                if not agent.wellKnown:
+                    agent.wellKnown = WellKnownConfig(
+                        enabled=True,
+                        url=new_url,
+                    )
+                else:
+                    agent.wellKnown.url = new_url
+                    agent.wellKnown.enabled = True
+
+                agent.wellKnown.lastSyncAt = datetime.now(UTC)
+                agent.wellKnown.lastSyncStatus = "success"
+                agent.wellKnown.lastSyncVersion = agent.card.version
+
+            else:
+                # Only update name/description without fetching card
+                # This allows minor tweaks without re-fetching
+                card_data = agent.card.model_dump(by_alias=False)
+
+                if "name" in update_data:
+                    card_data["name"] = update_data["name"]
+                if "description" in update_data:
+                    card_data["description"] = update_data["description"]
+
+                # Recreate agent card with updated fields
+                agent.card = AgentCard(**card_data)
+
+            # Update path if provided
+            if "path" in update_data:
+                # Check if new path conflicts with existing agent
+                existing = await A2AAgent.find_one({"path": update_data["path"], "_id": {"$ne": agent.id}})
+                if existing:
+                    raise ValueError(f"Agent with path '{update_data['path']}' already exists")
+                agent.path = update_data["path"]
 
             # Update timestamp
             agent.updatedAt = datetime.now(UTC)
