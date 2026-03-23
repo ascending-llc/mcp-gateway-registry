@@ -73,7 +73,7 @@ TOOL-RESULT EXAMPLE:
 """
 
 
-def create_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP:
+def create_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP[McpAppContext]:
     """
     Factory function to create a stateless FastMCP application instance.
 
@@ -121,7 +121,7 @@ def create_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]
     return mcp
 
 
-def create_gateway_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP:
+def create_gateway_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP[McpAppContext]:
     """Create the FastMCP app and register all prompts/tools in one place."""
     mcp = create_mcp_app(container_provider=container_provider)
     register_prompts(mcp)

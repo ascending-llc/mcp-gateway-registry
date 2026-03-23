@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +13,11 @@ from .core.config import settings
 from .core.exception_handler import register_validation_exception_handler
 from .middleware import ScopePermissionMiddleware, UnifiedAuthMiddleware
 from .routers import register_routers
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
+
+    from .mcpgw.core.types import McpAppContext
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +47,7 @@ OPENAPI_TAGS = [
 ]
 
 
-def create_app(*, lifespan, gateway_mcp_app) -> FastAPI:
+def create_app(*, lifespan, gateway_mcp_app: FastMCP[McpAppContext]) -> FastAPI:
     """Create and configure the FastAPI application."""
     app_version = settings.build_version or "0.0.0"
     app = FastAPI(

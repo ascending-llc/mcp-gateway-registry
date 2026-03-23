@@ -1,9 +1,11 @@
 """Registry entrypoint and application lifecycle wiring."""
 
+from __future__ import annotations
+
 import logging
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
-import uvicorn
 from fastapi import FastAPI
 
 from registry_pkgs.database import close_mongodb, init_mongodb
@@ -16,8 +18,19 @@ from .container import RegistryContainer
 from .core.config import settings
 from .mcpgw import create_gateway_mcp_app
 
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
+
+    from .mcpgw.core.types import McpAppContext
+
+
+settings.configure_logging()
+
 logger = logging.getLogger(__name__)
+
 app: FastAPI
+
+gateway_mcp_app: FastMCP[McpAppContext]
 
 
 def _get_current_container() -> RegistryContainer | None:
@@ -128,18 +141,7 @@ async def lifespan(app: FastAPI):
 # The gateway is created once here, but it resolves the active container lazily
 # through ``_get_current_container`` so each request uses the current app state.
 gateway_mcp_app = create_gateway_mcp_app(container_provider=_get_current_container)
-# The FastAPI app is assembled at module load so ASGI servers can import ``app``
+
+# The FastAPI app is exposed at module level so ASGI servers can import ``app``
 # directly while still keeping the startup and shutdown wiring in ``lifespan``.
 app = create_app(lifespan=lifespan, gateway_mcp_app=gateway_mcp_app)
-
-if __name__ == "__main__":
-    settings.configure_logging()
-
-    uvicorn.run(
-        "registry.main:app",
-        host="0.0.0.0",  # nosec B104 - it's fine to bind to 0.0.0.0 in a container.
-        port=7860,
-        reload=True,
-        log_level=settings.log_level.lower(),
-        log_config=None,  # Disable uvicorn's default logging config to use ours
-    )
