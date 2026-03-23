@@ -7,7 +7,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from registry_pkgs.database.redis_client import get_redis_client
+from redis import Redis
 
 from ...auth.oauth.oauth_utils import parse_scope, scope_to_string
 from ...auth.oauth.redis_flow_storage import RedisFlowStorage
@@ -32,7 +32,7 @@ class FlowStateManager:
 
     DEFAULT_FLOW_TTL = 600  # Flow time-to-live in seconds (10 minutes)
 
-    def __init__(self, fallback_to_memory: bool = True):
+    def __init__(self, redis_client: Redis | None = None, fallback_to_memory: bool = True):
         """
         Initialize FlowStateManager with Redis backend
 
@@ -47,11 +47,9 @@ class FlowStateManager:
 
         # Try to initialize Redis storage
         try:
-            redis_conn = get_redis_client()
-            if redis_conn:
-                redis_conn.ping()
-
-                self._redis_storage = RedisFlowStorage(redis_conn)
+            if redis_client:
+                redis_client.ping()
+                self._redis_storage = RedisFlowStorage(redis_client)
                 self._use_redis = True
 
                 logger.info("FlowStateManager initialized with Redis storage")
@@ -445,15 +443,3 @@ class FlowStateManager:
                 logger.info(f"Cleaned up {cleaned_count} expired flows from memory")
 
             return cleaned_count
-
-
-_flow_state_manager_instance: FlowStateManager | None = None
-
-
-def get_flow_state_manager() -> FlowStateManager:
-    """Get flow state manager"""
-    global _flow_state_manager_instance
-    if _flow_state_manager_instance is None:
-        _flow_state_manager_instance = FlowStateManager()
-        logger.info("Initialized global FlowStateManager singleton")
-    return _flow_state_manager_instance

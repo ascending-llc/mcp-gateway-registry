@@ -41,7 +41,7 @@ class AgentCoreFederationClient:
             default_region=self.region,
             get_runtime_client=self.client_provider.get_runtime_client,
             get_runtime_credentials_provider=self.client_provider.get_runtime_credentials_provider,
-            extract_region_from_arn=self._extract_region_from_arn,
+            extract_region_from_arn=self.extract_region_from_arn,
         )
 
     async def discover_runtime_entities(
@@ -494,7 +494,7 @@ class AgentCoreFederationClient:
                 )
                 await existing_a2a.delete()
 
-    def _extract_region_from_arn(self, arn: str, fallback: str = "us-east-1") -> str:
+    def extract_region_from_arn(self, arn: str, fallback: str = "us-east-1") -> str:
         parts = arn.split(":")
         return parts[3] if len(parts) > 3 and parts[3] else fallback
 

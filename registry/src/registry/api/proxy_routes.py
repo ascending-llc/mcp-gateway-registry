@@ -4,11 +4,10 @@ MCP proxy session route.
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..auth.dependencies import CurrentUser
-from ..core.mcp_client import clear_session
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ router = APIRouter(tags=["MCP Proxy"])
 
 
 @router.delete("/sessions/{server_id}")
-async def clear_session_endpoint(server_id: str, user_context: CurrentUser) -> JSONResponse:
+async def clear_session_endpoint(request: Request, server_id: str, user_context: CurrentUser) -> JSONResponse:
     """
     Clear/disconnect MCP session for a server (useful for debugging stale sessions).
 
@@ -25,7 +24,7 @@ async def clear_session_endpoint(server_id: str, user_context: CurrentUser) -> J
     user_id = user_context.get("user_id", "unknown")
     session_key = f"{user_id}:{server_id}"
 
-    clear_session(session_key)
+    request.app.state.container.mcp_client_service.clear_session(session_key)
 
     return JSONResponse(
         status_code=200,

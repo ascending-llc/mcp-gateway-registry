@@ -8,8 +8,6 @@ from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
-signer = URLSafeTimedSerializer(settings.secret_key)
-
 
 class UserContextDict(TypedDict):
     """
@@ -66,8 +64,10 @@ def get_current_user(request: Request) -> UserContextDict:
 # FastAPI extracts the `user` attribute (typed as UserContextDict) of the current request and pass it to the parameter.
 # Since it's Python 3.12, we use the new type statement instead of typing.TypeAlias
 type CurrentUser = Annotated[UserContextDict, Depends(get_current_user)]
-# Global scopes configuration loaded from centralized loader
-SCOPES_CONFIG = settings.scopes_config
+
+
+def build_signer():
+    return URLSafeTimedSerializer(settings.secret_key)
 
 
 def map_cognito_groups_to_scopes(groups: list[str]) -> list[str]:

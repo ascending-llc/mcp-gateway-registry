@@ -115,6 +115,3 @@ class UserService:
         except Exception as e:
             logger.error(f"Error creating new user for username: {user_claims.get('username')}: {e}")
             return None
-
-
-user_service = UserService()

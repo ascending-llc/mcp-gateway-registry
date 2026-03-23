@@ -21,8 +21,7 @@ from beanie import PydanticObjectId
 
 from registry_pkgs.database.decorators import get_current_session
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-from registry_pkgs.vector.client import get_db_client
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
 from ..auth.oauth.types import StateMetadata
 from ..core.mcp_client import get_oauth_metadata_from_server, get_tools_from_server_with_server_info
@@ -40,7 +39,9 @@ from ..schemas.server_api_schemas import (
 from ..utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
 from ..utils.schema_converter import convert_dict_keys_to_snake
 from ..utils.utils import generate_server_name_from_title, normalize_headers
-from .user_service import user_service
+from .oauth.oauth_service import MCPOAuthService
+from .oauth.token_service import TokenService
+from .user_service import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ def _build_server_info_for_mcp_client(config: dict[str, Any], tags: list[str]) -
 
 
 async def build_complete_headers_for_server(
+    oauth_service: MCPOAuthService,
     server: MCPServerDocument,
     user_id: str | None = None,
     *,
@@ -91,6 +93,7 @@ async def build_complete_headers_for_server(
     This eliminates duplicate header building across server_service, proxy_routes, and health_service.
 
     Args:
+        oauth_service:
         state_metadata:
         server: Server document containing config
         user_id: User ID for OAuth token retrieval (required for OAuth servers)
@@ -107,7 +110,6 @@ async def build_complete_headers_for_server(
     import base64
 
     from registry.core.config import settings
-    from registry.services.oauth.oauth_service import get_oauth_service
     from registry.utils.crypto_utils import decrypt_auth_fields
 
     config = server.config or {}
@@ -163,7 +165,6 @@ async def build_complete_headers_for_server(
             )
 
         # Get OAuth token (handles refresh automatically)
-        oauth_service = await get_oauth_service()
         access_token, auth_url, error = await oauth_service.get_valid_access_token(
             user_id=user_id, server=server, state_metadata=state_metadata
         )
@@ -523,15 +524,19 @@ def _update_config_from_request(
 class ServerServiceV1:
     """Service class for managing MCP servers with MongoDB"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        user_service: UserService,
+        token_service: TokenService,
+        oauth_service: Any,
+        mcp_server_repo: MCPServerRepository,
+    ):
         """Initialize server service with search index manager."""
-        self.mcp_server_repo = None
+        self.mcp_server_repo = mcp_server_repo
+        self.user_service = user_service
+        self.token_service = token_service
+        self.oauth_service = oauth_service
         logger.info("ServerServiceV1 initialized with search index manager")
-
-    def _get_mcp_server_repo(self):
-        if self.mcp_server_repo is None:
-            self.mcp_server_repo = get_mcp_server_repo(get_db_client())
-        return self.mcp_server_repo
 
     async def list_servers(
         self,
@@ -686,7 +691,7 @@ class ServerServiceV1:
         num_tools = len(tool_functions) if tool_functions else 0
 
         # Get author user reference - authentication required
-        author = await user_service.get_user_by_user_id(user_id)
+        author = await self.user_service.get_user_by_user_id(user_id)
 
         if not author:
             raise ValueError(f"Authentication required: User {user_id} not found")
@@ -909,7 +914,7 @@ class ServerServiceV1:
 
         await server.save(session=session)
 
-        asyncio.create_task(self._get_mcp_server_repo().smart_sync(server))
+        asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
 
     async def delete_server(
@@ -942,7 +947,7 @@ class ServerServiceV1:
             raise ValueError("Server not found")
 
         # Remove from vector DB before deleting from MongoDB (background task)
-        asyncio.create_task(self._get_mcp_server_repo().delete_by_server_id(server_id, server.serverName))
+        asyncio.create_task(self.mcp_server_repo.delete_by_server_id(server_id, server.serverName))
         await server.delete(session=session)
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
         return True
@@ -1050,7 +1055,7 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
 
-        asyncio.create_task(self._get_mcp_server_repo().smart_sync(server))
+        asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
 
     async def get_server_tools(
@@ -1134,7 +1139,11 @@ class ServerServiceV1:
             # Build complete headers with all authentication (OAuth, apiKey, custom)
             # This consolidates all auth logic in one place
             try:
-                headers = await build_complete_headers_for_server(server, user_id)
+                headers = await build_complete_headers_for_server(
+                    self.oauth_service,
+                    server,
+                    user_id,
+                )
             except OAuthReAuthRequiredError as e:
                 # OAuth re-authentication needed - return special error format
                 return (
@@ -1226,7 +1235,6 @@ class ServerServiceV1:
             If failed, returns (None, error_message)
         """
         from registry.auth.oauth import OAuthClient
-        from registry.services.oauth.token_service import token_service
 
         config = server.config or {}
         url = config.get("url")
@@ -1236,7 +1244,7 @@ class ServerServiceV1:
 
         try:
             # Get OAuth tokens for the user
-            oauth_tokens = await token_service.get_oauth_tokens(user_id, server.serverName)
+            oauth_tokens = await self.token_service.get_oauth_tokens(user_id, server.serverName)
 
             if not oauth_tokens or not oauth_tokens.access_token:
                 return None, f"No OAuth tokens found for user {user_id}"
@@ -1263,7 +1271,7 @@ class ServerServiceV1:
                     return None, "No OAuth configuration found"
 
                 # Get refresh token
-                refresh_token_doc = await token_service.get_oauth_refresh_token(user_id, server.serverName)
+                refresh_token_doc = await self.token_service.get_oauth_refresh_token(user_id, server.serverName)
                 if not refresh_token_doc or not refresh_token_doc.token:
                     return None, "No refresh token available"
 
@@ -1285,7 +1293,7 @@ class ServerServiceV1:
                     "grant_types_supported": ["authorization_code", "refresh_token"],
                     "response_types_supported": ["code"],
                 }
-                await token_service.store_oauth_tokens(
+                await self.token_service.store_oauth_tokens(
                     user_id=user_id,
                     service_name=server.serverName,
                     tokens=new_tokens,
@@ -1326,9 +1334,7 @@ class ServerServiceV1:
         str | None,
     ]:
         """
-        Retrieve tools, resources, prompts, and capabilities from a server using MCP client (legacy method).
-
-        Wraps retrieve_from_server() for backward compatibility.
+        Retrieve tools, resources, prompts, and capabilities from a server using the MCP client.
 
         This is a best-effort attempt - failures are logged but don't prevent registration.
         Tools can be fetched on-demand later.
@@ -1645,7 +1651,3 @@ class ServerServiceV1:
         Get service config for a specific MCP server
         """
         pass
-
-
-# Singleton instance
-server_service_v1 = ServerServiceV1()

@@ -1,5 +1,8 @@
-from collections.abc import AsyncIterator
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from httpx import AsyncClient, Limits, Timeout
 from mcp.server.fastmcp import FastMCP
@@ -9,6 +12,9 @@ from ..core.config import settings
 from .core.event_store import InMemoryEventStore
 from .core.types import McpAppContext
 from .tools import proxied, search
+
+if TYPE_CHECKING:
+    from ..container import RegistryContainer
 
 _SYSTEM_INSTRUCTIONS = """This MCP Gateway provides unified access to registered MCP servers through centralized discovery and execution.
 
@@ -67,25 +73,36 @@ TOOL-RESULT EXAMPLE:
 """
 
 
-@asynccontextmanager
-async def mcp_lifespan(server: FastMCP) -> AsyncIterator[McpAppContext]:
-    """Manage MCP application lifecycle with type-safe context."""
-
-    async with AsyncClient(
-        timeout=Timeout(30.0, read=60.0),
-        follow_redirects=True,
-        limits=Limits(max_connections=100, max_keepalive_connections=20),
-    ) as proxy_client:
-        yield McpAppContext(proxy_client=proxy_client)
-
-
-def create_mcp_app() -> FastMCP:
+def create_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP[McpAppContext]:
     """
     Factory function to create a stateless FastMCP application instance.
 
     Returns:
         Configured FastMCP application instance
     """
+
+    @asynccontextmanager
+    async def mcp_lifespan(server: FastMCP) -> AsyncIterator[McpAppContext]:
+        """Manage MCP application lifecycle with type-safe context."""
+
+        container = container_provider()
+        if container is None:
+            raise RuntimeError("Registry container is not initialized")
+
+        async with AsyncClient(
+            timeout=Timeout(30.0, read=60.0),
+            follow_redirects=True,
+            limits=Limits(max_connections=100, max_keepalive_connections=20),
+        ) as proxy_client:
+            yield McpAppContext(
+                proxy_client=proxy_client,
+                server_service=container.server_service,
+                mcp_server_repo=container.mcp_server_repo,
+                mcp_client_service=container.mcp_client_service,
+                oauth_service=container.oauth_service,
+                session_store=container.session_store,
+            )
+
     # Configure transport security settings from environment variables
     transport_security_settings = TransportSecuritySettings(
         enable_dns_rebinding_protection=settings.mcpgw_enable_dns_rebinding_protection,
@@ -101,6 +118,14 @@ def create_mcp_app() -> FastMCP:
         transport_security=transport_security_settings,
     )
 
+    return mcp
+
+
+def create_gateway_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP[McpAppContext]:
+    """Create the FastMCP app and register all prompts/tools in one place."""
+    mcp = create_mcp_app(container_provider=container_provider)
+    register_prompts(mcp)
+    register_tools(mcp)
     return mcp
 
 

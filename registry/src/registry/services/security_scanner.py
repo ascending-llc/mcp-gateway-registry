@@ -133,8 +133,9 @@ def _organize_findings_by_analyzer(tool_results: list) -> dict:
 class SecurityScannerService:
     """Service for scanning MCP servers for security vulnerabilities."""
 
-    def __init__(self) -> None:
+    def __init__(self, server_service) -> None:
         """Initialize the security scanner service."""
+        self.server_service = server_service
         self._ensure_output_directory()
 
     def _ensure_output_directory(self) -> Path:
@@ -519,11 +520,8 @@ class SecurityScannerService:
         Returns:
             Dictionary containing scan results, or None if no scan found
         """
-        # Import here to avoid circular dependency
-        from .server_service import server_service
-
         # Get server info to retrieve URL
-        server_info = server_service.get_server_info(server_path)
+        server_info = self.server_service.get_server_info(server_path)
         if not server_info:
             logger.warning(f"Server not found: {server_path}")
             return None
@@ -556,7 +554,3 @@ class SecurityScannerService:
         except Exception:
             logger.exception(f"Unexpected error loading security scan results for {server_path}")
             return None
-
-
-# Global singleton instance
-security_scanner_service = SecurityScannerService()

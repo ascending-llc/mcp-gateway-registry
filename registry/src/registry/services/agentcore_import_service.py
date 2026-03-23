@@ -9,18 +9,17 @@ from registry_pkgs.database.decorators import get_current_session, use_transacti
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 from registry_pkgs.models._generated import PrincipalType, ResourceType
 from registry_pkgs.models.enums import FederationSource, PermissionBits, RoleBits
-from registry_pkgs.vector.client import get_db_client
-from registry_pkgs.vector.repositories.a2a_agent_repository import get_a2a_agent_repo
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.vector.repositories.a2a_agent_repository import A2AAgentRepository
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
 from ..core.config import settings
 from ..schemas.server_api_schemas import ServerCreateRequest
-from .access_control_service import acl_service
+from .access_control_service import ACLService
 from .federation.agentcore_client import AgentCoreFederationClient
 from .federation.agentcore_client_provider import AgentCoreClientProvider
 from .federation.runtime_invoker import AgentCoreRuntimeInvoker
-from .server_service import server_service_v1
-from .user_service import user_service
+from .server_service import ServerServiceV1
+from .user_service import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -37,30 +36,34 @@ class AgentCoreImportService:
 
     def __init__(
         self,
+        acl_service_instance: ACLService,
+        server_service: ServerServiceV1,
+        user_service_instance: UserService,
+        mcp_server_repo: MCPServerRepository,
+        a2a_agent_repo: A2AAgentRepository,
         federation_client: AgentCoreFederationClient | None = None,
         agentcore_client_provider: AgentCoreClientProvider | None = None,
         runtime_invoker: AgentCoreRuntimeInvoker | None = None,
-        acl_service_instance=None,
-        mcp_server_repo=None,
-        a2a_agent_repo=None,
     ):
+        self.acl_service = acl_service_instance
+        self.server_service = server_service
+        self.user_service = user_service_instance
+        self.mcp_server_repo = mcp_server_repo
+        self.a2a_agent_repo = a2a_agent_repo
+
         default_region = settings.aws_region or "us-east-1"
         client_provider = agentcore_client_provider or AgentCoreClientProvider(default_region=default_region)
         invoker = runtime_invoker or AgentCoreRuntimeInvoker(
             default_region=client_provider.default_region,
             get_runtime_client=client_provider.get_runtime_client,
             get_runtime_credentials_provider=client_provider.get_runtime_credentials_provider,
-            extract_region_from_arn=AgentCoreFederationClient._extract_region_from_arn,
+            extract_region_from_arn=AgentCoreFederationClient.extract_region_from_arn,
         )
         self.federation_client = federation_client or AgentCoreFederationClient(
             region=client_provider.default_region,
             client_provider=client_provider,
             runtime_invoker=invoker,
         )
-        self.acl_service = acl_service_instance or acl_service
-        db_client = get_db_client()
-        self.mcp_server_repo = mcp_server_repo or get_mcp_server_repo(db_client)
-        self.a2a_agent_repo = a2a_agent_repo or get_a2a_agent_repo(db_client)
 
     async def import_from_runtime(
         self,
@@ -389,7 +392,7 @@ class AgentCoreImportService:
             headers=config.get("headers"),
             oauth=config.get("oauth"),
         )
-        created_server = await server_service_v1.create_server(
+        created_server = await self.server_service.create_server(
             data=create_request,
             user_id=str(owner_id),
             skip_post_registration_checks=True,
@@ -736,7 +739,7 @@ class AgentCoreImportService:
                 return None, None
             raise ValueError("user_id is required for import")
 
-        user = await user_service.get_user_by_user_id(user_id)
+        user = await self.user_service.get_user_by_user_id(user_id)
         if not user:
             if dry_run:
                 return None, None
@@ -806,6 +809,3 @@ class AgentCoreImportService:
             viewer_id=viewer_id,
             dry_run=False,
         )
-
-
-agentcore_import_service = AgentCoreImportService()

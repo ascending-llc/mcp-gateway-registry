@@ -55,15 +55,12 @@ async def test_create_server_route_creates_acl_entry(
 ):
     # Mock the transaction session
     mock_session = AsyncMock()
+    mock_server_service = MagicMock()
+    mock_server_service.create_server = AsyncMock(return_value=mock_created_server)
+    mock_acl_service = MagicMock()
+    mock_acl_service.grant_permission = AsyncMock(return_value=MagicMock())
 
     with (
-        patch(
-            "registry.api.v1.server.server_routes.server_service_v1.create_server",
-            new=AsyncMock(return_value=mock_created_server),
-        ) as mock_create_server,
-        patch(
-            "registry.api.v1.server.server_routes.acl_service.grant_permission", new=AsyncMock(return_value=MagicMock())
-        ) as mock_grant_permission,
         patch("registry_pkgs.database.decorators.MongoDB.get_client") as mock_get_client,
         patch(
             "registry.api.v1.server.server_routes.convert_to_detail",
@@ -77,21 +74,23 @@ async def test_create_server_route_creates_acl_entry(
         mock_get_client.return_value = mock_client
 
         await create_server(
-            sample_server_request,
-            sample_user_context,
+            data=sample_server_request,
+            user_context=sample_user_context,
+            server_service=mock_server_service,
+            acl_service=mock_acl_service,
         )
 
         # Verify server creation was called correctly
-        mock_create_server.assert_awaited_once_with(
+        mock_server_service.create_server.assert_awaited_once_with(
             data=sample_server_request,
             user_id=sample_user_context["user_id"],
         )
 
         # Verify ACL permission was granted
-        mock_grant_permission.assert_awaited_once()
+        mock_acl_service.grant_permission.assert_awaited_once()
 
         # Verify ACL call has correct parameters
-        call_args = mock_grant_permission.call_args
+        call_args = mock_acl_service.grant_permission.call_args
         assert call_args.kwargs["principal_type"] == PrincipalType.USER
         assert call_args.kwargs["principal_id"] == PydanticObjectId(sample_user_context["user_id"])
         assert call_args.kwargs["resource_type"] == ResourceType.MCPSERVER

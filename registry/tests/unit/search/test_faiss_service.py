@@ -505,10 +505,4 @@ class TestFaissService:
         with pytest.raises(ValueError):
             await faiss_service_instance.search_mixed(query="  ", entity_types=None, max_results=5)
 
-    def test_global_service_instance(self):
-        """Test that the global service instance is accessible."""
-        from registry.services.search.service import faiss_service
-
-        assert faiss_service is not None
-        # Note: faiss_service could be either EmbeddedFaissService or ExternalVectorSearchService
         # depending on settings.use_external_discovery

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...schemas.enums import ConnectionState
-from ..server_service import server_service_v1
+from ..server_service import ServerServiceV1
 from .base import Connection, ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,8 @@ class MCPConnection(Connection):
 class MCPConnectionService(ConnectionManager):
     """MCP connection service"""
 
-    def __init__(self):
+    def __init__(self, server_service: ServerServiceV1):
+        self.server_service = server_service
         self.app_connections: dict[str, MCPConnection] = {}
         self.user_connections: dict[str, dict[str, MCPConnection]] = {}  # user_id -> {server_id -> connection}
         self._lock = asyncio.Lock()
@@ -46,7 +47,7 @@ class MCPConnectionService(ConnectionManager):
         """
         async with self._lock:
             try:
-                servers, total = await server_service_v1.list_servers(page=1, per_page=1000, status="active")
+                servers, total = await self.server_service.list_servers(page=1, per_page=1000, status="active")
                 logger.info(f"Found {total} active servers in MongoDB")
 
                 for server in servers:
@@ -208,15 +209,3 @@ class MCPConnectionService(ConnectionManager):
                 "total_users": total_users,
                 "status_counts": status_counts,
             }
-
-
-_connection_service_instance: MCPConnectionService | None = None
-
-
-async def get_connection_service() -> MCPConnectionService:
-    """Get connection service instance"""
-    global _connection_service_instance
-    if _connection_service_instance is None:
-        _connection_service_instance = MCPConnectionService()
-        await _connection_service_instance.initialize_app_connections()
-    return _connection_service_instance

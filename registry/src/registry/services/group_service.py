@@ -23,6 +23,3 @@ class GroupService:
         except Exception as e:
             logger.error(f"Error searching groups with query '{search_query}': {e}")
             return []
-
-
-group_service = GroupService()

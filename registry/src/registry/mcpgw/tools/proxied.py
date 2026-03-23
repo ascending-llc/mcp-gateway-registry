@@ -31,8 +31,6 @@ from pydantic.networks import AnyUrl
 from ...auth.dependencies import UserContextDict
 from ...auth.oauth.flow_state_manager import FlowStateManager
 from ...auth.oauth.types import ClientBranding, StateMetadata
-from ...core.mcp_client import get_session, initialize_mcp_session
-from ...services.server_service import server_service_v1
 from ...utils.otel_metrics import record_server_request
 from ..core.types import McpAppContext
 from ..exceptions import (
@@ -43,9 +41,21 @@ from ..exceptions import (
     UrlElicitationRequiredException,
 )
 from .types import get_meta_field
-from .utils import build_authenticated_headers, build_target_url, forward_notification, parse_data_field, session_store
+from .utils import build_authenticated_headers, build_target_url, forward_notification, parse_data_field
 
 logger = logging.getLogger(__name__)
+
+
+def _get_server_service(ctx: Context[ServerSession, McpAppContext]):
+    return ctx.request_context.lifespan_context.server_service
+
+
+def _get_session_store(ctx: Context[ServerSession, McpAppContext]):
+    return ctx.request_context.lifespan_context.session_store
+
+
+def _get_mcp_client_service(ctx: Context[ServerSession, McpAppContext]):
+    return ctx.request_context.lifespan_context.mcp_client_service
 
 
 async def _downstream_tool_call(
@@ -261,7 +271,7 @@ async def execute_tool_impl(
         user_id = user_context.get("user_id", "unknown")
         logger.info(f"Tool execution from user '{username}:{user_id}': {tool_name} on {server_id}")
 
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await _get_server_service(ctx).get_server_by_id(server_id)
         if server is None:
             # Invalid input. Return a JSON-RPC **result response** with `isError=True` so that LLM can try another request.
             return CallToolResult(
@@ -292,7 +302,7 @@ async def execute_tool_impl(
         if requires_init:
             # Key format: "user_id:server_id" to track per-user, per-server sessions
             session_key = f"{user_id}:{server_id}"
-            session_info = get_session(session_key)
+            session_info = _get_mcp_client_service(ctx).get_session(session_key)
 
             if session_info:
                 # Existing session found - check if it's initialized
@@ -304,6 +314,7 @@ async def execute_tool_impl(
 
             if not stored_session_id:
                 init_headers = await build_authenticated_headers(
+                    oauth_service=ctx.request_context.lifespan_context.oauth_service,
                     server=server,
                     auth_context=user_context,
                     additional_headers=additional_headers,
@@ -311,7 +322,9 @@ async def execute_tool_impl(
                 )
                 # Get transport type from server config (default to streamable-http)
                 transport_type = server.config.get("type", "streamable-http")
-                session_id = await initialize_mcp_session(target_url, init_headers, session_key, transport_type)
+                session_id = await _get_mcp_client_service(ctx).initialize_mcp_session(
+                    target_url, init_headers, session_key, transport_type
+                )
 
                 if session_id:
                     additional_headers["mcp-Session-Id"] = session_id
@@ -322,6 +335,7 @@ async def execute_tool_impl(
 
         # Build final authenticated headers with session ID (if applicable)
         headers = await build_authenticated_headers(
+            oauth_service=ctx.request_context.lifespan_context.oauth_service,
             server=server,
             auth_context=user_context,
             additional_headers=additional_headers,
@@ -367,7 +381,7 @@ async def execute_tool_impl(
 
             logger.info(f"sending back the URL mode elicitation error response with ID {elicitation_id}.")
 
-            session_store.append(elicitation_id, ctx.session)
+            _get_session_store(ctx).append(elicitation_id, ctx.session)
 
             raise UrlElicitationRequiredError(
                 # This message is for LLM.
@@ -410,7 +424,12 @@ async def execute_tool_impl(
         raise InternalServerException(msg) from exc
 
 
-async def read_resource_impl(user_context: UserContextDict, server_id: str, resource_uri: str) -> CallToolResult:
+async def read_resource_impl(
+    user_context: UserContextDict,
+    server_id: str,
+    resource_uri: str,
+    ctx: Context[ServerSession, McpAppContext],
+) -> CallToolResult:
     """
     Read/access a resource from an MCP server.
 
@@ -433,7 +452,7 @@ async def read_resource_impl(user_context: UserContextDict, server_id: str, reso
         username = user_context.get("username", "unknown")
         logger.info(f"resource read request from user '{username}' - {resource_uri} on {server_id}")
 
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await _get_server_service(ctx).get_server_by_id(server_id)
         if server is None:
             # Invalid input. Return a JSON-RPC **result response** with `isError=True` so that LLM can try another request.
             return CallToolResult(
@@ -481,7 +500,11 @@ async def read_resource_impl(user_context: UserContextDict, server_id: str, reso
 
 
 async def execute_prompt_impl(
-    user_context: UserContextDict, server_id: str, prompt_name: str, arguments: dict[str, Any] | None = None
+    user_context: UserContextDict,
+    server_id: str,
+    prompt_name: str,
+    arguments: dict[str, Any] | None,
+    ctx: Context[ServerSession, McpAppContext],
 ) -> CallToolResult:
     """
     Execute a prompt from an MCP server.
@@ -509,7 +532,7 @@ async def execute_prompt_impl(
         username = user_context.get("username", "unknown")
         logger.info(f"Prompt execution request from user '{username}': {prompt_name} on {server_id}")
 
-        server = await server_service_v1.get_server_by_id(server_id)
+        server = await _get_server_service(ctx).get_server_by_id(server_id)
         if server is None:
             # Invalid input. Return a JSON-RPC **result response** with `isError=True` so that LLM can try another request.
             return CallToolResult(
@@ -711,7 +734,12 @@ def get_tools() -> list[tuple[str, Callable]]:
 
         Returns: Resource contents (format varies: text, JSON, binary, etc.)
         """
-        return await read_resource_impl(ctx.request_context.request.state.user, server_id, resource_uri)  # type: ignore[union-attr]
+        return await read_resource_impl(
+            ctx.request_context.request.state.user,  # type: ignore[union-attr]
+            server_id,
+            resource_uri,
+            ctx,
+        )
 
     async def execute_prompt(
         ctx: Context[ServerSession, McpAppContext],
@@ -759,7 +787,13 @@ def get_tools() -> list[tuple[str, Callable]]:
 
         Returns: Prompt messages ready for LLM consumption (role, content pairs)
         """
-        return await execute_prompt_impl(ctx.request_context.request.state.user, server_id, prompt_name, arguments)  # type: ignore[union-attr]
+        return await execute_prompt_impl(
+            ctx.request_context.request.state.user,  # type: ignore[union-attr]
+            server_id,
+            prompt_name,
+            arguments,
+            ctx,
+        )
 
     # Return list of (name, function) tuples
     return [

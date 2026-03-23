@@ -253,22 +253,3 @@ class FederationService:
 
         except Exception as e:
             logger.error(f"Failed to update server state for {server_path}: {e}")
-
-
-# Global instance
-_federation_service: FederationService | None = None
-
-
-def get_federation_service() -> FederationService:
-    """
-    Get global federation service instance (singleton).
-
-    Returns:
-        FederationService instance
-    """
-    global _federation_service
-
-    if _federation_service is None:
-        _federation_service = FederationService()
-
-    return _federation_service

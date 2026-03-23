@@ -1,13 +1,16 @@
-"""
-Unit tests for health monitoring routes.
-"""
+"""Unit tests for health monitoring routes."""
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import WebSocket, WebSocketDisconnect
+from tests.conftest import make_container
 
-from registry.health.routes import health_status_http, router, websocket_endpoint
+from registry.health.routes import (
+    health_status_http,
+    router,
+    websocket_endpoint,
+)
 
 
 @pytest.mark.unit
@@ -22,7 +25,7 @@ class TestHealthRoutes:
         TODO: Update WebSocket authentication to support JWT tokens, then update this fixture.
         WebSocket route currently uses itsdangerous signer, not JWT validation.
         """
-        from registry.auth.dependencies import signer
+        from registry.auth.dependencies import build_signer
         from registry.core.config import settings
 
         # WebSocket authentication still uses itsdangerous signer
@@ -33,7 +36,7 @@ class TestHealthRoutes:
             "groups": ["registry-admin"],
         }
 
-        return signer.dumps(session_data)
+        return build_signer().dumps(session_data)
 
     @pytest.fixture
     def mock_websocket(self, mock_session_cookie):
@@ -51,19 +54,34 @@ class TestHealthRoutes:
         websocket.cookies = {settings.session_cookie_name: mock_session_cookie}
         websocket.headers = {"cookie": f"{settings.session_cookie_name}={mock_session_cookie}"}
         websocket.query_params = {}
+        websocket.app = make_container(state=make_container(container=make_container(health_service=Mock())))
         return websocket
 
     @pytest.fixture
     def mock_health_service(self):
         """Mock health service."""
-        with patch("registry.health.routes.health_service") as mock_service:
-            mock_service.add_websocket_connection = AsyncMock(return_value=True)
-            mock_service.remove_websocket_connection = AsyncMock()
-            mock_service.get_all_health_status.return_value = {
-                "service1": {"status": "healthy", "last_check": "2023-01-01T00:00:00Z"},
-                "service2": {"status": "unhealthy", "last_check": "2023-01-01T00:00:00Z"},
-            }
-            yield mock_service
+        mock_service = Mock()
+        mock_service.add_websocket_connection = AsyncMock(return_value=True)
+        mock_service.remove_websocket_connection = AsyncMock()
+        mock_service.get_all_health_status.return_value = {
+            "service1": {"status": "healthy", "last_check": "2023-01-01T00:00:00Z"},
+            "service2": {"status": "unhealthy", "last_check": "2023-01-01T00:00:00Z"},
+        }
+        mock_service.get_websocket_stats.return_value = {"active_connections": 0}
+        yield mock_service
+
+    @pytest.fixture
+    def mock_request(self, mock_health_service):
+        """Create a mock request with container-backed health service."""
+        return make_container(
+            app=make_container(state=make_container(container=make_container(health_service=mock_health_service)))
+        )
+
+    @pytest.fixture(autouse=True)
+    def attach_health_service(self, mock_websocket, mock_health_service):
+        """Attach the mocked health service to WebSocket app state."""
+        mock_websocket.app.state.container.health_service = mock_health_service
+        yield
 
     @pytest.fixture
     def mock_signer(self):
@@ -142,36 +160,36 @@ class TestHealthRoutes:
         mock_health_service.remove_websocket_connection.assert_called_once_with(mock_websocket)
 
     @pytest.mark.asyncio
-    async def test_health_status_http_success(self, mock_health_service):
+    async def test_health_status_http_success(self, mock_health_service, mock_request):
         """Test successful HTTP health status retrieval."""
         expected_status = {
             "service1": {"status": "healthy", "last_check": "2023-01-01T00:00:00Z"},
             "service2": {"status": "unhealthy", "last_check": "2023-01-01T00:00:00Z"},
         }
 
-        result = await health_status_http()
+        result = await health_status_http(mock_request)
 
         assert result == expected_status
         mock_health_service.get_all_health_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_health_status_http_empty_status(self, mock_health_service):
+    async def test_health_status_http_empty_status(self, mock_health_service, mock_request):
         """Test HTTP health status when no services are monitored."""
         mock_health_service.get_all_health_status.return_value = {}
 
-        result = await health_status_http()
+        result = await health_status_http(mock_request)
 
         assert result == {}
         mock_health_service.get_all_health_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_health_status_http_service_exception(self, mock_health_service):
+    async def test_health_status_http_service_exception(self, mock_health_service, mock_request):
         """Test HTTP health status when service raises exception."""
         mock_health_service.get_all_health_status.side_effect = Exception("Service error")
 
         # Should propagate the exception
         with pytest.raises(Exception, match="Service error"):
-            await health_status_http()
+            await health_status_http(mock_request)
 
     def test_router_configuration(self):
         """Test that the router is properly configured."""
@@ -214,6 +232,9 @@ class TestHealthRoutes:
         websocket.cookies = {}
         websocket.headers = {}
         websocket.query_params = {}
+        websocket.app = make_container(
+            state=make_container(container=make_container(health_service=mock_health_service))
+        )
 
         await websocket_endpoint(websocket)
 

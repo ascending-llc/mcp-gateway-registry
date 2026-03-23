@@ -1,24 +1,22 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from itsdangerous import BadSignature, SignatureExpired
 
+from ..auth.dependencies import build_signer
 from ..core.config import settings
-from .service import health_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Initialize session signer for WebSocket authentication
-signer = URLSafeTimedSerializer(settings.secret_key)
 
 
 @router.websocket("/ws/health_status")
 async def websocket_endpoint(websocket: WebSocket):
     """High-performance WebSocket endpoint for real-time health status updates with authentication."""
     connection_added = False
+    health_service = websocket.app.state.container.health_service
     try:
         # WebSocket cookies are automatically included in handshake
         # Validate session before accepting connection
@@ -54,6 +52,7 @@ async def websocket_endpoint(websocket: WebSocket):
         if session_cookie:
             try:
                 # Validate session
+                signer = build_signer()
                 session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
                 username = session_data.get("username")
                 if username:
@@ -98,15 +97,15 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @router.get("/ws/health_status")
-async def health_status_http():
+async def health_status_http(request: Request):
     """HTTP endpoint that returns the same health status data as the WebSocket endpoint.
 
     This handles cases where health checks are done via HTTP GET instead of WebSocket.
     """
-    return health_service.get_all_health_status()
+    return request.app.state.container.health_service.get_all_health_status()
 
 
 @router.get("/ws/stats")
-async def websocket_stats():
+async def websocket_stats(request: Request):
     """Get WebSocket performance statistics for monitoring."""
-    return health_service.get_websocket_stats()
+    return request.app.state.container.health_service.get_websocket_stats()

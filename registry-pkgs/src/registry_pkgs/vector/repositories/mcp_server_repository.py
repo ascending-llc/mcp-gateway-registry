@@ -560,24 +560,3 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         except Exception as e:
             logger.error(f"Failed to remove server {log_name} from vector DB: {e}", exc_info=True)
             return False
-
-
-def create_mcp_server_repository(db_client: DatabaseClient) -> MCPServerRepository:
-    """
-    Factory function to create MCP Server repository.
-    """
-    repo = MCPServerRepository(db_client)
-    return repo
-
-
-_mcp_server_repo: MCPServerRepository | None = None
-
-
-def get_mcp_server_repo(db_client: DatabaseClient | None = None) -> MCPServerRepository:
-    """Lazy initialization of MCP Server repository."""
-    global _mcp_server_repo
-    if _mcp_server_repo is None:
-        if db_client is None:
-            raise RuntimeError("Database client is required when initializing MCPServerRepository")
-        _mcp_server_repo = create_mcp_server_repository(db_client)
-    return _mcp_server_repo

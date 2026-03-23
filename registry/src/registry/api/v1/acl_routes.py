@@ -16,12 +16,13 @@ from registry_pkgs.models._generated import PrincipalType
 from registry_pkgs.models.enums import PermissionBits
 
 from ...auth.dependencies import CurrentUser
+from ...deps import get_acl_service
 from ...schemas.acl_schema import (
     PermissionPrincipalOut,
     UpdateResourcePermissionsRequest,
     UpdateResourcePermissionsResponse,
 )
-from ...services.access_control_service import acl_service
+from ...services.access_control_service import ACLService
 from ...utils.utils import validate_resource_type
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ async def search_principals(
     query: str,
     limit: int | None = None,
     principal_types: list[str] | None = Query(None),
+    acl_service: ACLService = Depends(get_acl_service),
 ) -> list[PermissionPrincipalOut]:
     """
     Search for principals (users, groups, public) matching the query string.
@@ -70,6 +72,7 @@ async def update_resource_permissions(
     resource_type: str,
     data: UpdateResourcePermissionsRequest,
     user_context: dict = Depends(get_user_context),
+    acl_service: ACLService = Depends(get_acl_service),
 ) -> UpdateResourcePermissionsResponse:
     validate_resource_type(resource_type)
 
@@ -158,6 +161,7 @@ async def get_resource_permissions(
     resource_type: str,
     resource_id: str,
     user_context: dict = Depends(get_user_context),
+    acl_service: ACLService = Depends(get_acl_service),
 ) -> dict[str, Any]:
     """
     Get ACL permissions for a specific resource.

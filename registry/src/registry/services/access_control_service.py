@@ -15,13 +15,17 @@ from registry_pkgs.models.enums import PermissionBits
 from registry_pkgs.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 
 from ..schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
-from .group_service import group_service
-from .user_service import user_service
+from .group_service import GroupService
+from .user_service import UserService
 
 logger = logging.getLogger(__name__)
 
 
 class ACLService:
+    def __init__(self, user_service: UserService, group_service: GroupService):
+        self.user_service = user_service
+        self.group_service = group_service
+
     async def _upsert_acl_entry(
         self,
         *,
@@ -65,7 +69,7 @@ class ACLService:
         await new_entry.insert(session=session)
         return new_entry
 
-    def _principal_result_obj(self, principal_type: str, obj: Any) -> PermissionPrincipalOut:
+    def _principal_result_obj(self, principal_type: PrincipalType, obj: Any) -> PermissionPrincipalOut:
         """
         Helper to construct the PermissionPrincipalOut for users and groups.
         """
@@ -234,12 +238,12 @@ class ACLService:
 
         results: list[PermissionPrincipalOut] = []
         if not type_filters or PrincipalType.USER.value in type_filters:
-            for user in await user_service.search_users(query):
-                results.append(self._principal_result_obj(PrincipalType.USER.value, user))
+            for user in await self.user_service.search_users(query):
+                results.append(self._principal_result_obj(PrincipalType.USER, user))
 
         if not type_filters or PrincipalType.GROUP.value in type_filters:
-            for group in await group_service.search_groups(query):
-                results.append(self._principal_result_obj(PrincipalType.GROUP.value, group))
+            for group in await self.group_service.search_groups(query):
+                results.append(self._principal_result_obj(PrincipalType.GROUP, group))
         return results[:limit]
 
     async def get_resource_permissions(
@@ -381,7 +385,3 @@ class ACLService:
         except Exception as e:
             logger.error(f"Error fetching accessible {resource_type} IDs for user {user_id}: {e}")
             return []
-
-
-# Singleton instance
-acl_service = ACLService()

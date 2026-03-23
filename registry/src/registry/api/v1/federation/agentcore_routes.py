@@ -1,13 +1,14 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from pydantic import BaseModel, Field
 
 from ....auth.dependencies import CurrentUser
 from ....core.telemetry_decorators import track_registry_operation
+from ....deps import get_agentcore_import_service
 from ....schemas.errors import ErrorCode, create_error_detail
-from ....services.agentcore_import_service import agentcore_import_service
+from ....services.agentcore_import_service import AgentCoreImportService
 
 router = APIRouter()
 
@@ -59,6 +60,7 @@ class AgentCoreRuntimeSyncResponse(BaseModel):
 async def sync_agentcore_runtime(
     data: AgentCoreRuntimeSyncRequest,
     user_context: CurrentUser,
+    agentcore_import_service: AgentCoreImportService = Depends(get_agentcore_import_service),
 ) -> AgentCoreRuntimeSyncResponse:
     """
     Manual runtime sync entrypoint.

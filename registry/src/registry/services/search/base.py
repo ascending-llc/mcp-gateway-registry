@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 class VectorSearchService(ABC):
     """Abstract base class for vector search services."""
 
+    @property
+    def is_initialized(self) -> bool:
+        """Return whether the service is ready for use after initialize()."""
+        return getattr(self, "_initialized", True)
+
     @abstractmethod
     async def initialize(self):
         """Initialize the search service (load models, connect to external service, etc.)."""

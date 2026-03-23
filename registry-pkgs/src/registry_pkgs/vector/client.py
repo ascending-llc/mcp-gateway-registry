@@ -23,7 +23,7 @@ class DatabaseClient:
     - Direct adapter access for advanced users
 
     Recommended usage:
-        db = initialize_database(config)
+        db = create_database_client(config)
         tools_repo = db.for_model(McpTool)  # High-level Model API
         tools = tools_repo.search("query")
 
@@ -134,28 +134,8 @@ class DatabaseClient:
             raise RuntimeError("Database client not initialized. Call initialize() first.")
 
 
-# Global client instance for convenience
-_db_instance: DatabaseClient | None = None
-
-
-def get_db_client() -> DatabaseClient:
-    """Get the global database client instance."""
-    global _db_instance
-    if _db_instance is None:
-        _db_instance = DatabaseClient()
-    return _db_instance
-
-
-def initialize_database(config: BackendConfig) -> DatabaseClient:
-    """
-    Initialize the global database client.
-
-    Args:
-        config: Database configuration
-
-    Returns:
-        Initialized database client
-    """
-    client = get_db_client()
+def create_database_client(config: BackendConfig) -> DatabaseClient:
+    """Create and initialize a database client."""
+    client = DatabaseClient()
     client.initialize(config)
     return client

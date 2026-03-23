@@ -163,7 +163,7 @@ class Settings(BaseSettings):
 
     # ==================== Logging ====================
     log_level: str = "INFO"
-    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+    log_format: str = "%(asctime)s,p%(process)s,{%(name)s:%(lineno)d},%(levelname)s,%(message)s"
 
     # ==================== Encryption ====================
     creds_key: str | None = None
@@ -182,7 +182,7 @@ class Settings(BaseSettings):
     asor_client_credentials: str | None = None
 
     # ==================== Build Metadata ====================
-    build_version: str = ""
+    build_version: str = "1.0.0"
 
     def model_post_init(self, __context: Any) -> None:
         if not self.secret_key:

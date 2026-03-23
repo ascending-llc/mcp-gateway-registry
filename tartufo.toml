@@ -32,4 +32,13 @@ exclude-signatures = [
     {signature = '901d9ee1f7f3404557a55381876d39151a85c4d2e349e1ce7924578b7b07e557', reason = 'example opaque mock server_id is not credential'},
     {signature = 'd22e04bb6ed506bbebb2c79f9b93b358e60591a541a7bc6fe0db5300f0c3079a', reason = 'innocuous OTEL_SERVICE_NAME env var'},
     {signature = '9bc8d7e10240b313c245008330bcf1ce1cfaaa7b02a268461b4d7907772c838a', reason = 'example opaque mock server_id is not credential'},
+    {signature = 'e14bcb1101b3e00dbe5983cbea5f04937552930759d87d007dc4cfc88d5575aa', reason = 'dependency injection test diff in connection router is not credential'},
+    {signature = '6f93f8f01ad3b3681587d924f2212c6ffc046c8815a0785cd690b788728cfe0c', reason = 'new ACL route unit test uses synthetic IDs only'},
+    {signature = 'cd6d16d463f238335668215e575b7a2627ac3147c87be90e296c7403a3d575c3', reason = 'new AgentCore route unit test uses synthetic IDs only'},
+    {signature = 'b23bb66b9fd6b9c1e98369ab9cb6545a3ba71c07be13ac3b5fe32e3b2e5f50f2', reason = 'OAuth callback unit test uses mocked access tokens and decoded claims'},
+    {signature = 'c425141de7ee7b5cd951cce030516c66daf84b08b69b28dbc2544dc67e8f3fce', reason = 'OAuth callback unit test uses mocked access tokens and decoded claims'},
+    {signature = '85ad1c2974b339bca27b5da486f74048105771b53d0667159578790b1461ada9', reason = 'OAuth callback unit test uses mocked access tokens and decoded claims'},
+    {signature = '20c7387c76fac87bc98c5858b571628e367c403da266c5d6ba44130335513188', reason = 'OAuth router test dependency override diff is not credential'},
+    {signature = '38368f3fc37f1a37fcf5997cd286f46a1516aa0c886783d8808845e05d730538', reason = 'example opaque mock user ID is not credential'},
+    {signature = '64c14f4afec33ec4e9362f77f1e43f06596b103999eed03feb38c8e99975e6bd', reason = 'example opaque mock server_id is not credential'},
 ]

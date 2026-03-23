@@ -35,13 +35,14 @@ LangChain VectorStore (Weaviate)              ← Native DB operations
 This is how services should interact with vector DB - through specialized repositories:
 
 ```python
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.vector.client import create_database_client
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 from registry_pkgs.models import ExtendedMCPServer
 
 # Service layer code
 class ServerService:
-    def __init__(self):
-        self.mcp_server_repo = get_mcp_server_repo()
+    def __init__(self, mcp_server_repo: MCPServerRepository):
+        self.mcp_server_repo = mcp_server_repo
 
     async def toggle_server_status(self, server: ExtendedMCPServer, enabled: bool):
         """
@@ -98,11 +99,12 @@ class ServerService:
 For standalone scripts, CLI tools, or data migration:
 
 ```python
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.vector.client import create_database_client
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 from registry_pkgs.models import ExtendedMCPServer
 
-# Get singleton repository
-repo = get_mcp_server_repo()
+# Create repository explicitly after database initialization
+repo = MCPServerRepository(create_database_client(config))
 
 # Sync server to vector DB
 await repo.sync_by_enabled_status(
@@ -486,9 +488,9 @@ class MyCustomModel:
         )
 
 # Use with generic repository
-from registry_pkgs.vector import initialize_database
+from registry_pkgs.vector import create_database_client
 
-db = initialize_database()
+db = create_database_client(config)
 repo = db.for_model(MyCustomModel)
 
 # Now you can use ORM-style operations

@@ -7,7 +7,7 @@ from registry.auth.oauth import FlowStateManager
 from registry.schemas.enums import OAuthFlowStatus
 from registry.schemas.oauth_schema import OAuthTokens
 from registry.services.oauth.oauth_service import MCPOAuthService
-from registry.services.oauth.token_service import token_service
+from registry.services.oauth.token_service import TokenService
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 
@@ -25,9 +25,13 @@ class TestMCPOAuthService:
         return Mock()
 
     @pytest.fixture
-    def oauth_service(self, mock_flow_manager, mock_oauth_client):
+    def mock_token_service(self):
+        return Mock(spec=TokenService)
+
+    @pytest.fixture
+    def oauth_service(self, mock_flow_manager, mock_oauth_client, mock_token_service):
         """Create MCPOAuthService instance with mocked dependencies"""
-        service = MCPOAuthService(flow_manager=mock_flow_manager)
+        service = MCPOAuthService(flow_manager=mock_flow_manager, token_service_instance=mock_token_service)
         service.oauth_client = mock_oauth_client
         return service
 
@@ -60,7 +64,9 @@ class TestMCPOAuthService:
         return tokens
 
     # Helper method to mock token_service responses
-    def _mock_token_service(self, access_exists=True, access_valid=True, refresh_exists=True, refresh_valid=True):
+    def _mock_token_service(
+        self, token_service_mock, access_exists=True, access_valid=True, refresh_exists=True, refresh_valid=True
+    ):
         """Helper to mock token_service responses for status checks"""
         access_doc = Mock() if access_exists else None
         refresh_doc = Mock() if refresh_exists else None
@@ -72,18 +78,71 @@ class TestMCPOAuthService:
             refresh_doc.token = "valid_refresh_token"
 
         # Mock the async methods
-        token_service.get_access_token_status = AsyncMock(return_value=(access_doc, access_valid))
-        token_service.get_refresh_token_status = AsyncMock(return_value=(refresh_doc, refresh_valid))
-        token_service.get_oauth_tokens = AsyncMock(return_value=None)
-        token_service.store_oauth_tokens = AsyncMock()
-        token_service.has_refresh_token = AsyncMock(return_value=refresh_exists and refresh_valid)
+        token_service_mock.get_access_token_status = AsyncMock(return_value=(access_doc, access_valid))
+        token_service_mock.get_refresh_token_status = AsyncMock(return_value=(refresh_doc, refresh_valid))
+        token_service_mock.get_oauth_tokens = AsyncMock(return_value=None)
+        token_service_mock.store_oauth_tokens = AsyncMock()
+        token_service_mock.has_refresh_token = AsyncMock(return_value=refresh_exists and refresh_valid)
+
+    @pytest.mark.asyncio
+    async def test_initiate_oauth_flow_prefers_injected_token_service(self, mock_flow_manager, mock_oauth_client):
+        injected_token_service = AsyncMock()
+        injected_token_service.store_oauth_client_credentials = AsyncMock()
+
+        service = MCPOAuthService(
+            flow_manager=mock_flow_manager,
+            token_service_instance=injected_token_service,
+        )
+        service.oauth_client = mock_oauth_client
+
+        user_id = "test_user"
+        mock_server = Mock(spec=MCPServerDocument)
+        mock_server.id = ObjectId("507f1f77bcf86cd799439011")
+        mock_server.serverName = "test_server"
+        mock_server.path = "/test_server"
+        mock_server.config = {
+            "oauth": {},
+            "oauthMetadata": {
+                "issuer": "https://example.com",
+                "authorization_endpoint": "https://example.com/oauth/authorize",
+                "token_endpoint": "https://example.com/oauth/token",
+                "registration_endpoint": "https://example.com/oauth/register",
+            },
+        }
+
+        from registry.schemas.oauth_schema import OAuthClientInformation
+
+        mock_client_info = OAuthClientInformation(
+            client_id="dcr_registered_client_123",
+            client_secret="dcr_secret_abc",
+            redirect_uris=["https://registry.example.com/api/v1/mcp/test_server/oauth/callback"],
+            scope="read write",
+        )
+        service.oauth_client.register_client = AsyncMock(return_value=mock_client_info)
+        service.oauth_client.build_authorization_url = AsyncMock(return_value="https://example.com/auth")
+
+        mock_flow_manager.generate_flow_id = Mock(return_value="test_flow_id")
+        mock_metadata = Mock()
+        mock_metadata.client_info = mock_client_info
+        mock_metadata.state = "test_flow_id##security_token"
+        mock_flow_manager.create_flow_metadata = Mock(return_value=mock_metadata)
+        mock_flow_manager.create_flow = Mock(return_value=Mock())
+
+        flow_id, auth_url, error = await service.initiate_oauth_flow(user_id, mock_server)
+
+        injected_token_service.store_oauth_client_credentials.assert_awaited_once()
+        assert flow_id == "test_flow_id"
+        assert auth_url == "https://example.com/auth"
+        assert error is None
 
     # Tests for handle_reinitialize_auth method
     @pytest.mark.asyncio
     async def test_handle_reinitialize_auth_access_token_valid(self, oauth_service, mock_server):
         """Test handle_reinitialize_auth when access token exists and is valid"""
         user_id = "test_user"
-        self._mock_token_service(access_exists=True, access_valid=True, refresh_exists=True, refresh_valid=True)
+        self._mock_token_service(
+            oauth_service.token_service, access_exists=True, access_valid=True, refresh_exists=True, refresh_valid=True
+        )
 
         needs_connection, response_data = await oauth_service.handle_reinitialize_auth(user_id, mock_server)
 
@@ -96,7 +155,9 @@ class TestMCPOAuthService:
     async def test_handle_reinitialize_auth_access_token_expired_refresh_valid(self, oauth_service, mock_server):
         """Test handle_reinitialize_auth when access token expired but refresh token is valid"""
         user_id = "test_user"
-        self._mock_token_service(access_exists=True, access_valid=False, refresh_exists=True, refresh_valid=True)
+        self._mock_token_service(
+            oauth_service.token_service, access_exists=True, access_valid=False, refresh_exists=True, refresh_valid=True
+        )
 
         # Mock successful token refresh
         with patch.object(
@@ -112,7 +173,13 @@ class TestMCPOAuthService:
     async def test_handle_reinitialize_auth_access_token_expired_refresh_invalid(self, oauth_service, mock_server):
         """Test handle_reinitialize_auth when access token expired and refresh token invalid"""
         user_id = "test_user"
-        self._mock_token_service(access_exists=True, access_valid=False, refresh_exists=True, refresh_valid=False)
+        self._mock_token_service(
+            oauth_service.token_service,
+            access_exists=True,
+            access_valid=False,
+            refresh_exists=True,
+            refresh_valid=False,
+        )
 
         # Mock OAuth flow initiation
         with patch.object(
@@ -135,7 +202,13 @@ class TestMCPOAuthService:
     async def test_handle_reinitialize_auth_no_access_token_refresh_valid(self, oauth_service, mock_server):
         """Test handle_reinitialize_auth when no access token but refresh token is valid"""
         user_id = "test_user"
-        self._mock_token_service(access_exists=False, access_valid=False, refresh_exists=True, refresh_valid=True)
+        self._mock_token_service(
+            oauth_service.token_service,
+            access_exists=False,
+            access_valid=False,
+            refresh_exists=True,
+            refresh_valid=True,
+        )
 
         # Mock successful token refresh
         with patch.object(
@@ -152,7 +225,13 @@ class TestMCPOAuthService:
     async def test_handle_reinitialize_auth_no_valid_tokens(self, oauth_service, mock_server):
         """Test handle_reinitialize_auth when no valid tokens exist"""
         user_id = "test_user"
-        self._mock_token_service(access_exists=False, access_valid=False, refresh_exists=False, refresh_valid=False)
+        self._mock_token_service(
+            oauth_service.token_service,
+            access_exists=False,
+            access_valid=False,
+            refresh_exists=False,
+            refresh_valid=False,
+        )
 
         # Mock OAuth flow initiation
         with patch.object(
@@ -180,7 +259,13 @@ class TestMCPOAuthService:
         mock_server.serverName = "test_server"
         mock_server.config = {}  # No OAuth config
 
-        self._mock_token_service(access_exists=False, access_valid=False, refresh_exists=False, refresh_valid=False)
+        self._mock_token_service(
+            oauth_service.token_service,
+            access_exists=False,
+            access_valid=False,
+            refresh_exists=False,
+            refresh_valid=False,
+        )
 
         needs_connection, response_data = await oauth_service.handle_reinitialize_auth(user_id, mock_server)
 
@@ -192,7 +277,9 @@ class TestMCPOAuthService:
     async def test_handle_reinitialize_auth_refresh_failure(self, oauth_service, mock_server):
         """Test handle_reinitialize_auth when token refresh fails"""
         user_id = "test_user"
-        self._mock_token_service(access_exists=True, access_valid=False, refresh_exists=True, refresh_valid=True)
+        self._mock_token_service(
+            oauth_service.token_service, access_exists=True, access_valid=False, refresh_exists=True, refresh_valid=True
+        )
 
         # Mock refresh failure
         with patch.object(
@@ -280,35 +367,34 @@ class TestMCPOAuthService:
         oauth_service.oauth_client.register_client = AsyncMock(return_value=mock_client_info)
 
         # Mock token service
-        with patch("registry.services.oauth.oauth_service.token_service") as mock_token_service:
-            mock_token_service.store_oauth_client_credentials = AsyncMock()
+        oauth_service.token_service.store_oauth_client_credentials = AsyncMock()
 
-            # Mock flow manager methods
-            oauth_service.flow_manager.generate_flow_id = Mock(return_value="test_flow_id")
-            mock_metadata = Mock()
-            mock_metadata.client_info = mock_client_info
-            mock_metadata.state = "test_flow_id##security_token"
-            oauth_service.flow_manager.create_flow_metadata = Mock(return_value=mock_metadata)
-            oauth_service.flow_manager.create_flow = Mock(return_value=Mock())
+        # Mock flow manager methods
+        oauth_service.flow_manager.generate_flow_id = Mock(return_value="test_flow_id")
+        mock_metadata = Mock()
+        mock_metadata.client_info = mock_client_info
+        mock_metadata.state = "test_flow_id##security_token"
+        oauth_service.flow_manager.create_flow_metadata = Mock(return_value=mock_metadata)
+        oauth_service.flow_manager.create_flow = Mock(return_value=Mock())
 
-            # Mock authorization URL builder
-            oauth_service.oauth_client.build_authorization_url = AsyncMock(
-                return_value="https://example.com/auth?state=test&client_id=dcr_registered_client_123"
-            )
+        # Mock authorization URL builder
+        oauth_service.oauth_client.build_authorization_url = AsyncMock(
+            return_value="https://example.com/auth?state=test&client_id=dcr_registered_client_123"
+        )
 
-            flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(user_id, mock_server)
+        flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(user_id, mock_server)
 
-            # Verify DCR was called
-            oauth_service.oauth_client.register_client.assert_awaited_once()
+        # Verify DCR was called
+        oauth_service.oauth_client.register_client.assert_awaited_once()
 
-            # Verify credentials were stored
-            mock_token_service.store_oauth_client_credentials.assert_awaited_once()
+        # Verify credentials were stored
+        oauth_service.token_service.store_oauth_client_credentials.assert_awaited_once()
 
-            # Verify flow was created
-            assert flow_id == "test_flow_id"
-            assert auth_url is not None
-            assert "dcr_registered_client_123" in auth_url
-            assert error is None
+        # Verify flow was created
+        assert flow_id == "test_flow_id"
+        assert auth_url is not None
+        assert "dcr_registered_client_123" in auth_url
+        assert error is None
 
     @pytest.mark.asyncio
     async def test_initiate_oauth_flow_dcr_no_registration_endpoint(self, oauth_service, mock_server):
@@ -395,13 +481,13 @@ class TestMCPOAuthService:
         oauth_service.oauth_client.exchange_code_for_tokens = AsyncMock(return_value=mock_tokens)
 
         # Mock token service
-        token_service.store_oauth_tokens = AsyncMock()
+        oauth_service.token_service.store_oauth_tokens = AsyncMock()
 
         success, error = await oauth_service.complete_oauth_flow(flow_id, authorization_code, state)
 
         assert success
         assert error is None
-        token_service.store_oauth_tokens.assert_awaited_once()
+        oauth_service.token_service.store_oauth_tokens.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_complete_oauth_flow_invalid_state(self, oauth_service):
@@ -423,10 +509,10 @@ class TestMCPOAuthService:
         user_id = "test_user"
 
         # Mock token service to return valid token
-        token_service.is_access_token_expired = AsyncMock(return_value=False)
+        oauth_service.token_service.is_access_token_expired = AsyncMock(return_value=False)
         mock_tokens = Mock(spec=OAuthTokens)
         mock_tokens.access_token = "valid_access_token"
-        token_service.get_oauth_tokens = AsyncMock(return_value=mock_tokens)
+        oauth_service.token_service.get_oauth_tokens = AsyncMock(return_value=mock_tokens)
 
         token, auth_url, error = await oauth_service.get_valid_access_token(user_id, mock_server)
 
@@ -440,15 +526,15 @@ class TestMCPOAuthService:
         user_id = "test_user"
 
         # Mock token service
-        token_service.is_access_token_expired = AsyncMock(return_value=True)
-        token_service.has_refresh_token = AsyncMock(return_value=True)
+        oauth_service.token_service.is_access_token_expired = AsyncMock(return_value=True)
+        oauth_service.token_service.has_refresh_token = AsyncMock(return_value=True)
 
         # Mock successful refresh
         oauth_service.validate_and_refresh_tokens = AsyncMock(return_value=(True, None))
 
         mock_tokens = Mock(spec=OAuthTokens)
         mock_tokens.access_token = "refreshed_access_token"
-        token_service.get_oauth_tokens = AsyncMock(return_value=mock_tokens)
+        oauth_service.token_service.get_oauth_tokens = AsyncMock(return_value=mock_tokens)
 
         token, auth_url, error = await oauth_service.get_valid_access_token(user_id, mock_server)
 
@@ -479,8 +565,8 @@ class TestMCPOAuthService:
         oauth_service.oauth_client.refresh_tokens = AsyncMock(return_value=mock_tokens)
 
         # Mock token service methods
-        token_service.get_oauth_client_credentials = AsyncMock(return_value=(None, None))
-        token_service.store_oauth_tokens = AsyncMock()
+        oauth_service.token_service.get_oauth_client_credentials = AsyncMock(return_value=(None, None))
+        oauth_service.token_service.store_oauth_tokens = AsyncMock()
 
         success, error = await oauth_service.refresh_token(
             user_id, server_id, server_name, refresh_token_value, oauth_config
@@ -488,7 +574,7 @@ class TestMCPOAuthService:
 
         assert success
         assert error is None
-        token_service.store_oauth_tokens.assert_awaited_once()
+        oauth_service.token_service.store_oauth_tokens.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_refresh_token_failure(self, oauth_service):
@@ -507,7 +593,7 @@ class TestMCPOAuthService:
         oauth_service.oauth_client.refresh_tokens = AsyncMock(return_value=None)
 
         # Mock token service
-        token_service.get_oauth_client_credentials = AsyncMock(return_value=(None, None))
+        oauth_service.token_service.get_oauth_client_credentials = AsyncMock(return_value=(None, None))
 
         success, error = await oauth_service.refresh_token(
             user_id, server_id, server_name, refresh_token_value, oauth_config
@@ -524,12 +610,12 @@ class TestMCPOAuthService:
         server_name = "test_server"
 
         mock_tokens = Mock(spec=OAuthTokens)
-        token_service.get_oauth_tokens = AsyncMock(return_value=mock_tokens)
+        oauth_service.token_service.get_oauth_tokens = AsyncMock(return_value=mock_tokens)
 
         result = await oauth_service.get_tokens(user_id, server_name)
 
         assert result == mock_tokens
-        token_service.get_oauth_tokens.assert_awaited_once_with(user_id, server_name)
+        oauth_service.token_service.get_oauth_tokens.assert_awaited_once_with(user_id, server_name)
 
     @pytest.mark.asyncio
     async def test_cancel_oauth_flow_success(self, oauth_service):
