@@ -488,10 +488,10 @@ class TestBuildCompleteHeaders:
             state_metadata = {"client_branding": "vscode"}
 
             headers = await build_complete_headers_for_server(
+                oauth_service,
                 mock_oauth_server,
                 "user-123",
                 state_metadata=state_metadata,
-                oauth_service=oauth_service,
             )
 
             assert headers["Authorization"] == "Bearer access-token-123"
@@ -515,9 +515,9 @@ class TestBuildCompleteHeaders:
             mock_decrypt.return_value = mock_oauth_server.config
 
             headers = await build_complete_headers_for_server(
+                injected_oauth_service,
                 mock_oauth_server,
                 "user-123",
-                oauth_service=injected_oauth_service,
             )
 
             assert headers["Authorization"] == "Bearer access-token-456"
@@ -537,7 +537,7 @@ class TestBuildCompleteHeaders:
             mock_decrypt.return_value = mock_oauth_server.config
 
             with pytest.raises(MissingUserIdError) as exc_info:
-                await build_complete_headers_for_server(mock_oauth_server, None, oauth_service=Mock())
+                await build_complete_headers_for_server(Mock(), mock_oauth_server, None)
 
             assert "User ID required" in str(exc_info.value)
             assert exc_info.value.server_name == "oauth-server"
@@ -559,7 +559,7 @@ class TestBuildCompleteHeaders:
             )
 
             with pytest.raises(OAuthReAuthRequiredError) as exc_info:
-                await build_complete_headers_for_server(mock_oauth_server, "user-123", oauth_service=oauth_service)
+                await build_complete_headers_for_server(oauth_service, mock_oauth_server, "user-123")
 
             assert "re-authentication required" in str(exc_info.value).lower()
             assert exc_info.value.auth_url == "https://oauth.example.com/authorize"
@@ -580,7 +580,7 @@ class TestBuildCompleteHeaders:
             oauth_service.get_valid_access_token = AsyncMock(return_value=(None, None, "Token refresh failed"))
 
             with pytest.raises(OAuthTokenError) as exc_info:
-                await build_complete_headers_for_server(mock_oauth_server, "user-123", oauth_service=oauth_service)
+                await build_complete_headers_for_server(oauth_service, mock_oauth_server, "user-123")
 
             assert "OAuth token error" in str(exc_info.value)
             assert exc_info.value.server_name == "oauth-server"
@@ -600,7 +600,7 @@ class TestBuildCompleteHeaders:
             oauth_service.get_valid_access_token = AsyncMock(return_value=(None, None, None))
 
             with pytest.raises(OAuthTokenError) as exc_info:
-                await build_complete_headers_for_server(mock_oauth_server, "user-123", oauth_service=oauth_service)
+                await build_complete_headers_for_server(oauth_service, mock_oauth_server, "user-123")
 
             assert "No valid OAuth token" in str(exc_info.value)
             assert exc_info.value.server_name == "oauth-server"
@@ -613,7 +613,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = mock_apikey_server.config
 
-            headers = await build_complete_headers_for_server(mock_apikey_server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), mock_apikey_server, None)
 
             assert headers["Authorization"] == "Bearer test-api-key-123"
             assert headers["Content-Type"] == "application/json"
@@ -626,7 +626,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = mock_basic_auth_server.config
 
-            headers = await build_complete_headers_for_server(mock_basic_auth_server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), mock_basic_auth_server, None)
 
             # Basic auth should be base64 encoded
             assert headers["Authorization"].startswith("Basic ")
@@ -640,7 +640,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = mock_custom_auth_server.config
 
-            headers = await build_complete_headers_for_server(mock_custom_auth_server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), mock_custom_auth_server, None)
 
             assert headers["X-API-Key"] == "custom-token-xyz"
             assert headers["Content-Type"] == "application/json"
@@ -653,7 +653,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = mock_custom_headers_server.config
 
-            headers = await build_complete_headers_for_server(mock_custom_headers_server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), mock_custom_headers_server, None)
 
             assert headers["X-Custom-Header"] == "value1"
             assert headers["X-Another-Header"] == "value2"
@@ -676,9 +676,9 @@ class TestBuildCompleteHeaders:
             oauth_service.get_valid_access_token = AsyncMock(return_value=("access-token", None, None))
 
             headers = await build_complete_headers_for_server(
+                oauth_service,
                 mock_oauth_server,
                 "user-123",
-                oauth_service=oauth_service,
             )
 
             # Should have both OAuth and custom headers
@@ -698,7 +698,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = {}
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             assert headers["Content-Type"] == "application/json"
             assert headers["Accept"] == "application/json"
@@ -731,7 +731,7 @@ class TestBuildCompleteHeaders:
             oauth_service = AsyncMock()
             oauth_service.get_valid_access_token = AsyncMock(return_value=("oauth-token-wins", None, None))
 
-            headers = await build_complete_headers_for_server(server, "user-123", oauth_service=oauth_service)
+            headers = await build_complete_headers_for_server(oauth_service, server, "user-123")
 
             # OAuth token should override custom Authorization header
             assert headers["Authorization"] == "Bearer oauth-token-wins"
@@ -752,7 +752,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # API key should override custom Authorization header
             assert headers["Authorization"] == "Bearer apikey-token-wins"
@@ -783,7 +783,7 @@ class TestBuildCompleteHeaders:
             oauth_service = AsyncMock()
             oauth_service.get_valid_access_token = AsyncMock(return_value=("oauth-token", None, None))
 
-            headers = await build_complete_headers_for_server(server, "user-123", oauth_service=oauth_service)
+            headers = await build_complete_headers_for_server(oauth_service, server, "user-123")
 
             # OAuth Authorization should be present
             assert headers["Authorization"] == "Bearer oauth-token"
@@ -811,7 +811,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # API key should override custom Authorization
             assert headers["Authorization"] == "Bearer test-key"
@@ -837,7 +837,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             assert headers["X-Trace-Id"] == "trace-123"
             assert headers["Accept"] == "application/json, application/xml"
@@ -860,7 +860,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # List values should be joined with comma
             assert headers["Accept"] == "application/json, application/xml"
@@ -879,7 +879,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # Base headers should be present
             assert headers["Content-Type"] == "application/json"
@@ -910,7 +910,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # Should use the pre-encoded value
             assert headers["Authorization"] == f"Basic {encoded_creds}"
@@ -930,7 +930,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # Should be auto-encoded
             expected = base64.b64encode(b"username:password").decode()
@@ -955,7 +955,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # Should not add any custom header
             assert "Authorization" not in headers
@@ -975,7 +975,7 @@ class TestBuildCompleteHeaders:
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
 
-            headers = await build_complete_headers_for_server(server, None, oauth_service=Mock())
+            headers = await build_complete_headers_for_server(Mock(), server, None)
 
             # Should default to Bearer
             assert headers["Authorization"] == "Bearer test-key"

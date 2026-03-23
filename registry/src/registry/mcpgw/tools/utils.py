@@ -2,9 +2,11 @@
 Dynamic MCP server proxy routes.
 """
 
+from __future__ import annotations
+
 import logging
 from enum import StrEnum
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from httpx_sse import ServerSentEvent
 from mcp.server.session import ServerSession
@@ -29,6 +31,9 @@ from ...auth.oauth.types import StateMetadata
 from ...schemas.errors import AuthenticationError, OAuthReAuthRequiredError, OAuthTokenError
 from ...services.server_service import build_complete_headers_for_server
 from ..exceptions import InternalServerException, UrlElicitationRequiredException
+
+if TYPE_CHECKING:
+    from ...services.oauth.oauth_service import MCPOAuthService
 
 logger = logging.getLogger(__name__)
 
@@ -144,11 +149,11 @@ def parse_data_field(
 
 
 async def build_authenticated_headers(
+    oauth_service: MCPOAuthService,
     server: MCPServerDocument,
     auth_context: UserContextDict,
     additional_headers: dict[str, str] | None = None,
     *,
-    oauth_service: Any,
     state_metadata: StateMetadata | None = None,
 ) -> dict[str, str]:
     """
@@ -196,9 +201,9 @@ async def build_authenticated_headers(
     try:
         user_id = auth_context["user_id"]  # Already validated above
         auth_headers = await build_complete_headers_for_server(
+            oauth_service,
             server,
             user_id,
-            oauth_service=oauth_service,
             state_metadata=state_metadata,
         )
 

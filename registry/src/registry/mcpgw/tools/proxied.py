@@ -314,10 +314,10 @@ async def execute_tool_impl(
 
             if not stored_session_id:
                 init_headers = await build_authenticated_headers(
+                    oauth_service=ctx.request_context.lifespan_context.oauth_service,
                     server=server,
                     auth_context=user_context,
                     additional_headers=additional_headers,
-                    oauth_service=ctx.request_context.lifespan_context.oauth_service,
                     state_metadata=state_metadata,
                 )
                 # Get transport type from server config (default to streamable-http)
@@ -335,10 +335,10 @@ async def execute_tool_impl(
 
         # Build final authenticated headers with session ID (if applicable)
         headers = await build_authenticated_headers(
+            oauth_service=ctx.request_context.lifespan_context.oauth_service,
             server=server,
             auth_context=user_context,
             additional_headers=additional_headers,
-            oauth_service=ctx.request_context.lifespan_context.oauth_service,
             state_metadata=state_metadata,
         )
 

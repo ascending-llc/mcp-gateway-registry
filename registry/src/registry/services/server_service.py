@@ -80,10 +80,10 @@ def _build_server_info_for_mcp_client(config: dict[str, Any], tags: list[str]) -
 
 
 async def build_complete_headers_for_server(
+    oauth_service: MCPOAuthService,
     server: MCPServerDocument,
     user_id: str | None = None,
     *,
-    oauth_service: MCPOAuthService | None,
     state_metadata: StateMetadata | None = None,
 ) -> dict[str, str]:
     """
@@ -138,9 +138,6 @@ async def build_complete_headers_for_server(
     requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
 
     if requires_oauth:
-        if oauth_service is None:
-            raise AuthenticationError("OAuth-enabled server requires configured oauth_service")
-
         if not user_id:
             raise MissingUserIdError(
                 f"User ID required for OAuth server {server.serverName}",
@@ -1143,9 +1140,9 @@ class ServerServiceV1:
             # This consolidates all auth logic in one place
             try:
                 headers = await build_complete_headers_for_server(
+                    self.oauth_service,
                     server,
                     user_id,
-                    oauth_service=self.oauth_service,
                 )
             except OAuthReAuthRequiredError as e:
                 # OAuth re-authentication needed - return special error format

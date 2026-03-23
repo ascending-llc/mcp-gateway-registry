@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
@@ -71,7 +73,7 @@ TOOL-RESULT EXAMPLE:
 """
 
 
-def create_mcp_app(*, container_provider: Callable[[], "RegistryContainer | None"]) -> FastMCP:
+def create_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP:
     """
     Factory function to create a stateless FastMCP application instance.
 
@@ -119,7 +121,7 @@ def create_mcp_app(*, container_provider: Callable[[], "RegistryContainer | None
     return mcp
 
 
-def create_gateway_mcp_app(*, container_provider: Callable[[], "RegistryContainer | None"]) -> FastMCP:
+def create_gateway_mcp_app(*, container_provider: Callable[[], RegistryContainer | None]) -> FastMCP:
     """Create the FastMCP app and register all prompts/tools in one place."""
     mcp = create_mcp_app(container_provider=container_provider)
     register_prompts(mcp)
