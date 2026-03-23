@@ -72,18 +72,31 @@ async def _shutdown_container(app: FastAPI, resources: _RuntimeResources) -> Non
     """Shutdown app-scoped services before tearing down the underlying infra clients."""
     container = getattr(app.state, "container", None)
     if container is not None:
-        await container.shutdown()
-        del app.state.container
+        try:
+            await container.shutdown()
+        except Exception as exc:
+            logger.error("Container shutdown error: %s", exc, exc_info=True)
+        finally:
+            del app.state.container
 
-    logger.info("Closing Redis connection")
-    close_redis_client(resources.redis_client)
+    try:
+        logger.info("Closing Redis connection")
+        close_redis_client(resources.redis_client)
+    except Exception as exc:
+        logger.error("Redis close error: %s", exc, exc_info=True)
 
     if resources.db_client is not None:
-        logger.info("Closing vector database client")
-        resources.db_client.close()
+        try:
+            logger.info("Closing vector database client")
+            resources.db_client.close()
+        except Exception as exc:
+            logger.error("Vector database client close error: %s", exc, exc_info=True)
 
-    logger.info("Closing MongoDB connection")
-    await close_mongodb()
+    try:
+        logger.info("Closing MongoDB connection")
+        await close_mongodb()
+    except Exception as exc:
+        logger.error("MongoDB close error: %s", exc, exc_info=True)
 
 
 @asynccontextmanager

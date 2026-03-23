@@ -5,6 +5,8 @@ Centralized configuration constants for MCP client operations.
 Eliminates hardcoded values scattered across the codebase.
 """
 
+from types import MappingProxyType
+
 
 class MCPClientConfig:
     """Stateless configuration constants for MCP client operations."""
@@ -34,8 +36,10 @@ class MCPClientConfig:
     ANTHROPIC_TAG = "anthropic-registry"
 
     # Header defaults
-    DEFAULT_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    DEFAULT_HEADERS = MappingProxyType(
+        {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    )
 
     # HTTP status codes considered healthy
-    HEALTHY_STATUS_CODES = [200, 400, 405]
-    AUTH_REQUIRED_STATUS_CODES = [401, 403]
+    HEALTHY_STATUS_CODES = (200, 400, 405)
+    AUTH_REQUIRED_STATUS_CODES = (401, 403)

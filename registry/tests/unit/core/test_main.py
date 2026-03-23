@@ -108,8 +108,9 @@ class TestMainApplication:
         async with lifespan(test_app):
             pass
 
-        mock_services["close_redis_client"].assert_not_called()
-        mock_services["close_mongodb"].assert_not_awaited()
+        mock_services["close_redis_client"].assert_called_once()
+        mock_services["create_database_client"].return_value.close.assert_called_once()
+        mock_services["close_mongodb"].assert_awaited_once()
 
     def test_app_configuration(self):
         """Test FastAPI app configuration."""

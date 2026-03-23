@@ -178,7 +178,7 @@ class RegistryContainer:
 
         logger.info("Initializing vector search service...")
         await self.vector_service.initialize()
-        if hasattr(self.vector_service, "_initialized") and self.vector_service._initialized:
+        if self.vector_service.is_initialized:
             logger.info("Vector search service initialized successfully")
         else:
             logger.warning("Vector search service not initialized - index update skipped")

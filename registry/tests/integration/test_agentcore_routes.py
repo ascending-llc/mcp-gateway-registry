@@ -41,7 +41,6 @@ class TestAgentCoreRuntimeSyncRoute:
         body = response.json()
         assert body["created"]["mcp_servers"] == 1
         mock_service.import_from_runtime.assert_awaited_once()
-        test_client.app.dependency_overrides.clear()
 
     def test_sync_runtime_maps_unexpected_error_to_500(self, test_client, monkeypatch):
         mock_service = AsyncMock()
@@ -57,7 +56,6 @@ class TestAgentCoreRuntimeSyncRoute:
 
         assert response.status_code == 500
         assert "AgentCore runtime sync failed: boom" in response.text
-        test_client.app.dependency_overrides.clear()
 
     def test_sync_runtime_forbidden_when_rbac_denies(self, test_client, monkeypatch):
         mock_service = AsyncMock()
@@ -78,4 +76,3 @@ class TestAgentCoreRuntimeSyncRoute:
         assert response.status_code == 403
         assert "Insufficient permissions" in response.text
         mock_service.import_from_runtime.assert_not_awaited()
-        test_client.app.dependency_overrides.clear()

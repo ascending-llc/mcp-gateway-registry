@@ -17,7 +17,7 @@ class MCPService:
     ):
         self.connection_service = connection_service
         self.oauth_service = oauth_service
-        self._initialized = True
+        self._initialized = False
         self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
@@ -43,8 +43,5 @@ class MCPService:
 
             except Exception as e:
                 logger.error(f"Failed to initialize MCP service: {e}", exc_info=True)
-                # Reset state on failure
-                self.connection_service = None
-                self.oauth_service = None
                 self._initialized = False
                 raise RuntimeError(f"MCP service initialization failed: {e}")

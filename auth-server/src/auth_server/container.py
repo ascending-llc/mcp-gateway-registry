@@ -33,8 +33,12 @@ class AuthContainer:
     def validator(self) -> SimplifiedCognitoValidator:
         return SimplifiedCognitoValidator(region=self.settings.aws_region)
 
-    def build_signer(self) -> URLSafeTimedSerializer:
+    @cached_property
+    def signer(self) -> URLSafeTimedSerializer:
         return URLSafeTimedSerializer(self.settings.secret_key)
+
+    def build_signer(self) -> URLSafeTimedSerializer:
+        return self.signer
 
     def get_provider_config(self, provider_name: str) -> dict | None:
         return self.oauth2_config_loader.get_provider_config(provider_name)

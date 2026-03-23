@@ -25,9 +25,8 @@ def _get_settings_value(var_name: str) -> str | None:
 class OAuth2ConfigLoader:
     """OAuth2 configuration loader with environment variable substitution."""
 
-    _lock: Lock = Lock()
-
     def __init__(self):
+        self._lock = Lock()
         self._config: dict[str, Any] | None = None
         with self._lock:
             self._config = self._load_config()

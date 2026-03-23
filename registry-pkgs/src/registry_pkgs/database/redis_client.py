@@ -38,4 +38,8 @@ def close_redis_client(client: Redis | None) -> None:
     """Close a Redis client created by create_redis_client()."""
     if client is None:
         return
-    client.close()
+    try:
+        client.close()
+        logger.info("Redis connection closed")
+    except Exception as e:
+        logger.error("Error closing Redis connection: %s", e)

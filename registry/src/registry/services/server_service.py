@@ -83,7 +83,7 @@ async def build_complete_headers_for_server(
     server: MCPServerDocument,
     user_id: str | None = None,
     *,
-    oauth_service: MCPOAuthService,
+    oauth_service: MCPOAuthService | None,
     state_metadata: StateMetadata | None = None,
 ) -> dict[str, str]:
     """
@@ -138,6 +138,9 @@ async def build_complete_headers_for_server(
     requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
 
     if requires_oauth:
+        if oauth_service is None:
+            raise AuthenticationError("OAuth-enabled server requires configured oauth_service")
+
         if not user_id:
             raise MissingUserIdError(
                 f"User ID required for OAuth server {server.serverName}",
@@ -165,8 +168,6 @@ async def build_complete_headers_for_server(
             )
 
         # Get OAuth token (handles refresh automatically)
-        if oauth_service is None:
-            raise AuthenticationError("OAuth-enabled server requires configured oauth_service")
         access_token, auth_url, error = await oauth_service.get_valid_access_token(
             user_id=user_id, server=server, state_metadata=state_metadata
         )

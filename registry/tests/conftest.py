@@ -6,6 +6,7 @@ import asyncio
 import tempfile
 from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -190,7 +191,7 @@ def create_test_jwt_token(
 
 def make_container(**services):
     """Create a lightweight container-like object for tests."""
-    return type("Container", (), services)()
+    return SimpleNamespace(**services)
 
 
 def make_container_factory(**services):
