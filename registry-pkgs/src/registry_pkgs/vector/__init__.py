@@ -6,13 +6,13 @@ from .enum.exceptions import DependencyMissingError, UnsupportedBackendError
 from .exceptions import AdapterError, ConfigurationError, RepositoryError, ValidationError
 from .protocols import VectorStorable
 from .repository import Repository
-from .client import DatabaseClient, initialize_database
+from .client import DatabaseClient, create_database_client
 from .repositories.mcp_server_repository import MCPServerRepository
 from .adapters.create import embedding, vector_store
 
 __all__ = [
     "DatabaseClient",
-    "initialize_database",
+    "create_database_client",
     "BackendConfig",
     "VectorStoreType",
     "SearchType",

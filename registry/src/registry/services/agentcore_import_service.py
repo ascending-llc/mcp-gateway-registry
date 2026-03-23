@@ -39,34 +39,31 @@ class AgentCoreImportService:
         acl_service_instance: ACLService,
         server_service: ServerServiceV1,
         user_service_instance: UserService,
+        mcp_server_repo: MCPServerRepository,
+        a2a_agent_repo: A2AAgentRepository,
         federation_client: AgentCoreFederationClient | None = None,
         agentcore_client_provider: AgentCoreClientProvider | None = None,
         runtime_invoker: AgentCoreRuntimeInvoker | None = None,
-        mcp_server_repo: MCPServerRepository | None = None,
-        a2a_agent_repo: A2AAgentRepository | None = None,
     ):
+        self.acl_service = acl_service_instance
+        self.server_service = server_service
+        self.user_service = user_service_instance
+        self.mcp_server_repo = mcp_server_repo
+        self.a2a_agent_repo = a2a_agent_repo
+
         default_region = settings.aws_region or "us-east-1"
         client_provider = agentcore_client_provider or AgentCoreClientProvider(default_region=default_region)
         invoker = runtime_invoker or AgentCoreRuntimeInvoker(
             default_region=client_provider.default_region,
             get_runtime_client=client_provider.get_runtime_client,
             get_runtime_credentials_provider=client_provider.get_runtime_credentials_provider,
-            extract_region_from_arn=AgentCoreFederationClient._extract_region_from_arn,
+            extract_region_from_arn=AgentCoreFederationClient.extract_region_from_arn,
         )
         self.federation_client = federation_client or AgentCoreFederationClient(
             region=client_provider.default_region,
             client_provider=client_provider,
             runtime_invoker=invoker,
         )
-        self.acl_service = acl_service_instance
-        self.server_service = server_service
-        self.user_service = user_service_instance
-        if mcp_server_repo is None:
-            raise ValueError("mcp_server_repo is required")
-        if a2a_agent_repo is None:
-            raise ValueError("a2a_agent_repo is required")
-        self.mcp_server_repo = mcp_server_repo
-        self.a2a_agent_repo = a2a_agent_repo
 
     async def import_from_runtime(
         self,

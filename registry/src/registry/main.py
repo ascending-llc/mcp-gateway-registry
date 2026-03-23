@@ -7,9 +7,9 @@ import uvicorn
 from fastapi import FastAPI
 
 from registry_pkgs.database import close_mongodb, init_mongodb
-from registry_pkgs.database.redis_client import close_redis, init_redis
+from registry_pkgs.database.redis_client import close_redis_client, create_redis_client
 from registry_pkgs.telemetry import setup_metrics
-from registry_pkgs.vector.client import initialize_database
+from registry_pkgs.vector.client import create_database_client
 
 from .app_factory import create_app
 from .container import RegistryContainer
@@ -21,78 +21,105 @@ app: FastAPI
 
 
 def _get_current_container() -> RegistryContainer | None:
+    """Return the app-scoped dependency container for route dependencies and MCP tools."""
     return getattr(app.state, "container", None)
+
+
+def _get_gateway_mcp_app(app: FastAPI):
+    """Resolve the mounted MCP gateway from app state, with a module-level fallback for tests."""
+    return getattr(app.state, "gateway_mcp_app", gateway_mcp_app)
+
+
+class _RuntimeResources:
+    """Keep track of infrastructure clients that must be closed during shutdown."""
+
+    def __init__(self):
+        self.db_client = None
+        self.redis_client = None
+
+
+def _initialize_telemetry() -> None:
+    """Best-effort telemetry setup that should not block the application from starting."""
+    logger.info("Initializing telemetry")
+    try:
+        setup_metrics("mcp-gateway-registry", settings.telemetry_config)
+    except Exception as exc:
+        logger.warning("Failed to initialize telemetry: %s", exc)
+
+
+async def _startup_container(app: FastAPI, resources: _RuntimeResources) -> RegistryContainer:
+    """Create infra clients, build the registry container, and expose it on app.state."""
+    logger.info("Initializing MongoDB connection")
+    await init_mongodb(settings.mongo_config)
+
+    logger.info("Initializing Redis connection")
+    resources.redis_client = create_redis_client(settings.redis_config)
+
+    logger.info("Initializing vector database client")
+    resources.db_client = create_database_client(settings.vector_backend_config)
+
+    container = RegistryContainer(
+        settings=settings,
+        db_client=resources.db_client,
+        redis_client=resources.redis_client,
+    )
+    app.state.container = container
+    await container.startup()
+    return container
+
+
+async def _shutdown_container(app: FastAPI, resources: _RuntimeResources) -> None:
+    """Shutdown app-scoped services before tearing down the underlying infra clients."""
+    container = getattr(app.state, "container", None)
+    if container is not None:
+        await container.shutdown()
+        del app.state.container
+
+    logger.info("Closing Redis connection")
+    close_redis_client(resources.redis_client)
+
+    if resources.db_client is not None:
+        logger.info("Closing vector database client")
+        resources.db_client.close()
+
+    logger.info("Closing MongoDB connection")
+    await close_mongodb()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application startup and shutdown lifecycle management."""
-    # Configure logging first before any other operations
+    """Own the full application lifecycle around one app-scoped dependency container."""
     settings.configure_logging()
-
-    logger.info("🚀 Starting MCP Gateway Registry...")
+    logger.info("Starting MCP Gateway Registry")
+    resources = _RuntimeResources()
 
     try:
-        logger.info("🔭 Initializing Telemetry...")
-        try:
-            setup_metrics("mcp-gateway-registry", settings.telemetry_config)
-        except Exception as e:
-            logger.warning(f"Failed to initialize telemetry: {e}")
-
-        # Initialize MongoDB connection first
-        logger.info("🗄️  Initializing MongoDB connection...")
-        await init_mongodb(settings.mongo_config)
-        logger.info("✅ MongoDB connection established")
-
-        # Initialize Redis connection
-        logger.info("🔴 Initializing Redis connection...")
-        await init_redis(settings.redis_config)
-        logger.info("✅ Redis connection established")
-
-        logger.info("🧭 Initializing vector database client...")
-        initialize_database(settings.vector_backend_config)
-
-        container = RegistryContainer(settings=settings)
-        app.state.container = container
-        await container.startup()
-
-        logger.info("✅ All services initialized successfully!")
-
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize services: {e}", exc_info=True)
+        _initialize_telemetry()
+        await _startup_container(app, resources)
+        logger.info("Application startup completed")
+    except Exception as exc:
+        logger.error("Failed to initialize services: %s", exc, exc_info=True)
         raise
 
-    async with gateway_mcp_app.session_manager.run():
-        # Application is ready
+    async with _get_gateway_mcp_app(app).session_manager.run():
         yield
 
-    # Shutdown tasks
-    logger.info("🔄 Shutting down MCP Gateway Registry...")
+    logger.info("Shutting down MCP Gateway Registry")
     try:
-        # Shutdown services gracefully
-        container = getattr(app.state, "container", None)
-        if container is not None:
-            await container.shutdown()
-            del app.state.container
-
-        # Close Redis connection
-        logger.info("🔴 Closing Redis connection...")
-        await close_redis()
-
-        # Close MongoDB connection
-        logger.info("🗄️  Closing MongoDB connection...")
-        await close_mongodb()
-
-        logger.info("✅ Shutdown completed successfully!")
-    except Exception as e:
-        logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
+        await _shutdown_container(app, resources)
+        logger.info("Application shutdown completed")
+    except Exception as exc:
+        logger.error("Error during shutdown: %s", exc, exc_info=True)
 
 
+# The gateway is created once here, but it resolves the active container lazily
+# through ``_get_current_container`` so each request uses the current app state.
 gateway_mcp_app = create_gateway_mcp_app(container_provider=_get_current_container)
+# The FastAPI app is assembled at module load so ASGI servers can import ``app``
+# directly while still keeping the startup and shutdown wiring in ``lifespan``.
 app = create_app(lifespan=lifespan, gateway_mcp_app=gateway_mcp_app)
 
 if __name__ == "__main__":
-    # Configure logging before starting server
     settings.configure_logging()
 
     uvicorn.run(

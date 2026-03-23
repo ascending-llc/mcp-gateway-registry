@@ -25,7 +25,7 @@ class TestHealthRoutes:
         TODO: Update WebSocket authentication to support JWT tokens, then update this fixture.
         WebSocket route currently uses itsdangerous signer, not JWT validation.
         """
-        from registry.auth.dependencies import signer
+        from registry.auth.dependencies import build_signer
         from registry.core.config import settings
 
         # WebSocket authentication still uses itsdangerous signer
@@ -36,7 +36,7 @@ class TestHealthRoutes:
             "groups": ["registry-admin"],
         }
 
-        return signer.dumps(session_data)
+        return build_signer().dumps(session_data)
 
     @pytest.fixture
     def mock_websocket(self, mock_session_cookie):

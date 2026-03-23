@@ -8,7 +8,7 @@ Eliminates hardcoded special-case handling scattered across the codebase.
 import logging
 from abc import ABC, abstractmethod
 
-from .mcp_config import mcp_config
+from .mcp_config import MCPClientConfig
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +50,9 @@ class AnthropicRegistryStrategy(ServerBehaviorStrategy):
         instance_id=default query parameter.
         """
         if "?" not in url:
-            modified_url = f"{url}?{mcp_config.ANTHROPIC_QUERY_PARAM}"
+            modified_url = f"{url}?{MCPClientConfig.ANTHROPIC_QUERY_PARAM}"
         elif "instance_id=" not in url:
-            modified_url = f"{url}&{mcp_config.ANTHROPIC_QUERY_PARAM}"
+            modified_url = f"{url}&{MCPClientConfig.ANTHROPIC_QUERY_PARAM}"
         else:
             modified_url = url
 
@@ -82,7 +82,7 @@ def get_server_strategy(server_info: dict) -> ServerBehaviorStrategy:
     tags = server_info.get("tags", [])
 
     # Check for Anthropic registry servers
-    if mcp_config.ANTHROPIC_TAG in tags:
+    if MCPClientConfig.ANTHROPIC_TAG in tags:
         logger.debug("Using AnthropicRegistryStrategy for server")
         return AnthropicRegistryStrategy()
 

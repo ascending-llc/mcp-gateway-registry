@@ -19,13 +19,12 @@ from authlib.oauth2.rfc8414 import AuthorizationServerMetadata
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
-
-from registry_pkgs.database.redis_client import get_redis_client
+from redis import Redis
 
 from .config import settings
 
 # Internal imports
-from .mcp_config import mcp_config
+from .mcp_config import MCPClientConfig
 from .server_strategies import get_server_strategy
 
 logger = logging.getLogger(__name__)
@@ -58,9 +57,8 @@ def _format_exception_group(error: ExceptionGroup) -> str:
     return " | ".join(details)
 
 
-def get_session(session_key: str) -> tuple[str, bool] | None:
+def _get_session(session_key: str, redis_client: Redis | None = None) -> tuple[str, bool] | None:
     """Get session ID and initialization status from Redis if not expired."""
-    redis_client = get_redis_client()
     if not redis_client:
         logger.warning("Redis not available, session management disabled")
         return None
@@ -86,8 +84,12 @@ def get_session(session_key: str) -> tuple[str, bool] | None:
         return None
 
 
-def store_session(session_key: str, session_id: str, initialized: bool = False) -> None:
-    redis_client = get_redis_client()
+def _store_session(
+    session_key: str,
+    session_id: str,
+    initialized: bool = False,
+    redis_client: Redis | None = None,
+) -> None:
     """Store session ID with TTL and initialization status in Redis."""
     if not redis_client:
         logger.warning("Redis not available, session not stored")
@@ -109,8 +111,7 @@ def store_session(session_key: str, session_id: str, initialized: bool = False) 
         logger.error(f"Failed to store session in Redis: {e}")
 
 
-def clear_session(session_key: str) -> None:
-    redis_client = get_redis_client()
+def _clear_session(session_key: str, redis_client: Redis | None = None) -> None:
     """Clear/disconnect a session from Redis."""
     if not redis_client:
         logger.warning("Redis not available, session not cleared")
@@ -149,7 +150,7 @@ async def initialize_mcp(
 
     # Use provided headers or default MCP headers
     if headers is None:
-        headers = mcp_config.DEFAULT_HEADERS.copy()
+        headers = MCPClientConfig.DEFAULT_HEADERS.copy()
 
     # Prepare URL based on transport type
     strategy = get_server_strategy({"type": transport_type})
@@ -164,7 +165,7 @@ async def initialize_mcp(
                 async with streamable_http_client(url=mcp_url, http_client=http_client) as (read, write, _):
                     async with ClientSession(read, write) as session:
                         # Perform MCP initialization
-                        init_result = await asyncio.wait_for(session.initialize(), timeout=mcp_config.INIT_TIMEOUT)
+                        init_result = await asyncio.wait_for(session.initialize(), timeout=MCPClientConfig.INIT_TIMEOUT)
                         logger.info(f"MCP initialization successful for {target_url}")
                         return init_result
 
@@ -172,7 +173,7 @@ async def initialize_mcp(
                 async with sse_client(mcp_url, http_client=http_client) as (read, write):
                     async with ClientSession(read, write) as session:
                         # Perform MCP initialization
-                        init_result = await asyncio.wait_for(session.initialize(), timeout=mcp_config.INIT_TIMEOUT)
+                        init_result = await asyncio.wait_for(session.initialize(), timeout=MCPClientConfig.INIT_TIMEOUT)
                         logger.info(f"MCP initialization successful for {target_url}")
                         return init_result
             else:
@@ -222,7 +223,7 @@ async def perform_health_check(
         return False, "No URL provided", None, None
 
     # Skip health checks for stdio transport
-    if transport == mcp_config.TRANSPORT_STDIO:
+    if transport == MCPClientConfig.TRANSPORT_STDIO:
         logger.info(f"Skipping health check for stdio transport: {url}")
         return True, "healthy (stdio transport skipped)", None, None
 
@@ -257,7 +258,7 @@ async def perform_health_check(
     # Application logic: Interpret the initialization result
 
     # Check for 401/403 Unauthorized/Forbidden - server is healthy but requires auth
-    if http_status_code in mcp_config.AUTH_REQUIRED_STATUS_CODES:
+    if http_status_code in MCPClientConfig.AUTH_REQUIRED_STATUS_CODES:
         logger.info(
             f"Health check passed for {url}: Connected successfully, initialize requires authentication ({http_status_code})"
         )
@@ -287,8 +288,12 @@ async def perform_health_check(
         return False, "unhealthy: invalid initialize response", response_time_ms, None
 
 
-async def initialize_mcp_session(
-    target_url: str, headers: dict[str, str], session_key: str, transport_type: str = "streamable-http"
+async def _initialize_mcp_session(
+    target_url: str,
+    headers: dict[str, str],
+    session_key: str,
+    transport_type: str = "streamable-http",
+    redis_client: Redis | None = None,
 ) -> str | None:
     """
     Perform MCP initialization handshake using raw JSON-RPC.
@@ -352,14 +357,14 @@ async def initialize_mcp_session(
             logger.info(f"✅ MCP session fully initialized: {session_id}")
 
             # Store session as initialized
-            store_session(session_key, session_id, initialized=True)
+            _store_session(session_key, session_id, initialized=True, redis_client=redis_client)
 
             return session_id
 
     except Exception as e:
         logger.error(f"❌ Failed to initialize MCP session: {e}", exc_info=True)
         # Clear any partial session state
-        clear_session(session_key)
+        _clear_session(session_key, redis_client=redis_client)
         return None
 
 
@@ -467,12 +472,12 @@ async def detect_server_transport_aware(base_url: str, server_info: dict = None)
         The preferred transport type (uses mcp_config constants)
     """
     # If URL already has a transport endpoint, detect from it
-    if base_url.endswith(mcp_config.ENDPOINT_SSE) or mcp_config.ENDPOINT_SSE in base_url:
+    if base_url.endswith(MCPClientConfig.ENDPOINT_SSE) or MCPClientConfig.ENDPOINT_SSE in base_url:
         logger.debug(f"Server URL {base_url} already has SSE endpoint")
-        return mcp_config.TRANSPORT_SSE
-    elif base_url.endswith(mcp_config.ENDPOINT_MCP) or mcp_config.ENDPOINT_MCP in base_url:
+        return MCPClientConfig.TRANSPORT_SSE
+    elif base_url.endswith(MCPClientConfig.ENDPOINT_MCP) or MCPClientConfig.ENDPOINT_MCP in base_url:
         logger.debug(f"Server URL {base_url} already has MCP endpoint")
-        return mcp_config.TRANSPORT_HTTP
+        return MCPClientConfig.TRANSPORT_HTTP
 
     # Use server configuration if available
     if server_info:
@@ -491,34 +496,34 @@ async def detect_server_transport(base_url: str) -> str:
     Returns the preferred transport type.
     """
     # If URL already has a transport endpoint, detect from it
-    if base_url.endswith(mcp_config.ENDPOINT_SSE) or mcp_config.ENDPOINT_SSE in base_url:
+    if base_url.endswith(MCPClientConfig.ENDPOINT_SSE) or MCPClientConfig.ENDPOINT_SSE in base_url:
         logger.debug(f"Server URL {base_url} already has SSE endpoint")
-        return mcp_config.TRANSPORT_SSE
-    elif base_url.endswith(mcp_config.ENDPOINT_MCP) or mcp_config.ENDPOINT_MCP in base_url:
+        return MCPClientConfig.TRANSPORT_SSE
+    elif base_url.endswith(MCPClientConfig.ENDPOINT_MCP) or MCPClientConfig.ENDPOINT_MCP in base_url:
         logger.debug(f"Server URL {base_url} already has MCP endpoint")
-        return mcp_config.TRANSPORT_HTTP
+        return MCPClientConfig.TRANSPORT_HTTP
 
     # Test streamable-http first (default preference)
     try:
-        mcp_url = base_url.rstrip("/") + mcp_config.ENDPOINT_MCP + "/"
+        mcp_url = base_url.rstrip("/") + MCPClientConfig.ENDPOINT_MCP + "/"
         async with streamable_http_client(url=mcp_url):
             logger.debug(f"Server at {base_url} supports streamable-http transport")
-            return mcp_config.TRANSPORT_HTTP
+            return MCPClientConfig.TRANSPORT_HTTP
     except Exception as e:
         logger.debug(f"Streamable-HTTP test failed for {base_url}: {e}")
 
     # Fallback to SSE
     try:
-        sse_url = base_url.rstrip("/") + mcp_config.ENDPOINT_SSE
+        sse_url = base_url.rstrip("/") + MCPClientConfig.ENDPOINT_SSE
         async with sse_client(sse_url):
             logger.debug(f"Server at {base_url} supports SSE transport")
-            return mcp_config.TRANSPORT_SSE
+            return MCPClientConfig.TRANSPORT_SSE
     except Exception as e:
         logger.debug(f"SSE test failed for {base_url}: {e}")
 
     # Default to streamable-http if detection fails
     logger.warning(f"Could not detect transport for {base_url}, defaulting to streamable-http")
-    return mcp_config.TRANSPORT_HTTP
+    return MCPClientConfig.TRANSPORT_HTTP
 
 
 async def get_tools_from_server_with_transport(base_url: str, transport: str = "auto") -> list[dict] | None:
@@ -601,7 +606,7 @@ async def _get_from_streamable_http(
     """
     # Use provided headers or default MCP headers
     if headers is None:
-        headers = mcp_config.DEFAULT_HEADERS.copy()
+        headers = MCPClientConfig.DEFAULT_HEADERS.copy()
 
     # Use the URL as provided - it should contain everything needed
     mcp_url = base_url
@@ -619,8 +624,8 @@ async def _get_from_streamable_http(
         async with httpx.AsyncClient(headers=headers, timeout=30.0, auth=httpx_auth) as http_client:
             async with streamable_http_client(url=mcp_url, http_client=http_client) as (read, write, get_session_id):
                 async with ClientSession(read, write) as session:
-                    init_result = await asyncio.wait_for(session.initialize(), timeout=mcp_config.INIT_TIMEOUT)
-                    tools_response = await asyncio.wait_for(session.list_tools(), timeout=mcp_config.TOOLS_TIMEOUT)
+                    init_result = await asyncio.wait_for(session.initialize(), timeout=MCPClientConfig.INIT_TIMEOUT)
+                    tools_response = await asyncio.wait_for(session.list_tools(), timeout=MCPClientConfig.TOOLS_TIMEOUT)
 
                     # Extract capabilities if requested
                     capabilities = None
@@ -642,7 +647,7 @@ async def _get_from_streamable_http(
                     if include_resources:
                         try:
                             resources_response = await asyncio.wait_for(
-                                session.list_resources(), timeout=mcp_config.TOOLS_TIMEOUT
+                                session.list_resources(), timeout=MCPClientConfig.TOOLS_TIMEOUT
                             )
                             resource_list = _extract_resource_details(resources_response)
                         except Exception as e:
@@ -654,7 +659,7 @@ async def _get_from_streamable_http(
                     if include_prompts:
                         try:
                             prompts_response = await asyncio.wait_for(
-                                session.list_prompts(), timeout=mcp_config.TOOLS_TIMEOUT
+                                session.list_prompts(), timeout=MCPClientConfig.TOOLS_TIMEOUT
                             )
                             prompt_list = _extract_prompt_details(prompts_response)
                         except Exception as e:
@@ -725,7 +730,7 @@ async def _get_from_sse(
     """
     # Use provided headers or default MCP headers
     if headers is None:
-        headers = mcp_config.DEFAULT_HEADERS.copy()
+        headers = MCPClientConfig.DEFAULT_HEADERS.copy()
 
     # Use the URL as provided - it should contain everything needed
     sse_url = base_url
@@ -749,9 +754,9 @@ async def _get_from_sse(
         original_request = httpx.AsyncClient.request
 
         async def patched_request(self, method, url, **kwargs):
-            if isinstance(url, str) and mcp_config.ENDPOINT_MESSAGES in url:
+            if isinstance(url, str) and MCPClientConfig.ENDPOINT_MESSAGES in url:
                 url = normalize_sse_endpoint_url_for_request(url)
-            elif hasattr(url, "__str__") and mcp_config.ENDPOINT_MESSAGES in str(url):
+            elif hasattr(url, "__str__") and MCPClientConfig.ENDPOINT_MESSAGES in str(url):
                 url = normalize_sse_endpoint_url_for_request(str(url))
             return await original_request(self, method, url, **kwargs)
 
@@ -762,8 +767,10 @@ async def _get_from_sse(
             async with httpx.AsyncClient(headers=headers, timeout=30.0, auth=httpx_auth) as http_client:
                 async with sse_client(mcp_server_url, http_client=http_client) as (read, write):
                     async with ClientSession(read, write, sampling_callback=None) as session:
-                        init_result = await asyncio.wait_for(session.initialize(), timeout=mcp_config.INIT_TIMEOUT)
-                        tools_response = await asyncio.wait_for(session.list_tools(), timeout=mcp_config.TOOLS_TIMEOUT)
+                        init_result = await asyncio.wait_for(session.initialize(), timeout=MCPClientConfig.INIT_TIMEOUT)
+                        tools_response = await asyncio.wait_for(
+                            session.list_tools(), timeout=MCPClientConfig.TOOLS_TIMEOUT
+                        )
 
                         # Extract capabilities if requested
                         capabilities = None
@@ -787,7 +794,7 @@ async def _get_from_sse(
                         if include_resources:
                             try:
                                 resources_response = await asyncio.wait_for(
-                                    session.list_resources(), timeout=mcp_config.TOOLS_TIMEOUT
+                                    session.list_resources(), timeout=MCPClientConfig.TOOLS_TIMEOUT
                                 )
                                 resource_list = _extract_resource_details(resources_response)
                             except Exception as e:
@@ -799,7 +806,7 @@ async def _get_from_sse(
                         if include_prompts:
                             try:
                                 prompts_response = await asyncio.wait_for(
-                                    session.list_prompts(), timeout=mcp_config.TOOLS_TIMEOUT
+                                    session.list_prompts(), timeout=MCPClientConfig.TOOLS_TIMEOUT
                                 )
                                 prompt_list = _extract_prompt_details(prompts_response)
                             except Exception as e:
@@ -1084,7 +1091,7 @@ async def get_tools_and_capabilities_from_server(
     logger.info(f"Attempting to connect to MCP server at {base_url} using {transport_type} transport...")
 
     try:
-        if transport_type == mcp_config.TRANSPORT_HTTP or transport_type == "streamable-http":
+        if transport_type == MCPClientConfig.TRANSPORT_HTTP or transport_type == "streamable-http":
             return await _get_from_streamable_http(
                 base_url,
                 headers,
@@ -1094,7 +1101,7 @@ async def get_tools_and_capabilities_from_server(
                 include_prompts=include_prompts,
                 httpx_auth=httpx_auth,
             )
-        elif transport_type == mcp_config.TRANSPORT_SSE or transport_type == "sse":
+        elif transport_type == MCPClientConfig.TRANSPORT_SSE or transport_type == "sse":
             return await _get_from_sse(
                 base_url,
                 headers,
@@ -1213,7 +1220,34 @@ async def get_oauth_metadata_from_server(base_url: str) -> dict | None:
 
 
 class MCPClientService:
-    """Service wrapper for the MCP client function to maintain compatibility."""
+    """Service wrapper for MCP client helpers and session persistence."""
+
+    def __init__(self, redis_client: Redis | None = None):
+        self.redis_client = redis_client
+
+    def get_session(self, session_key: str) -> tuple[str, bool] | None:
+        return _get_session(session_key, redis_client=self.redis_client)
+
+    def store_session(self, session_key: str, session_id: str, initialized: bool = False) -> None:
+        _store_session(session_key, session_id, initialized=initialized, redis_client=self.redis_client)
+
+    def clear_session(self, session_key: str) -> None:
+        _clear_session(session_key, redis_client=self.redis_client)
+
+    async def initialize_mcp_session(
+        self,
+        target_url: str,
+        headers: dict[str, str],
+        session_key: str,
+        transport_type: str = "streamable-http",
+    ) -> str | None:
+        return await _initialize_mcp_session(
+            target_url,
+            headers,
+            session_key,
+            transport_type,
+            redis_client=self.redis_client,
+        )
 
     async def get_tools_from_server_with_server_info(
         self, base_url: str, server_info: dict = None

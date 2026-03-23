@@ -8,7 +8,6 @@ from typing import Annotated
 import httpx
 from fastapi import APIRouter, Cookie, Depends, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
-from itsdangerous import URLSafeTimedSerializer
 
 from registry_pkgs.core.scopes import map_groups_to_scopes
 
@@ -20,10 +19,6 @@ from ..utils.crypto_utils import generate_access_token, generate_token_pair, ver
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# JWT / signer configuration
-SECRET_KEY = settings.secret_key
-signer = URLSafeTimedSerializer(SECRET_KEY)
 
 
 async def get_oauth2_providers():

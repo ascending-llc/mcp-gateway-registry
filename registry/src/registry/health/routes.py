@@ -2,16 +2,14 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import BadSignature, SignatureExpired
 
+from ..auth.dependencies import build_signer
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Initialize session signer for WebSocket authentication
-signer = URLSafeTimedSerializer(settings.secret_key)
 
 
 @router.websocket("/ws/health_status")
@@ -54,6 +52,7 @@ async def websocket_endpoint(websocket: WebSocket):
         if session_cookie:
             try:
                 # Validate session
+                signer = build_signer()
                 session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
                 username = session_data.get("username")
                 if username:

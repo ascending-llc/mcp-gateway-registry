@@ -33,11 +33,13 @@ class TestMainApplication:
             patch("registry.main.RegistryContainer", return_value=mock_container) as mock_container_cls,
             patch("registry.main.init_mongodb", new=AsyncMock()) as mock_init_mongodb,
             patch("registry.main.close_mongodb", new=AsyncMock()) as mock_close_mongodb,
-            patch("registry.main.init_redis", new=AsyncMock()) as mock_init_redis,
-            patch("registry.main.close_redis", new=AsyncMock()) as mock_close_redis,
-            patch("registry.main.initialize_database") as mock_initialize_database,
-            patch("registry.main.gateway_mcp_app") as mock_gateway_mcp_app,
+            patch("registry.main.create_redis_client") as mock_create_redis_client,
+            patch("registry.main.close_redis_client") as mock_close_redis_client,
+            patch("registry.main.create_database_client") as mock_create_database_client,
         ):
+            mock_create_redis_client.return_value = Mock()
+            mock_create_database_client.return_value = Mock()
+            mock_gateway_mcp_app = Mock()
             mock_gateway_mcp_app.session_manager.run.return_value = _mock_async_context_manager()
 
             yield {
@@ -45,9 +47,9 @@ class TestMainApplication:
                 "container_cls": mock_container_cls,
                 "init_mongodb": mock_init_mongodb,
                 "close_mongodb": mock_close_mongodb,
-                "init_redis": mock_init_redis,
-                "close_redis": mock_close_redis,
-                "initialize_database": mock_initialize_database,
+                "create_redis_client": mock_create_redis_client,
+                "close_redis_client": mock_close_redis_client,
+                "create_database_client": mock_create_database_client,
                 "gateway_mcp_app": mock_gateway_mcp_app,
             }
 
@@ -55,14 +57,19 @@ class TestMainApplication:
     async def test_lifespan_startup_success(self, mock_services):
         """Test successful application startup."""
         test_app = FastAPI()
+        test_app.state.gateway_mcp_app = mock_services["gateway_mcp_app"]
 
         async with lifespan(test_app):
             assert test_app.state.container is mock_services["container"]
 
         mock_services["init_mongodb"].assert_awaited_once_with(settings.mongo_config)
-        mock_services["init_redis"].assert_awaited_once_with(settings.redis_config)
-        mock_services["initialize_database"].assert_called_once_with(settings.vector_backend_config)
-        mock_services["container_cls"].assert_called_once_with(settings=settings)
+        mock_services["create_redis_client"].assert_called_once_with(settings.redis_config)
+        mock_services["create_database_client"].assert_called_once_with(settings.vector_backend_config)
+        mock_services["container_cls"].assert_called_once_with(
+            settings=settings,
+            db_client=mock_services["create_database_client"].return_value,
+            redis_client=mock_services["create_redis_client"].return_value,
+        )
         mock_services["container"].startup.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -70,6 +77,7 @@ class TestMainApplication:
         """Container startup failures should bubble up."""
         mock_services["container"].startup.side_effect = Exception("container startup failed")
         test_app = FastAPI()
+        test_app.state.gateway_mcp_app = mock_services["gateway_mcp_app"]
 
         with pytest.raises(Exception, match="container startup failed"):
             async with lifespan(test_app):
@@ -79,12 +87,14 @@ class TestMainApplication:
     async def test_lifespan_shutdown_success(self, mock_services):
         """Test successful application shutdown."""
         test_app = FastAPI()
+        test_app.state.gateway_mcp_app = mock_services["gateway_mcp_app"]
 
         async with lifespan(test_app):
             pass
 
         mock_services["container"].shutdown.assert_awaited_once()
-        mock_services["close_redis"].assert_awaited_once()
+        mock_services["close_redis_client"].assert_called_once()
+        mock_services["create_database_client"].return_value.close.assert_called_once()
         mock_services["close_mongodb"].assert_awaited_once()
         assert not hasattr(test_app.state, "container")
 
@@ -93,11 +103,12 @@ class TestMainApplication:
         """Shutdown failures are swallowed and logged by lifespan."""
         mock_services["container"].shutdown.side_effect = Exception("shutdown failed")
         test_app = FastAPI()
+        test_app.state.gateway_mcp_app = mock_services["gateway_mcp_app"]
 
         async with lifespan(test_app):
             pass
 
-        mock_services["close_redis"].assert_not_awaited()
+        mock_services["close_redis_client"].assert_not_called()
         mock_services["close_mongodb"].assert_not_awaited()
 
     def test_app_configuration(self):

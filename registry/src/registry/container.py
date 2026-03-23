@@ -4,7 +4,9 @@ import logging
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from registry_pkgs.vector.client import DatabaseClient, get_db_client
+from redis import Redis
+
+from registry_pkgs.vector.client import DatabaseClient
 from registry_pkgs.vector.repositories.a2a_agent_repository import A2AAgentRepository
 from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
@@ -25,7 +27,6 @@ from .services.oauth.oauth_service import MCPOAuthService
 from .services.oauth.status_resolver import ConnectionStatusResolver
 from .services.oauth.token_service import TokenService
 from .services.search.base import VectorSearchService
-from .services.search.service import create_vector_search_service
 from .services.security_scanner import SecurityScannerService
 from .services.server_service import ServerServiceV1
 from .services.user_service import UserService
@@ -44,12 +45,11 @@ class RegistryContainer:
     ``app_factory.py``.
     """
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, db_client: DatabaseClient, redis_client: Redis | None):
+        """Store shared infra clients and expose lazily-built app-scoped services."""
         self.settings = settings
-
-    @cached_property
-    def db_client(self) -> DatabaseClient:
-        return get_db_client()
+        self.db_client = db_client
+        self.redis_client = redis_client
 
     @cached_property
     def mcp_server_repo(self) -> MCPServerRepository:
@@ -61,7 +61,7 @@ class RegistryContainer:
 
     @cached_property
     def mcp_client_service(self) -> MCPClientService:
-        return MCPClientService()
+        return MCPClientService(redis_client=self.redis_client)
 
     @cached_property
     def session_store(self) -> SessionStore:
@@ -69,7 +69,21 @@ class RegistryContainer:
 
     @cached_property
     def vector_service(self) -> VectorSearchService:
-        return create_vector_search_service(self.mcp_server_repo)
+        """Build the single vector-search implementation used by routes and MCP tools.
+
+        This property now owns the selection logic that used to live in
+        ``create_vector_search_service(...)``.
+        """
+        if self.settings.use_external_discovery:
+            from .services.search.external_service import ExternalVectorSearchService
+
+            logger.info("Initializing Weaviate-based vector search service for MCP tools")
+            return ExternalVectorSearchService(mcp_server_repo=self.mcp_server_repo)
+
+        from .services.search.embedded_service import EmbeddedFaissService
+
+        logger.info("Initializing embedded FAISS vector search service")
+        return EmbeddedFaissService(self.settings)
 
     @cached_property
     def health_service(self) -> HealthMonitoringService:
@@ -97,7 +111,7 @@ class RegistryContainer:
 
     @cached_property
     def flow_state_manager(self) -> FlowStateManager:
-        return FlowStateManager()
+        return FlowStateManager(redis_client=self.redis_client)
 
     @cached_property
     def oauth_service(self) -> MCPOAuthService:
@@ -159,7 +173,7 @@ class RegistryContainer:
         return AgentScannerService()
 
     async def startup(self) -> None:
-        """Warm root services managed by the registry container."""
+        """Warm services that need async initialization before the app can serve traffic."""
         logger.info("Initializing services via registry container...")
 
         logger.info("Initializing vector search service...")
@@ -183,10 +197,11 @@ class RegistryContainer:
         self._initialize_federation()
 
     async def shutdown(self) -> None:
-        """Shutdown managed root services."""
+        """Shutdown services that hold background tasks or external resources."""
         await self.health_service.shutdown()
 
     def _initialize_federation(self) -> None:
+        """Run optional federation sync on startup without failing the whole application."""
         federation_service = self.federation_service
         if federation_service.config.is_any_federation_enabled():
             logger.info("Federation enabled for: %s", ", ".join(federation_service.config.get_enabled_federations()))

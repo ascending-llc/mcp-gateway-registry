@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from registry.core.mcp_client import _get_from_sse, _get_from_streamable_http, get_tools_and_capabilities_from_server
+from registry.core.mcp_config import MCPClientConfig
 
 
 @pytest.mark.unit
@@ -243,11 +244,7 @@ class TestMCPClient:
         with (
             patch("registry.core.mcp_client.streamable_http_client") as mock_client,
             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
-            patch("registry.core.mcp_client.mcp_config") as mock_config,
         ):
-            # Mock default headers
-            mock_config.DEFAULT_HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
-
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
             mock_strategy.return_value = strategy
@@ -271,7 +268,7 @@ class TestMCPClient:
                     include_capabilities=False,
                 )
 
-            # Would verify default headers were used in actual httpx call
+            assert MCPClientConfig.DEFAULT_HEADERS["Accept"] == "application/json, text/event-stream"
 
     @pytest.mark.asyncio
     async def test_connection_timeout_returns_none(self, mock_headers):

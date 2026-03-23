@@ -31,7 +31,6 @@ from pydantic.networks import AnyUrl
 from ...auth.dependencies import UserContextDict
 from ...auth.oauth.flow_state_manager import FlowStateManager
 from ...auth.oauth.types import ClientBranding, StateMetadata
-from ...core.mcp_client import get_session, initialize_mcp_session
 from ...utils.otel_metrics import record_server_request
 from ..core.types import McpAppContext
 from ..exceptions import (
@@ -53,6 +52,10 @@ def _get_server_service(ctx: Context[ServerSession, McpAppContext]):
 
 def _get_session_store(ctx: Context[ServerSession, McpAppContext]):
     return ctx.request_context.lifespan_context.session_store
+
+
+def _get_mcp_client_service(ctx: Context[ServerSession, McpAppContext]):
+    return ctx.request_context.lifespan_context.mcp_client_service
 
 
 async def _downstream_tool_call(
@@ -299,7 +302,7 @@ async def execute_tool_impl(
         if requires_init:
             # Key format: "user_id:server_id" to track per-user, per-server sessions
             session_key = f"{user_id}:{server_id}"
-            session_info = get_session(session_key)
+            session_info = _get_mcp_client_service(ctx).get_session(session_key)
 
             if session_info:
                 # Existing session found - check if it's initialized
@@ -319,7 +322,9 @@ async def execute_tool_impl(
                 )
                 # Get transport type from server config (default to streamable-http)
                 transport_type = server.config.get("type", "streamable-http")
-                session_id = await initialize_mcp_session(target_url, init_headers, session_key, transport_type)
+                session_id = await _get_mcp_client_service(ctx).initialize_mcp_session(
+                    target_url, init_headers, session_key, transport_type
+                )
 
                 if session_id:
                     additional_headers["mcp-Session-Id"] = session_id
