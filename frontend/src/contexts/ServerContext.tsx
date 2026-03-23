@@ -199,6 +199,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
         protocolVersion: agentInfo.protocolVersion || '',
         tags: agentInfo.tags || [],
         numSkills: agentInfo.numSkills || 0,
+        skills: agentInfo.skills || [],
         enabled:
           agentInfo.is_enabled !== undefined
             ? agentInfo.is_enabled

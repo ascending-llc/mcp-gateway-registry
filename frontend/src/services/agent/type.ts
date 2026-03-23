@@ -23,6 +23,7 @@ export type AgentItem = {
   protocolVersion: string;
   tags: string[];
   numSkills: number;
+  skills?: AgentSkillItem[];
   enabled: boolean;
   status: AgentStatus;
   permissions: AgentPermissionType;

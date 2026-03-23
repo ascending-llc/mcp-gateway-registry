@@ -1,6 +1,6 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { useEffect, useRef, useState } from 'react';
 import { JarvisEmbed } from 'jarvis-embed';
+import { useEffect, useRef, useState } from 'react';
 
 import SERVICES from '@/services';
 
@@ -32,8 +32,8 @@ const McpPlaygroundModal = ({ serverPath, onClose }: Props) => {
     let destroyed = false;
 
     SERVICES.AUTH.getToken({ expiresInHours: 1, description: 'Jarvis MCP test' })
-      .then((result) => {
-        if (destroyed ) return;
+      .then(result => {
+        if (destroyed) return;
 
         const token = result.tokenData?.accessToken;
         if (!token) {
@@ -54,7 +54,7 @@ const McpPlaygroundModal = ({ serverPath, onClose }: Props) => {
         embed.setMcpServers([serverName]);
         jarvisRef.current = embed;
       })
-      .catch((err) => {
+      .catch(err => {
         console.error('[McpPlaygroundModal] getToken failed:', err);
         setError('Failed to authenticate with Jarvis');
       });
