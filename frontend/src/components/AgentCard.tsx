@@ -181,7 +181,10 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent }) => {
                     </div>
                   </button>
                 ) : (
-                  <div className='flex items-center gap-1.5 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded text-xs' title='Skills count'>
+                  <div
+                    className='flex items-center gap-1.5 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded text-xs'
+                    title='Skills count'
+                  >
                     <div className='p-1 bg-blue-50 dark:bg-blue-900/30 rounded'>
                       <WrenchScrewdriverIcon className='h-3.5 w-3.5' />
                     </div>
