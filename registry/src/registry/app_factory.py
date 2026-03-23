@@ -98,7 +98,7 @@ def _build_openapi_factory(app: FastAPI):
 
         openapi_schema = get_openapi(
             title=app.title,
-            version=app.build_version,
+            version=app.version,
             description=app.description,
             routes=app.routes,
         )
