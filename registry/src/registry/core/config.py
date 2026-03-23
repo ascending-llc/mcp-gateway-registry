@@ -163,7 +163,7 @@ class Settings(BaseSettings):
 
     # ==================== Logging ====================
     log_level: str = "INFO"
-    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+    log_format: str = "%(asctime)s,p%(process)s,{%(name)s:%(lineno)d},%(levelname)s,%(message)s"
 
     # ==================== Encryption ====================
     creds_key: str | None = None

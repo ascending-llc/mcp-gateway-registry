@@ -81,7 +81,7 @@ class AuthSettings(BaseSettings):
     log_level: str = (
         "INFO"  # Default to INFO, can be overridden by LOG_LEVEL env var (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     )
-    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+    log_format: str = "%(asctime)s,p%(process)s,{%(name)s:%(lineno)d},%(levelname)s,%(message)s"
 
     # ==================== Metrics Settings ====================
     metrics_service_url: str = "http://localhost:8890"
