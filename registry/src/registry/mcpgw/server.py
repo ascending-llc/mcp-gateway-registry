@@ -96,6 +96,7 @@ def create_mcp_app(*, container_provider: Callable[[], "RegistryContainer | None
                 proxy_client=proxy_client,
                 server_service=container.server_service,
                 oauth_service=container.oauth_service,
+                session_store=container.session_store,
             )
 
     # Configure transport security settings from environment variables

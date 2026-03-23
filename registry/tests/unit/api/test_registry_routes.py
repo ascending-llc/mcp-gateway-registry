@@ -14,8 +14,10 @@ from registry.main import app
 from registry.services.server_service import ServerServiceV1
 
 # Alias for tests
-server_service = ServerServiceV1(user_service=Mock(), token_service=Mock(), oauth_service=Mock())
-health_service = HealthMonitoringService(server_service=Mock())
+server_service = ServerServiceV1(
+    user_service=Mock(), token_service=Mock(), oauth_service=Mock(), mcp_server_repo=Mock()
+)
+health_service = HealthMonitoringService(server_service=Mock(), mcp_client_service=Mock())
 
 
 @pytest.fixture

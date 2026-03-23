@@ -7,7 +7,7 @@ from .exceptions import AdapterError, ConfigurationError, RepositoryError, Valid
 from .protocols import VectorStorable
 from .repository import Repository
 from .client import DatabaseClient, initialize_database
-from .repositories.mcp_server_repository import MCPServerRepository, create_mcp_server_repository
+from .repositories.mcp_server_repository import MCPServerRepository
 from .adapters.create import embedding, vector_store
 
 __all__ = [
@@ -28,5 +28,4 @@ __all__ = [
     "Repository",
     "VectorStorable",
     "MCPServerRepository",
-    "create_mcp_server_repository",
 ]

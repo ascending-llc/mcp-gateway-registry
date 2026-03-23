@@ -12,8 +12,7 @@ from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRep
 
 from ...auth.dependencies import CurrentUser
 from ...core.telemetry_decorators import track_registry_operation
-from ...deps import get_mcp_server_repo as get_mcp_server_repo_dep
-from ...deps import get_server_service, get_vector_service
+from ...deps import get_mcp_server_repo, get_server_service, get_vector_service
 from ...schemas.case_conversion import APIBaseModel
 from ...services.search.base import VectorSearchService
 from ...services.server_service import ServerServiceV1
@@ -373,7 +372,7 @@ async def search_servers(
     search: SearchRequest,
     user_context: CurrentUser,
     server_service: ServerServiceV1 = Depends(get_server_service),
-    mcp_server_repo: MCPServerRepository = Depends(get_mcp_server_repo_dep),
+    mcp_server_repo: MCPServerRepository = Depends(get_mcp_server_repo),
 ):
     """
     Search for MCP servers with their tools, resources, and prompts.

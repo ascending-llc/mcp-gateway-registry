@@ -2,9 +2,8 @@ import logging
 from typing import Any
 
 from registry_pkgs.models.extended_mcp_server import ExtendedMCPServer
-from registry_pkgs.vector.client import get_db_client
 from registry_pkgs.vector.enum.enums import RerankerProvider, SearchType
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
 from .base import VectorSearchService
 
@@ -18,6 +17,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
     def __init__(
         self,
+        mcp_server_repo: MCPServerRepository,
         enable_rerank: bool = True,
         search_type: SearchType = SearchType.HYBRID,
         reranker_model: str = "ms-marco-TinyBERT-L-2-v2",
@@ -34,17 +34,15 @@ class ExternalVectorSearchService(VectorSearchService):
         self.search_type = search_type
         self.reranker_model = reranker_model
 
-        self.client = None
-        self.mcp_server_repo = None
+        self.client = mcp_server_repo.db_client
+        self.mcp_server_repo = mcp_server_repo
         self._initialized = False
 
     async def initialize(self) -> None:
         """Initialize and verify database connection."""
         try:
-            self.client = get_db_client()
             if not self.client.is_initialized():
                 raise Exception("Database client not initialized")
-            self.mcp_server_repo = get_mcp_server_repo(self.client)
             self._initialized = True
 
             collection_name = ExtendedMCPServer.COLLECTION_NAME

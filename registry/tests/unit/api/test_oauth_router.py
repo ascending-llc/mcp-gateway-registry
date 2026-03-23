@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from registry.api.v1.mcp.oauth_router import router
+from registry.core.session_store import SessionStore
 from registry.deps import get_container
 from registry.services.oauth.mcp_service import MCPService
 from tests.conftest import make_container_factory
@@ -112,6 +113,7 @@ def client():
         server_service=mock_container.server_service,
         token_service=mock_container.token_service,
         mcp_service=mock_container.mcp_service,
+        session_store=SessionStore(),
     )
     yield TestClient(app)
 

@@ -3,7 +3,6 @@ Dynamic MCP server proxy routes.
 """
 
 import logging
-from collections import deque
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -149,6 +148,7 @@ async def build_authenticated_headers(
     auth_context: UserContextDict,
     additional_headers: dict[str, str] | None = None,
     *,
+    oauth_service: Any,
     state_metadata: StateMetadata | None = None,
 ) -> dict[str, str]:
     """
@@ -160,6 +160,7 @@ async def build_authenticated_headers(
     - setting.internal_auth_header: Internal JWT for gateway-to-MCP authentication (always included)
 
     Args:
+        state_metadata:
         server: MCP server document
         auth_context: Gateway authentication context (user, client_id, scopes, jwt_token)
         additional_headers: Optional additional headers to merge
@@ -194,7 +195,12 @@ async def build_authenticated_headers(
     # Build complete authentication headers (OAuth, apiKey, custom)
     try:
         user_id = auth_context["user_id"]  # Already validated above
-        auth_headers = await build_complete_headers_for_server(server, user_id, state_metadata=state_metadata)
+        auth_headers = await build_complete_headers_for_server(
+            server,
+            user_id,
+            oauth_service=oauth_service,
+            state_metadata=state_metadata,
+        )
 
         # Merge auth headers with case-insensitive override logic
         # Protected headers that won't be overridden by auth headers
@@ -262,48 +268,3 @@ def build_target_url(server: MCPServerDocument, remaining_path: str = "") -> str
         base_url += "/"
 
     return base_url + remaining_path
-
-
-class SessionStore:
-    """
-    Global singleton object that implements the elicitation_id to ServerSession mapping.
-    Before a tool call handler function returns a URL mode elicitation, it sets the map from elicitation_id to session.
-    When the /oauth/callback route receives the callback request, on success, it retrieves the session object
-    via elicitation_id (passed via the "state" parameter) and uses the session to make a best-effort notification
-    to client on elicitation completion.
-    """
-
-    _max_session_count: int
-    _mapping: dict[str, ServerSession]
-    _elicitation_order: deque[str]
-
-    def __init__(self, max_session_count: int = 100):
-        self._max_session_count = max_session_count
-        self._mapping = {}
-        self._elicitation_order = deque(maxlen=self._max_session_count)
-
-    def append(self, elicitation_id: str, session: ServerSession):
-        # The elicitation_id to session mapping cannot be updated once set.
-        # In practice, elicitation_id is a newly generated UUID for each unique elicitation request,
-        # so normally we will not see the same ID being appended again.
-        if elicitation_id in self._mapping:
-            return
-
-        # If we are at max capacity, pop the oldest elicitation_id and its corresponding session.
-        if len(self._mapping) >= self._max_session_count:
-            oldest_id = self._elicitation_order.popleft()
-            self._mapping.pop(oldest_id, None)
-
-        self._mapping[elicitation_id] = session
-        self._elicitation_order.append(elicitation_id)
-
-    def pop(self, elicitation_id: str) -> ServerSession | None:
-        try:
-            self._elicitation_order.remove(elicitation_id)
-        except Exception:
-            logger.exception(f"trying to remove elicitation_id {elicitation_id} that doesn't exist in the deque.")
-
-        return self._mapping.pop(elicitation_id, None)
-
-
-session_store = SessionStore()

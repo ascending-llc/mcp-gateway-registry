@@ -100,7 +100,13 @@ def server_service(mock_settings: Settings) -> ServerServiceV1:
     user_service = Mock()
     token_service = Mock()
     oauth_service = Mock()
-    service = ServerServiceV1(user_service=user_service, token_service=token_service, oauth_service=oauth_service)
+    mcp_server_repo = Mock()
+    service = ServerServiceV1(
+        user_service=user_service,
+        token_service=token_service,
+        oauth_service=oauth_service,
+        mcp_server_repo=mcp_server_repo,
+    )
     return service
 
 
@@ -118,7 +124,7 @@ def mock_faiss_service() -> Mock:
 @pytest.fixture
 def health_service() -> HealthMonitoringService:
     """Create a fresh health monitoring service for testing."""
-    service = HealthMonitoringService(server_service=Mock())
+    service = HealthMonitoringService(server_service=Mock(), mcp_client_service=Mock())
     return service
 
 
@@ -250,6 +256,7 @@ def test_client(mock_auth_middleware) -> TestClient:
         status_resolver=Mock(),
         vector_service=Mock(),
         mcp_server_repo=Mock(),
+        session_store=Mock(),
         health_service=Mock(),
     )
     client = TestClient(app)

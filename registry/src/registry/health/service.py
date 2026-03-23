@@ -186,10 +186,11 @@ class HighPerformanceWebSocketManager:
 class HealthMonitoringService:
     """Optimized health monitoring service for high-scale WebSocket operations."""
 
-    def __init__(self, server_service):
+    def __init__(self, server_service, mcp_client_service):
         self.server_health_status: dict[str, str] = {}
         self.server_last_check_time: dict[str, datetime] = {}
         self.server_service = server_service
+        self.mcp_client_service = mcp_client_service
 
         # High-performance WebSocket manager
         self.websocket_manager = HighPerformanceWebSocketManager(health_service=self)
@@ -872,8 +873,6 @@ class HealthMonitoringService:
         """Update tool list in the background without blocking health checks."""
         try:
             logger.info(f"Starting background tool update for {service_path}")
-            from ..core.mcp_client import mcp_client_service
-
             server_service = self.server_service
 
             # Wait a moment to ensure health check session is fully closed
@@ -884,7 +883,9 @@ class HealthMonitoringService:
             # Get server info to pass transport configuration
             server_info = server_service.get_server_info(service_path)
             logger.info(f"Fetching tools from {proxy_pass_url} for {service_path}")
-            tool_list = await mcp_client_service.get_tools_from_server_with_server_info(proxy_pass_url, server_info)
+            tool_list = await self.mcp_client_service.get_tools_from_server_with_server_info(
+                proxy_pass_url, server_info
+            )
             logger.info(f"Tool fetch result for {service_path}: {len(tool_list) if tool_list else 'None'} tools")
 
             if tool_list is not None:
@@ -993,7 +994,7 @@ class HealthMonitoringService:
         return current_status, last_checked_time
 
     def _get_service_health_data(self, service_path: str) -> dict:
-        """Get health data for a specific service - legacy method, use _get_service_health_data_fast for better performance."""
+        """Get health data for a specific service."""
         server_service = self.server_service
         server_info = server_service.get_server_info(service_path)
         return self._get_service_health_data_fast(service_path, server_info or {})

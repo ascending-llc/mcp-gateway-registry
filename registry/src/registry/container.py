@@ -4,14 +4,18 @@ import logging
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from registry_pkgs.vector.client import get_db_client
-from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository, get_mcp_server_repo
+from registry_pkgs.vector.client import DatabaseClient, get_db_client
+from registry_pkgs.vector.repositories.a2a_agent_repository import A2AAgentRepository
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
 from .auth.oauth.flow_state_manager import FlowStateManager
 from .auth.oauth.reconnection import OAuthReconnectionManager
+from .core.mcp_client import MCPClientService
+from .core.session_store import SessionStore
 from .health.service import HealthMonitoringService
 from .services.a2a_agent_service import A2AAgentService
 from .services.access_control_service import ACLService
+from .services.agent_scanner import AgentScannerService
 from .services.agentcore_import_service import AgentCoreImportService
 from .services.federation_service import FederationService
 from .services.group_service import GroupService
@@ -22,6 +26,7 @@ from .services.oauth.status_resolver import ConnectionStatusResolver
 from .services.oauth.token_service import TokenService
 from .services.search.base import VectorSearchService
 from .services.search.service import create_vector_search_service
+from .services.security_scanner import SecurityScannerService
 from .services.server_service import ServerServiceV1
 from .services.user_service import UserService
 
@@ -43,16 +48,32 @@ class RegistryContainer:
         self.settings = settings
 
     @cached_property
-    def vector_service(self) -> VectorSearchService:
-        return create_vector_search_service()
+    def db_client(self) -> DatabaseClient:
+        return get_db_client()
 
     @cached_property
     def mcp_server_repo(self) -> MCPServerRepository:
-        return get_mcp_server_repo(get_db_client())
+        return MCPServerRepository(self.db_client)
+
+    @cached_property
+    def a2a_agent_repo(self) -> A2AAgentRepository:
+        return A2AAgentRepository(self.db_client)
+
+    @cached_property
+    def mcp_client_service(self) -> MCPClientService:
+        return MCPClientService()
+
+    @cached_property
+    def session_store(self) -> SessionStore:
+        return SessionStore()
+
+    @cached_property
+    def vector_service(self) -> VectorSearchService:
+        return create_vector_search_service(self.mcp_server_repo)
 
     @cached_property
     def health_service(self) -> HealthMonitoringService:
-        return HealthMonitoringService(server_service=self.server_service)
+        return HealthMonitoringService(server_service=self.server_service, mcp_client_service=self.mcp_client_service)
 
     @cached_property
     def federation_service(self) -> FederationService:
@@ -112,6 +133,7 @@ class RegistryContainer:
             user_service=self.user_service,
             token_service=self.token_service,
             oauth_service=self.oauth_service,
+            mcp_server_repo=self.mcp_server_repo,
         )
 
     @cached_property
@@ -124,10 +146,20 @@ class RegistryContainer:
             acl_service_instance=self.acl_service,
             server_service=self.server_service,
             user_service_instance=self.user_service,
+            mcp_server_repo=self.mcp_server_repo,
+            a2a_agent_repo=self.a2a_agent_repo,
         )
 
+    @cached_property
+    def security_scanner_service(self) -> SecurityScannerService:
+        return SecurityScannerService(server_service=self.server_service)
+
+    @cached_property
+    def agent_scanner_service(self) -> AgentScannerService:
+        return AgentScannerService()
+
     async def startup(self) -> None:
-        """Warm root services while keeping compatibility with existing singletons."""
+        """Warm root services managed by the registry container."""
         logger.info("Initializing services via registry container...")
 
         logger.info("Initializing vector search service...")

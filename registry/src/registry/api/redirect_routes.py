@@ -72,9 +72,9 @@ async def oauth2_login_redirect(provider: str, request: Request):
 @router.get("/redirect")
 async def oauth2_callback(
     request: Request,
-    code: str = None,
-    error: str = None,
-    details: str = None,
+    code: str | None = None,
+    error: str | None = None,
+    details: str | None = None,
     user_service: UserService = Depends(get_user_service),
 ):
     """Handle OAuth2 callback from auth server

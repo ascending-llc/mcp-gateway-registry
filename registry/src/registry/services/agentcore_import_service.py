@@ -9,9 +9,8 @@ from registry_pkgs.database.decorators import get_current_session, use_transacti
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 from registry_pkgs.models._generated import PrincipalType, ResourceType
 from registry_pkgs.models.enums import FederationSource, PermissionBits, RoleBits
-from registry_pkgs.vector.client import get_db_client
-from registry_pkgs.vector.repositories.a2a_agent_repository import get_a2a_agent_repo
-from registry_pkgs.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_pkgs.vector.repositories.a2a_agent_repository import A2AAgentRepository
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
 from ..core.config import settings
 from ..schemas.server_api_schemas import ServerCreateRequest
@@ -43,8 +42,8 @@ class AgentCoreImportService:
         federation_client: AgentCoreFederationClient | None = None,
         agentcore_client_provider: AgentCoreClientProvider | None = None,
         runtime_invoker: AgentCoreRuntimeInvoker | None = None,
-        mcp_server_repo=None,
-        a2a_agent_repo=None,
+        mcp_server_repo: MCPServerRepository | None = None,
+        a2a_agent_repo: A2AAgentRepository | None = None,
     ):
         default_region = settings.aws_region or "us-east-1"
         client_provider = agentcore_client_provider or AgentCoreClientProvider(default_region=default_region)
@@ -62,9 +61,12 @@ class AgentCoreImportService:
         self.acl_service = acl_service_instance
         self.server_service = server_service
         self.user_service = user_service_instance
-        db_client = get_db_client()
-        self.mcp_server_repo = mcp_server_repo or get_mcp_server_repo(db_client)
-        self.a2a_agent_repo = a2a_agent_repo or get_a2a_agent_repo(db_client)
+        if mcp_server_repo is None:
+            raise ValueError("mcp_server_repo is required")
+        if a2a_agent_repo is None:
+            raise ValueError("a2a_agent_repo is required")
+        self.mcp_server_repo = mcp_server_repo
+        self.a2a_agent_repo = a2a_agent_repo
 
     async def import_from_runtime(
         self,

@@ -10,6 +10,8 @@ As of 2026-02-12, we decide not to use the embedded FAISS service moving forward
 
 import logging
 
+from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
+
 from ...core.config import settings
 from .base import VectorSearchService
 
@@ -17,7 +19,7 @@ from .base import VectorSearchService
 logger = logging.getLogger(__name__)
 
 
-def create_vector_search_service() -> VectorSearchService:
+def create_vector_search_service(mcp_server_repo: MCPServerRepository) -> VectorSearchService:
     """
     Factory function to create the appropriate vector search service based on configuration.
 
@@ -28,7 +30,7 @@ def create_vector_search_service() -> VectorSearchService:
         logger.info("Initializing Weaviate-based vector search service for MCP tools")
         from .external_service import ExternalVectorSearchService
 
-        return ExternalVectorSearchService()
+        return ExternalVectorSearchService(mcp_server_repo=mcp_server_repo)
     else:
         logger.info("Initializing EMBEDDED FAISS vector search service")
         from .embedded_service import EmbeddedFaissService

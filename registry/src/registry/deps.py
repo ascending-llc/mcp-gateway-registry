@@ -6,6 +6,7 @@ from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRep
 
 from .auth.oauth.reconnection import OAuthReconnectionManager
 from .container import RegistryContainer
+from .core.session_store import SessionStore
 from .health.service import HealthMonitoringService
 from .services.a2a_agent_service import A2AAgentService
 from .services.access_control_service import ACLService
@@ -32,6 +33,10 @@ def get_vector_service(container: RegistryContainer = Depends(get_container)) ->
 
 def get_mcp_server_repo(container: RegistryContainer = Depends(get_container)) -> MCPServerRepository:
     return container.mcp_server_repo
+
+
+def get_session_store(container: RegistryContainer = Depends(get_container)) -> SessionStore:
+    return container.session_store
 
 
 def get_health_service(container: RegistryContainer = Depends(get_container)) -> HealthMonitoringService:

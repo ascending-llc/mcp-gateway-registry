@@ -42,13 +42,17 @@ from ..exceptions import (
     UrlElicitationRequiredException,
 )
 from .types import get_meta_field
-from .utils import build_authenticated_headers, build_target_url, forward_notification, parse_data_field, session_store
+from .utils import build_authenticated_headers, build_target_url, forward_notification, parse_data_field
 
 logger = logging.getLogger(__name__)
 
 
 def _get_server_service(ctx: Context[ServerSession, McpAppContext]):
     return ctx.request_context.lifespan_context.server_service
+
+
+def _get_session_store(ctx: Context[ServerSession, McpAppContext]):
+    return ctx.request_context.lifespan_context.session_store
 
 
 async def _downstream_tool_call(
@@ -310,6 +314,7 @@ async def execute_tool_impl(
                     server=server,
                     auth_context=user_context,
                     additional_headers=additional_headers,
+                    oauth_service=ctx.request_context.lifespan_context.oauth_service,
                     state_metadata=state_metadata,
                 )
                 # Get transport type from server config (default to streamable-http)
@@ -328,6 +333,7 @@ async def execute_tool_impl(
             server=server,
             auth_context=user_context,
             additional_headers=additional_headers,
+            oauth_service=ctx.request_context.lifespan_context.oauth_service,
             state_metadata=state_metadata,
         )
 
@@ -370,7 +376,7 @@ async def execute_tool_impl(
 
             logger.info(f"sending back the URL mode elicitation error response with ID {elicitation_id}.")
 
-            session_store.append(elicitation_id, ctx.session)
+            _get_session_store(ctx).append(elicitation_id, ctx.session)
 
             raise UrlElicitationRequiredError(
                 # This message is for LLM.

@@ -106,21 +106,3 @@ class A2AAgentRepository(Repository[A2AAgent]):
         except Exception as e:
             logger.error("Failed to delete A2A vector docs for %s: %s", log_name, e, exc_info=True)
             return False
-
-
-def create_a2a_agent_repository(db_client: DatabaseClient) -> A2AAgentRepository:
-    return A2AAgentRepository(db_client)
-
-
-_a2a_agent_repo: A2AAgentRepository | None = None
-
-
-def get_a2a_agent_repo(db_client: DatabaseClient | None = None) -> A2AAgentRepository:
-    global _a2a_agent_repo
-
-    if _a2a_agent_repo is None:
-        if db_client is None:
-            raise ValueError("db_client is required when initializing A2AAgentRepository")
-        _a2a_agent_repo = create_a2a_agent_repository(db_client)
-
-    return _a2a_agent_repo

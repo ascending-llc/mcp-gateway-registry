@@ -1220,7 +1220,3 @@ class MCPClientService:
     ) -> list[dict] | None:
         """Wrapper method that uses server configuration for transport selection."""
         return await get_tools_from_server_with_server_info(base_url, server_info)
-
-
-# Global MCP client service instance
-mcp_client_service = MCPClientService()

@@ -392,7 +392,3 @@ class AgentScannerService:
         except Exception as e:
             logger.error(f"Failed to read scan results for agent {agent_path}: {e}")
             return None
-
-
-# Global singleton instance
-agent_scanner_service = AgentScannerService()

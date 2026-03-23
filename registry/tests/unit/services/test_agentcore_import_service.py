@@ -325,7 +325,7 @@ class TestAgentCoreImportService:
         assert len(stale_mcp) == 1
         assert len(stale_a2a) == 1
 
-    async def test_update_server_removes_requires_oauth_legacy_key(self, service, repo):
+    async def test_update_server_removes_old_requires_oauth_key(self, service, repo):
         existing = _FakeServer(name="srv-noise", federation_id="fed-noise", title="same-title")
         existing.id = PydanticObjectId()
         existing.config["requiresOauth"] = False

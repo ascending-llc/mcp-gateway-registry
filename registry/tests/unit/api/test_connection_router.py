@@ -26,11 +26,11 @@ mock_mcp_service.oauth_service = mock_oauth_service
 mock_connection_service = AsyncMock()
 mock_mcp_service.connection_service = mock_connection_service
 
-# Mock server_service_v1
-mock_server_service_v1 = AsyncMock()
+# Mock injected server service
+mock_server_service = AsyncMock()
 
 mock_container = Mock()
-mock_container.server_service = mock_server_service_v1
+mock_container.server_service = mock_server_service
 mock_container.mcp_service = mock_mcp_service
 mock_container.status_resolver = Mock()
 
@@ -117,8 +117,8 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        # Mock server_service_v1.get_server_by_id to return the mock server
-        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        # Mock injected server_service.get_server_by_id to return the mock server
+        mock_server_service.get_server_by_id.return_value = mock_server
 
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
@@ -137,8 +137,8 @@ class TestConnectionRouter:
 
     def test_reinitialize_server_not_found(self, client):
         """Test reinitialization with non-existent server"""
-        # Mock server_service_v1.get_server_by_id to return None
-        mock_server_service_v1.get_server_by_id.return_value = None
+        # Mock injected server_service.get_server_by_id to return None
+        mock_server_service.get_server_by_id.return_value = None
 
         response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
@@ -154,8 +154,8 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        # Mock server_service_v1.get_server_by_id to return the mock server
-        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        # Mock injected server_service.get_server_by_id to return the mock server
+        mock_server_service.get_server_by_id.return_value = mock_server
 
         # Mock connection service to fail disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = False
@@ -181,8 +181,8 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        # Mock server_service_v1.get_server_by_id to return the mock server
-        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        # Mock injected server_service.get_server_by_id to return the mock server
+        mock_server_service.get_server_by_id.return_value = mock_server
 
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
@@ -204,8 +204,8 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        # Mock server_service_v1.get_server_by_id to return the mock server
-        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        # Mock injected server_service.get_server_by_id to return the mock server
+        mock_server_service.get_server_by_id.return_value = mock_server
 
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
@@ -224,13 +224,13 @@ class TestConnectionRouter:
 
     def test_get_all_connection_status_success(self, client):
         """Test successful retrieval of all connection statuses"""
-        # Mock server_service_v1.list_servers to return a list of servers
+        # Mock injected server_service.list_servers to return a list of servers
         mock_server = Mock()
         mock_server.id = ObjectId(TEST_SERVER_ID)
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        mock_server_service_v1.list_servers.return_value = ([mock_server], 1)
+        mock_server_service.list_servers.return_value = ([mock_server], 1)
 
         # Mock get_servers_connection_status to return status as dict (not list)
         mock_get_servers_connection_status.return_value = {
@@ -252,8 +252,8 @@ class TestConnectionRouter:
 
     def test_get_all_connection_status_empty(self, client):
         """Test retrieval of all connection statuses when no servers exist"""
-        # Mock server_service_v1.list_servers to return empty list
-        mock_server_service_v1.list_servers.return_value = ([], 0)
+        # Mock injected server_service.list_servers to return empty list
+        mock_server_service.list_servers.return_value = ([], 0)
 
         # Mock get_servers_connection_status to return empty dict (not list)
         mock_get_servers_connection_status.return_value = {}
@@ -269,8 +269,8 @@ class TestConnectionRouter:
 
     def test_get_all_connection_status_failure(self, client):
         """Test failure when retrieving all connection statuses"""
-        # Mock server_service_v1.list_servers to raise an exception
-        mock_server_service_v1.list_servers.side_effect = Exception("Database error")
+        # Mock injected server_service.list_servers to raise an exception
+        mock_server_service.list_servers.side_effect = Exception("Database error")
 
         response = client.get("/mcp/connection/status")
 
@@ -285,8 +285,8 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        # Mock server_service_v1.get_server_by_id to return the mock server
-        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        # Mock injected server_service.get_server_by_id to return the mock server
+        mock_server_service.get_server_by_id.return_value = mock_server
 
         # Mock get_single_server_connection_status to return status
         mock_get_single_server_connection_status.return_value = {
@@ -306,8 +306,8 @@ class TestConnectionRouter:
 
     def test_get_server_connection_status_not_found(self, client):
         """Test retrieval of single server connection status when server not found"""
-        # Mock server_service_v1.get_server_by_id to return None
-        mock_server_service_v1.get_server_by_id.return_value = None
+        # Mock injected server_service.get_server_by_id to return None
+        mock_server_service.get_server_by_id.return_value = None
 
         response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
 
@@ -322,8 +322,8 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        # Mock server_service_v1.get_server_by_id to return the mock server
-        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        # Mock injected server_service.get_server_by_id to return the mock server
+        mock_server_service.get_server_by_id.return_value = mock_server
 
         mock_get_single_server_connection_status.side_effect = Exception("Status error")
 
