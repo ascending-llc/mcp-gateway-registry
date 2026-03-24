@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from registry.core.mcp_client import _get_from_sse, _get_from_streamable_http, get_tools_and_capabilities_from_server
+from registry.core.mcp_client import (
+    _get_from_sse,
+    _get_from_streamable_http,
+    get_tools_and_capabilities_from_server,
+    initialize_mcp,
+)
 from registry.core.mcp_config import MCPClientConfig
 
 
@@ -127,7 +132,6 @@ class TestMCPClient:
         with (
             patch("registry.core.mcp_client.sse_client") as mock_client,
             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
-            patch("httpx.AsyncClient"),
         ):
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
@@ -158,6 +162,48 @@ class TestMCPClient:
 
             assert result.tools is not None
             assert result.capabilities == mock_capabilities
+            # Regression guard: sse_client should receive headers and never http_client.
+            _, kwargs = mock_client.call_args
+            assert kwargs["headers"] == mock_headers
+            assert "http_client" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_initialize_mcp_sse_uses_headers_not_http_client(self, mock_headers):
+        """Test initialize_mcp uses sse_client(headers=...) for SSE transport."""
+        target_url = "https://example.com/sse"
+
+        with (
+            patch("registry.core.mcp_client.sse_client") as mock_sse_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+        ):
+            strategy = Mock()
+            strategy.modify_url = Mock(return_value=target_url)
+            mock_strategy.return_value = strategy
+
+            mock_init_result = Mock()
+
+            mock_session = AsyncMock()
+            mock_session.initialize = AsyncMock(return_value=mock_init_result)
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+
+            mock_sse_context = AsyncMock()
+            mock_sse_context.__aenter__ = AsyncMock(return_value=(Mock(), Mock()))
+            mock_sse_client.return_value = mock_sse_context
+
+            with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
+                mock_session_cls.return_value = mock_session
+
+                result = await initialize_mcp(
+                    target_url=target_url,
+                    headers=mock_headers,
+                    transport_type="sse",
+                )
+
+            assert result == mock_init_result
+            _, kwargs = mock_sse_client.call_args
+            assert kwargs["headers"] == mock_headers
+            assert "http_client" not in kwargs
 
     @pytest.mark.asyncio
     async def test_get_tools_and_capabilities_from_server_streamable_http(self, mock_headers):
