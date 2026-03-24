@@ -369,7 +369,7 @@ class FlowStateManager:
         """
         Build OAuth client information from server configuration
         """
-        base_url = settings.registry_url
+        base_url = settings.registry_client_url
         if base_url.endswith("/"):
             base_url = base_url.removesuffix("/")
 
