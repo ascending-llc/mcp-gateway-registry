@@ -2,7 +2,7 @@ import logging
 import secrets
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     session_max_age_seconds: int = 60 * 60 * 8
     session_cookie_secure: bool = True
     session_cookie_domain: str | None = None
+    cookie_same_site: Literal["lax", "strict"] = "lax"
 
     # ==================== Service URLs ====================
     auth_server_url: str = "http://localhost:8888"

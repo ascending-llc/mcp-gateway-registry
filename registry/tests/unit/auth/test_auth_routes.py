@@ -39,6 +39,7 @@ class TestAuthRoutes:
             mock_settings.session_max_age_seconds = 3600
             mock_settings.templates_dir = "/templates"
             mock_settings.registry_client_url = "http://localhost:8000/"
+            mock_settings.cookie_same_site = "lax"
             yield mock_settings
 
     @pytest.fixture

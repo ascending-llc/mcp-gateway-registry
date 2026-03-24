@@ -560,7 +560,7 @@ async def oauth2_login(
             value=temp_session,
             max_age=settings.oauth_session_ttl_seconds,
             httponly=True,
-            samesite="lax",
+            samesite=settings.cookie_same_site,
         )
         return response
     except HTTPException:

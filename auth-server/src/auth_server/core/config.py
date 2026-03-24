@@ -8,6 +8,7 @@ All environment variables are loaded here and accessed through the global `setti
 import logging
 import secrets
 from functools import cached_property
+from typing import Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -51,6 +52,9 @@ class AuthSettings(BaseSettings):
 
     # ==================== CORS Configuration ====================
     cors_origins: str = "*"  # Comma-separated list of allowed origins, or "*" for all
+
+    # ==================== Cookies Configuration ====================
+    cookie_same_site: Literal["lax", "strict"] = "lax"
 
     # ==================== Auth Provider ====================
     auth_provider: str = "keycloak"  # cognito, keycloak, entra

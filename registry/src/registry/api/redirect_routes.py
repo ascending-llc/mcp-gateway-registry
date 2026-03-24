@@ -189,7 +189,7 @@ async def oauth2_callback(
             value=access_token,
             max_age=86400,  # 1 day in seconds
             httponly=True,
-            samesite="lax",
+            samesite=settings.cookie_same_site,
             secure=cookie_secure,
             path="/",
         )
@@ -200,7 +200,7 @@ async def oauth2_callback(
             value=refresh_token,
             max_age=604800,  # 7 days in seconds
             httponly=True,
-            samesite="lax",
+            samesite=settings.cookie_same_site,
             secure=cookie_secure,
             path="/",
         )
@@ -371,7 +371,7 @@ async def refresh_token(
                 value=new_access_token,
                 max_age=86400,  # 1 day in seconds
                 httponly=True,
-                samesite="lax",
+                samesite=settings.cookie_same_site,
                 secure=cookie_secure,
                 path="/",
             )
