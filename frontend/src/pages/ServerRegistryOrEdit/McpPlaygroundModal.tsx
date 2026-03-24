@@ -3,9 +3,9 @@ import { JarvisEmbed } from 'jarvis-embed';
 import { useEffect, useRef, useState } from 'react';
 
 import HELPER from '@/helper';
-import { AuthCookieKey } from '@/services/auth/type';
+import SERVICES from '@/services';
 
-const JARVIS_URL = 'https://jarvis-demo.ascendingdc.com';
+const JARVIS_URL = HELPER.getJarvisUrl();
 
 type Props = {
   serverName: string;
@@ -30,27 +30,34 @@ const McpPlaygroundModal = ({ serverName, onClose }: Props) => {
 
     let destroyed = false;
 
-    setError(null);
-    const token = HELPER.getCookieValue(AuthCookieKey.JarvisRegistrySession);
-    if (!token) {
-      setError('Failed to retrieve Jarvis session token');
-      return;
-    }
+    SERVICES.AUTH.getToken({ expiresInHours: 1, description: 'Jarvis MCP test' })
+      .then(result => {
+        if (destroyed) return;
 
-    const embed = new JarvisEmbed({
-      provider: 'direct',
-      token,
-      model: 'anthropic-claude-sonnet-4-6',
-      apiUrl: JARVIS_URL,
-      container,
-      width: '100%',
-      height: '100%',
-      onError: () => setError('Failed to connect to Jarvis'),
-    });
-    if (!destroyed) {
-      embed.setMcpServers([serverName]);
-      jarvisRef.current = embed;
-    }
+        const token = result.tokenData?.accessToken;
+        if (!token) {
+          setError('Failed to retrieve access token');
+          return;
+        }
+
+        const embed = new JarvisEmbed({
+          provider: 'direct',
+          token,
+          model: 'anthropic-claude-sonnet-4-6',
+          apiUrl: JARVIS_URL,
+          container,
+          width: '100%',
+          height: '100%',
+          onError: () => setError('Failed to connect to Jarvis'),
+        });
+        embed.setMcpServers([serverName]);
+        jarvisRef.current = embed;
+      })
+      .catch(() => {
+        if (!destroyed) {
+          setError('Failed to authenticate with Jarvis');
+        }
+      });
 
     return () => {
       destroyed = true;

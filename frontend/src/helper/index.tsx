@@ -1,9 +1,9 @@
 import formatTimeSince from './formatTimeSince';
-import { getCookieValue } from './cookieManipulation';
+import { getJarvisUrl } from './hostInfo';
 
 const HELPER = {
   formatTimeSince,
-  getCookieValue,
+  getJarvisUrl,
 };
 
 export default HELPER;
