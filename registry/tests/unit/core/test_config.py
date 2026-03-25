@@ -26,8 +26,8 @@ class TestSettings:
         assert settings.admin_password == "password"
         assert settings.session_cookie_name == "jarvis_registry_session"
         assert settings.session_max_age_seconds == 60 * 60 * 8  # 8 hours
-        assert settings.embeddings_model_name == "all-MiniLM-L6-v2"
-        assert settings.embeddings_model_dimensions == 384
+        assert settings.local_embeddings_model_name == "all-MiniLM-L6-v2"
+        assert settings.local_embeddings_model_dimensions == 384
         assert settings.health_check_interval_seconds == 300  # 5 minutes
 
     @patch.dict(os.environ, {}, clear=True)
@@ -66,7 +66,8 @@ class TestSettings:
         assert settings.static_dir == settings.container_registry_dir / "static"
         assert settings.templates_dir == settings.container_registry_dir / "templates"
         assert (
-            settings.embeddings_model_dir == settings.container_registry_dir / "models" / settings.embeddings_model_name
+            settings.local_embeddings_model_dir
+            == settings.container_registry_dir / "models" / settings.embeddings_model_name
         )
 
     @pytest.mark.skip(reason="state_file_path, faiss paths removed in PR-113 (MongoDB migration)")
@@ -98,7 +99,7 @@ class TestSettings:
             "ADMIN_USER": "testuser",
             "ADMIN_PASSWORD": "testpass",
             "SECRET_KEY": "test-secret",
-            "EMBEDDINGS_MODEL_NAME": "test-model",
+            "LOCAL_EMBEDDINGS_MODEL_NAME": "test-model",
             "HEALTH_CHECK_INTERVAL_SECONDS": "120",
         },
     )
@@ -109,7 +110,7 @@ class TestSettings:
         assert settings.admin_user == "testuser"
         assert settings.admin_password == "testpass"
         assert settings.secret_key == "test-secret"
-        assert settings.embeddings_model_name == "test-model"
+        assert settings.local_embeddings_model_name == "test-model"
         assert settings.health_check_interval_seconds == 120
 
     def test_case_insensitive_env_vars(self):

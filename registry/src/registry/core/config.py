@@ -60,9 +60,13 @@ class Settings(BaseSettings):
     anthropic_api_default_limit: int = 100
     anthropic_api_max_limit: int = 1000
 
-    # ==================== Embeddings ====================
-    embeddings_model_name: str = "all-MiniLM-L6-v2"
-    embeddings_model_dimensions: int = 384
+    # ====================Local Embeddings ====================
+    # Note: We may not use them later, but we’re doing our best to keep these variables separate to prevent conflicts.
+    local_embeddings_provider: str | None = None
+    local_embeddings_model_name: str = "all-MiniLM-L6-v2"
+    local_embeddings_model_dimensions: int = 384
+    local_embeddings_api_key: str | None = None
+    local_embeddings_aws_region: str | None = None
 
     # ==================== Search Defaults ====================
     tool_discovery_mode: str = "external"
@@ -227,10 +231,10 @@ class Settings(BaseSettings):
         return self.container_registry_dir / "templates"
 
     @cached_property
-    def embeddings_model_dir(self) -> Path:
+    def local_embeddings_model_dir(self) -> Path:
         if self.is_local_dev:
-            return Path.cwd() / "registry" / "models" / self.embeddings_model_name
-        return self.container_registry_dir / "models" / self.embeddings_model_name
+            return Path.cwd() / "registry" / "models" / self.local_embeddings_model_dir
+        return self.container_registry_dir / "models" / self.local_embeddings_model_dir
 
     @cached_property
     def log_dir(self) -> Path:

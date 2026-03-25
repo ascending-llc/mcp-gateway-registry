@@ -29,9 +29,9 @@ Local embedding models that run on your infrastructure.
 
 ```bash
 # In .env
-EMBEDDINGS_PROVIDER=sentence-transformers
-EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2
-EMBEDDINGS_MODEL_DIMENSIONS=384
+LOCAL_EMBEDDINGS_PROVIDER=sentence-transformers
+LOCAL_EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2
+LOCAL_EMBEDDINGS_MODEL_DIMENSIONS=384
 ```
 
 **Characteristics:**
@@ -48,10 +48,10 @@ Cloud-based embedding service via OpenAI API.
 
 ```bash
 # In .env
-EMBEDDINGS_PROVIDER=litellm
-EMBEDDINGS_MODEL_NAME=openai/text-embedding-ada-002
-EMBEDDINGS_MODEL_DIMENSIONS=1536
-EMBEDDINGS_API_KEY=sk-your-openai-api-key
+LOCAL_EMBEDDINGS_PROVIDER=litellm
+LOCAL_EMBEDDINGS_MODEL_NAME=openai/text-embedding-ada-002
+LOCAL_EMBEDDINGS_MODEL_DIMENSIONS=1536
+LOCAL_EMBEDDINGS_API_KEY=<your-openai-api-key>
 ```
 
 **Characteristics:**
@@ -68,10 +68,10 @@ Cloud-based embedding service via AWS Bedrock.
 
 ```bash
 # In .env
-EMBEDDINGS_PROVIDER=litellm
-EMBEDDINGS_MODEL_NAME=bedrock/amazon.titan-embed-text-v1
-EMBEDDINGS_MODEL_DIMENSIONS=1536
-EMBEDDINGS_AWS_REGION=us-east-1
+LOCAL_EMBEDDINGS_PROVIDER=litellm
+LOCAL_EMBEDDINGS_MODEL_NAME=bedrock/amazon.titan-embed-text-v1
+LOCAL_EMBEDDINGS_MODEL_DIMENSIONS=1536
+LOCAL_EMBEDDINGS_AWS_REGION=us-east-1
 # No API key needed - uses IAM
 ```
 
@@ -89,12 +89,12 @@ EMBEDDINGS_AWS_REGION=us-east-1
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `EMBEDDINGS_PROVIDER` | Provider type: `sentence-transformers` or `litellm` | `sentence-transformers` | No |
-| `EMBEDDINGS_MODEL_NAME` | Model identifier | `all-MiniLM-L6-v2` | Yes |
-| `EMBEDDINGS_MODEL_DIMENSIONS` | Embedding dimension | `384` | Yes |
-| `EMBEDDINGS_API_KEY` | API key for cloud provider (OpenAI, Cohere, etc.) | - | For cloud* |
-| `EMBEDDINGS_API_BASE` | Custom API endpoint (LiteLLM only) | - | No |
-| `EMBEDDINGS_AWS_REGION` | AWS region for Bedrock (LiteLLM only) | - | For Bedrock |
+| `LOCAL_EMBEDDINGS_PROVIDER` | Provider type: `sentence-transformers` or `litellm` | `sentence-transformers` | No |
+| `LOCAL_EMBEDDINGS_MODEL_NAME` | Model identifier | `all-MiniLM-L6-v2` | Yes |
+| `LOCAL_EMBEDDINGS_MODEL_DIMENSIONS` | Embedding dimension | `384` | Yes |
+| `LOCAL_EMBEDDINGS_API_KEY` | API key for cloud provider (OpenAI, Cohere, etc.) | - | For cloud* |
+| `LOCAL_EMBEDDINGS_API_BASE` | Custom API endpoint (LiteLLM only) | - | No |
+| `LOCAL_EMBEDDINGS_AWS_REGION` | AWS region for Bedrock (LiteLLM only) | - | For Bedrock |
 
 *Not required for AWS Bedrock - use standard AWS credential chain (IAM roles, environment variables, ~/.aws/credentials)
 
@@ -112,20 +112,20 @@ For AWS ECS deployments, configure embeddings in your `terraform.tfvars`:
 #### Using OpenAI
 
 ```hcl
-embeddings_provider         = "litellm"
-embeddings_model_name       = "openai/text-embedding-ada-002"
-embeddings_model_dimensions = 1536
-embeddings_api_key          = "sk-proj-YOUR-OPENAI-API-KEY"
+LOCAL_EMBEDDINGS_PROVIDER         = "litellm"
+LOCAL_EMBEDDINGS_MODEL_NAME       = "openai/text-embedding-ada-002"
+LOCAL_EMBEDDINGS_MODEL_DIMENSIONS = 1536
+LOCAL_EMBEDDINGS_API_KEY          = "<YOUR-OPENAI-API-KEY>"
 ```
 
 #### Using Amazon Bedrock
 
 ```hcl
-embeddings_provider         = "litellm"
-embeddings_model_name       = "bedrock/amazon.titan-embed-text-v1"
-embeddings_model_dimensions = 1536
-embeddings_aws_region       = "us-east-1"
-embeddings_api_key          = ""  # Empty for Bedrock (uses IAM)
+local_embeddings_provider         = "litellm"
+local_embeddings_model_name       = "bedrock/amazon.titan-embed-text-v1"
+local_embeddings_model_dimensions = 1536
+local_embeddings_aws_region       = "us-east-1"
+local_embeddings_api_key          = ""  # Empty for Bedrock (uses IAM)
 ```
 
 See [terraform/aws-ecs/terraform.tfvars.example](../terraform/aws-ecs/terraform.tfvars.example) for complete examples.
@@ -194,15 +194,15 @@ Just update your environment variables or Terraform configuration:
 
 ```bash
 # From
-EMBEDDINGS_PROVIDER=sentence-transformers
-EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2
-EMBEDDINGS_MODEL_DIMENSIONS=384
+LOCAL_EMBEDDINGS_PROVIDER=sentence-transformers
+LOCAL_EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2
+LOCAL_EMBEDDINGS_MODEL_DIMENSIONS=384
 
 # To
-EMBEDDINGS_PROVIDER=litellm
-EMBEDDINGS_MODEL_NAME=openai/text-embedding-ada-002
-EMBEDDINGS_MODEL_DIMENSIONS=1536
-EMBEDDINGS_API_KEY=sk-your-key
+LOCAL_EMBEDDINGS_PROVIDER=litellm
+LOCAL_EMBEDDINGS_MODEL_NAME=openai/text-embedding-ada-002
+LOCAL_EMBEDDINGS_MODEL_DIMENSIONS=1536
+LOCAL_EMBEDDINGS_API_KEY=<your-key>
 ```
 
 Restart the service and the index will be automatically rebuilt.
@@ -259,11 +259,11 @@ from registry.embeddings import create_embeddings_client
 class FaissService:
     async def _load_embedding_model(self):
         self.embedding_model = create_embeddings_client(
-            provider=settings.embeddings_provider,
-            model_name=settings.embeddings_model_name,
-            api_key=settings.embeddings_api_key,
-            aws_region=settings.embeddings_aws_region,
-            embedding_dimension=settings.embeddings_model_dimensions,
+            provider=settings.local_embeddings_provider,
+            model_name=settings.local_embeddings_model_name,
+            api_key=settings.local_embeddings_api_key,
+            aws_region=settings.local_embeddings_aws_region,
+            embedding_dimension=settings.local_embeddings_model_dimensions,
         )
 ```
 
@@ -302,14 +302,14 @@ uv add litellm
 WARNING: Embedding dimension mismatch: expected 384, got 1536
 ```
 
-**Solution:** Update `EMBEDDINGS_MODEL_DIMENSIONS` to match your model's actual output dimension. The system will automatically rebuild the index.
+**Solution:** Update `LOCAL_EMBEDDINGS_MODEL_DIMENSIONS` to match your model's actual output dimension. The system will automatically rebuild the index.
 
 ### API Authentication Errors
 
 **OpenAI:**
 ```bash
 # Verify API key is set correctly
-echo $EMBEDDINGS_API_KEY
+echo $LOCAL_EMBEDDINGS_API_KEY
 # Should start with sk-
 ```
 
@@ -328,7 +328,7 @@ If using AWS ECS and Bedrock, ensure the task execution role has access to the e
 
 ```bash
 # Check IAM policy in terraform/aws-ecs/modules/mcp-gateway/iam.tf
-# Should include: aws_secretsmanager_secret.embeddings_api_key.arn
+# Should include: aws_secretsmanager_secret.local_embeddings_api_key.arn
 ```
 
 ## API Reference

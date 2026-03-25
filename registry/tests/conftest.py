@@ -69,8 +69,8 @@ def test_settings(temp_dir: Path) -> Settings:
         container_registry_dir=temp_dir / "app" / "registry",
         container_log_dir=temp_dir / "app" / "logs",
         health_check_interval_seconds=60,  # Longer for tests
-        embeddings_model_name="all-MiniLM-L6-v2",
-        embeddings_model_dimensions=384,
+        local_embeddings_model_name="all-MiniLM-L6-v2",
+        local_embeddings_model_dimensions=384,
     )
 
     # Create necessary directories
