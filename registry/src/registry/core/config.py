@@ -233,8 +233,8 @@ class Settings(BaseSettings):
     @cached_property
     def local_embeddings_model_dir(self) -> Path:
         if self.is_local_dev:
-            return Path.cwd() / "registry" / "models" / self.local_embeddings_model_dir
-        return self.container_registry_dir / "models" / self.local_embeddings_model_dir
+            return Path.cwd() / "registry" / "models" / self.local_embeddings_model_name
+        return self.container_registry_dir / "models" / self.local_embeddings_model_name
 
     @cached_property
     def log_dir(self) -> Path:

@@ -67,7 +67,7 @@ class TestSettings:
         assert settings.templates_dir == settings.container_registry_dir / "templates"
         assert (
             settings.local_embeddings_model_dir
-            == settings.container_registry_dir / "models" / settings.embeddings_model_name
+            == settings.container_registry_dir / "models" / settings.local_embeddings_model_name
         )
 
     @pytest.mark.skip(reason="state_file_path, faiss paths removed in PR-113 (MongoDB migration)")

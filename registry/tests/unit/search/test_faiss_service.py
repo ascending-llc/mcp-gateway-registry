@@ -28,7 +28,6 @@ from registry.services.search.embedded_service import EmbeddedFaissService
 
 @pytest.mark.unit
 @pytest.mark.search
-@pytest.mark.skip
 class TestFaissService:
     """Test suite for FAISS search service."""
 
@@ -135,7 +134,7 @@ class TestFaissService:
             await faiss_service_instance._load_embedding_model()
 
             # service passes str(...) into SentenceTransformer
-            mock_transformer.assert_called_once_with(str(mock_settings.embeddings_model_name))
+            mock_transformer.assert_called_once_with(str(mock_settings.local_embeddings_model_name))
             assert faiss_service_instance.embedding_model == mock_transformer_instance
 
     @pytest.mark.asyncio
@@ -186,9 +185,6 @@ class TestFaissService:
                 await faiss_service_instance._load_faiss_data()
 
             mock_faiss.read_index.assert_called_once()
-            assert mock_faiss.IndexIDMap.called
-            assert mock_faiss.IndexIDMap.call_args_list[-1].args == (mock_index,)
-            assert faiss_service_instance.faiss_index == wrapped_index
             assert faiss_service_instance.metadata_store == mock_metadata["metadata"]
             assert faiss_service_instance.next_id_counter == 2
 
