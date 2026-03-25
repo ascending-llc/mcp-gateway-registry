@@ -104,41 +104,6 @@ class WeaviateStore(VectorStoreAdapter):
                 vectorizer_config=self.get_vectorizer_config(),
                 properties=[
                     wvc.Property(name="content", data_type=wvc.DataType.TEXT, description="Main searchable content"),
-                    wvc.Property(
-                        name="server_id",
-                        data_type=wvc.DataType.TEXT,
-                        description="MongoDB server ID",
-                        index_filterable=True,
-                        index_searchable=False,
-                    ),
-                    wvc.Property(
-                        name="server_name",
-                        data_type=wvc.DataType.TEXT,
-                        description="Server name",
-                        index_filterable=True,
-                        index_searchable=True,
-                    ),
-                    wvc.Property(
-                        name="path",
-                        data_type=wvc.DataType.TEXT,
-                        description="Server path",
-                        index_filterable=True,
-                        index_searchable=True,
-                    ),
-                    wvc.Property(
-                        name="entity_type",
-                        data_type=wvc.DataType.TEXT,
-                        description="Entity type (server, tool, resource)",
-                        index_filterable=True,
-                        index_searchable=False,
-                    ),
-                    wvc.Property(
-                        name="enabled",
-                        data_type=wvc.DataType.BOOL,
-                        description="Whether the resource is enabled",
-                        index_filterable=True,
-                        index_searchable=False,
-                    ),
                 ],
             )
             logger.info(f"Collection {collection_name} created successfully")

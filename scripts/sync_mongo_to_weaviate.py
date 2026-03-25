@@ -154,35 +154,6 @@ def parse_args() -> tuple[bool, int, str]:
     return clean_mode, batch_size, env_file
 
 
-def print_loaded_config(settings: Settings, env_path: Path) -> None:
-    """Print the actual loaded configuration for debugging."""
-    print("=" * 80)
-    print("LOADED CONFIGURATION")
-    print("=" * 80)
-    print(f"Env file:                  {env_path.resolve()}")
-    print(f"MongoDB URI:               {settings.mongo_uri}")
-    print(f"Redis URI:                 {settings.redis_uri}")
-    print(f"Vector store type:         {settings.vector_store_type}")
-    print(f"Embedding provider:        {settings.embeddings_provider}")
-    print(f"Weaviate host:             {settings.weaviate_host}")
-    print(f"Weaviate port:             {settings.weaviate_port}")
-    print(f"Weaviate collection prefix:{settings.weaviate_collection_prefix!r}")
-    print(f"OpenAI model:              {settings.openai_model}")
-    print(f"AWS region:                {settings.aws_region}")
-    print(f"Bedrock model:             {settings.bedrock_model}")
-    print(f"Tool discovery mode:       {settings.tool_discovery_mode}")
-    print("=" * 80)
-    print("NOTE:")
-    print("  Settings expects these env var names:")
-    print("    - VECTOR_STORE_TYPE")
-    print("    - EMBEDDING_PROVIDER")
-    print("    - OPENAI_MODEL")
-    print("  NOT:")
-    print("    - EMBEDDING_PROVIDER")
-    print("    - EMBEDDINGS_MODEL")
-    print("=" * 80 + "\n")
-
-
 async def check_server_exists(mcp_server_repo, server_id: str) -> bool:
     """Check if server already exists in Weaviate."""
     try:
@@ -326,8 +297,6 @@ async def run() -> int:
 
     settings = Settings(_env_file=str(env_path))
     settings.configure_logging()
-
-    print_loaded_config(settings, env_path)
 
     db_client = None
     redis_client = None
