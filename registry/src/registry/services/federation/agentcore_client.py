@@ -10,7 +10,6 @@ from beanie import PydanticObjectId
 
 from registry.core.config import settings
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
-from registry_pkgs.models.enums import FederationSource
 
 from .agentcore_client_provider import AgentCoreClientProvider
 from .runtime_invoker import AgentCoreRuntimeInvoker
@@ -49,6 +48,7 @@ class AgentCoreFederationClient:
         runtime_arns: list[str] | None = None,
         author_id: PydanticObjectId | None = None,
         enrich_protocol_payloads: bool = True,
+        region: str | None = None,
     ) -> dict[str, list[Any]]:
         """
         Discover runtime details and classify by protocol.
@@ -58,13 +58,14 @@ class AgentCoreFederationClient:
         - MCP runtime -> ExtendedMCPServer
         - HTTP/AGUI/unknown runtime -> skipped_runtimes
         """
-        control_client = await self._get_control_client(self.region)
+        selected_region = region or self.region
+        control_client = await self._get_control_client(selected_region)
 
         try:
             runtime_summaries = await asyncio.to_thread(self._list_runtime_summaries, control_client)
         except Exception as exc:
-            logger.error("Failed to list AgentCore runtimes in %s: %s", self.region, exc, exc_info=True)
-            return {"a2a_agents": [], "mcp_servers": [], "skipped_runtimes": []}
+            logger.error("Failed to list AgentCore runtimes in %s: %s", selected_region, exc, exc_info=True)
+            raise RuntimeError(f"Failed to list AgentCore runtimes in {selected_region}: {exc}") from exc
 
         summary_by_arn = {s["agentRuntimeArn"]: s for s in runtime_summaries if "agentRuntimeArn" in s}
         selected_arns = runtime_arns or list(summary_by_arn.keys())
@@ -91,15 +92,15 @@ class AgentCoreFederationClient:
 
             if protocol == "A2A":
                 await self._reconcile_runtime_type(runtime_arn=runtime_arn, target_type="a2a")
-                a2a_agent = self._transform_runtime_to_a2a_agent(runtime_detail, self.region, author_id)
+                a2a_agent = self._transform_runtime_to_a2a_agent(runtime_detail, selected_region, author_id)
                 if enrich_protocol_payloads:
-                    await self._enrich_a2a_agent(a2a_agent, runtime_detail, self.region)
+                    await self._enrich_a2a_agent(a2a_agent, runtime_detail, selected_region)
                 a2a_agents.append(a2a_agent)
                 continue
 
             if protocol == "MCP":
                 await self._reconcile_runtime_type(runtime_arn=runtime_arn, target_type="mcp")
-                mcp_server = self._transform_runtime_to_mcp_server(runtime_detail, self.region, author_id)
+                mcp_server = self._transform_runtime_to_mcp_server(runtime_detail, selected_region, author_id)
                 if enrich_protocol_payloads:
                     await self._enrich_mcp_server(mcp_server)
                 mcp_servers.append(mcp_server)
@@ -287,9 +288,7 @@ class AgentCoreFederationClient:
             tags=agent.tags,
             registeredBy=agent.registeredBy,
             registeredAt=agent.registeredAt,
-            federationSource=agent.federationSource,
-            federationId=agent.federationId,
-            federationSyncedAt=agent.federationSyncedAt or datetime.now(UTC),
+            federationRefId=agent.federationRefId,
             federationMetadata=agent.federationMetadata,
             wellKnown=agent.wellKnown.model_dump(mode="json") if agent.wellKnown else None,
         )
@@ -352,9 +351,6 @@ class AgentCoreFederationClient:
             tags=["agentcore", "a2a", "aws", "federated"],
             registeredBy="agentcore-federation",
             registeredAt=datetime.now(UTC),
-            federationSource=FederationSource.AGENTCORE,
-            federationId=runtime_arn,
-            federationSyncedAt=datetime.now(UTC),
             federationMetadata={
                 "sourceType": "runtime",
                 "runtimeArn": runtime_arn,
@@ -406,9 +402,6 @@ class AgentCoreFederationClient:
                 "authProvider": "bedrock-agentcore",
             },
             "author": author_id or PydanticObjectId(),
-            "federationSource": FederationSource.AGENTCORE,
-            "federationId": runtime_arn,
-            "federationSyncedAt": datetime.now(UTC),
             "federationMetadata": {
                 "sourceType": "runtime",
                 "runtimeArn": runtime_arn,
@@ -472,24 +465,20 @@ class AgentCoreFederationClient:
 
     async def _reconcile_runtime_type(self, runtime_arn: str, target_type: str) -> None:
         if target_type == "a2a":
-            existing_mcp = await ExtendedMCPServer.find_one(
-                {"federationSource": FederationSource.AGENTCORE, "federationId": runtime_arn}
-            )
+            existing_mcp = await ExtendedMCPServer.find_one({"federationMetadata.runtimeArn": runtime_arn})
             if existing_mcp:
                 logger.info(
-                    "Runtime type changed to A2A, deleting previous MCP server model for federationId=%s",
+                    "Runtime type changed to A2A, deleting previous MCP server model for runtimeArn=%s",
                     runtime_arn,
                 )
                 await existing_mcp.delete()
             return
 
         if target_type == "mcp":
-            existing_a2a = await A2AAgent.find_one(
-                {"federationSource": FederationSource.AGENTCORE, "federationId": runtime_arn}
-            )
+            existing_a2a = await A2AAgent.find_one({"federationMetadata.runtimeArn": runtime_arn})
             if existing_a2a:
                 logger.info(
-                    "Runtime type changed to MCP, deleting previous A2A agent model for federationId=%s",
+                    "Runtime type changed to MCP, deleting previous A2A agent model for runtimeArn=%s",
                     runtime_arn,
                 )
                 await existing_a2a.delete()

@@ -1,0 +1,83 @@
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from beanie import PydanticObjectId
+
+from registry.services.federation_crud_service import FederationCrudService
+from registry_pkgs.models.enums import FederationStatus, FederationSyncStatus
+from registry_pkgs.models.federation import FederationStats
+
+
+def _make_federation(
+    *,
+    status: FederationStatus = FederationStatus.ACTIVE,
+    sync_status: FederationSyncStatus = FederationSyncStatus.IDLE,
+):
+    federation = SimpleNamespace(
+        id=PydanticObjectId(),
+        status=status,
+        syncStatus=sync_status,
+        syncMessage=None,
+        lastSync=None,
+        stats=FederationStats(),
+        deletedAt=None,
+        save=AsyncMock(),
+    )
+    return federation
+
+
+@pytest.mark.asyncio
+async def test_mark_sync_pending_uses_state_machine():
+    service = FederationCrudService()
+    federation = _make_federation(sync_status=FederationSyncStatus.SUCCESS)
+
+    result = await service.mark_sync_pending(federation)
+
+    assert result.syncStatus == FederationSyncStatus.PENDING
+    federation.save.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mark_sync_pending_rejects_invalid_status_transition():
+    service = FederationCrudService()
+    federation = _make_federation(status=FederationStatus.DELETING, sync_status=FederationSyncStatus.SUCCESS)
+
+    with pytest.raises(ValueError, match="cannot transition to sync pending"):
+        await service.mark_sync_pending(federation)
+
+
+@pytest.mark.asyncio
+async def test_mark_deleting_transitions_status_and_sync_status():
+    service = FederationCrudService()
+    federation = _make_federation(status=FederationStatus.ACTIVE, sync_status=FederationSyncStatus.IDLE)
+
+    result = await service.mark_deleting(federation)
+
+    assert result.status == FederationStatus.DELETING
+    assert result.syncStatus == FederationSyncStatus.PENDING
+    federation.save.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mark_deleted_requires_valid_transition():
+    service = FederationCrudService()
+    federation = _make_federation(status=FederationStatus.DELETED, sync_status=FederationSyncStatus.SUCCESS)
+
+    with pytest.raises(ValueError, match="cannot transition to deleted"):
+        await service.mark_deleted(federation)
+
+
+@pytest.mark.asyncio
+async def test_mark_sync_success_updates_stats_and_last_sync():
+    service = FederationCrudService()
+    federation = _make_federation(sync_status=FederationSyncStatus.SYNCING)
+    now = datetime.now(UTC)
+    stats = FederationStats(mcpServerCount=1, agentCount=2, toolCount=3, importedTotal=3)
+
+    result = await service.mark_sync_success(federation, last_sync=now, stats=stats)
+
+    assert result.syncStatus == FederationSyncStatus.SUCCESS
+    assert result.lastSync == now
+    assert result.stats == stats

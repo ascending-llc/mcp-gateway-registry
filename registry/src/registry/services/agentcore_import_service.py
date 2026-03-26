@@ -8,7 +8,7 @@ from beanie import PydanticObjectId
 from registry_pkgs.database.decorators import get_current_session, use_transaction
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 from registry_pkgs.models._generated import PrincipalType, ResourceType
-from registry_pkgs.models.enums import FederationSource, PermissionBits, RoleBits
+from registry_pkgs.models.enums import PermissionBits, RoleBits
 from registry_pkgs.vector.repositories.a2a_agent_repository import A2AAgentRepository
 from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRepository
 
@@ -69,6 +69,8 @@ class AgentCoreImportService:
         self,
         dry_run: bool = False,
         user_id: str | None = None,
+        aws_region: str | None = None,
+        runtime_arn: str | None = None,
     ) -> dict[str, Any]:
         """
         Import MCP + A2A entities from AgentCore runtimes.
@@ -82,7 +84,12 @@ class AgentCoreImportService:
 
         system_owner_id, viewer_id = await self._resolve_identities(user_id=user_id, dry_run=dry_run)
 
-        discovered = await self.federation_client.discover_runtime_entities(author_id=system_owner_id or viewer_id)
+        runtime_arns = [runtime_arn] if runtime_arn else None
+        discovered = await self.federation_client.discover_runtime_entities(
+            runtime_arns=runtime_arns,
+            author_id=system_owner_id or viewer_id,
+            region=aws_region,
+        )
         discovered_mcp = discovered.get("mcp_servers", [])
         discovered_a2a = discovered.get("a2a_agents", [])
         skipped_runtimes = discovered.get("skipped_runtimes", [])
@@ -187,8 +194,16 @@ class AgentCoreImportService:
                     }
                 )
 
-        discovered_mcp_ids = {item.federationId for item in discovered_mcp if item.federationId}
-        discovered_a2a_ids = {item.federationId for item in discovered_a2a if item.federationId}
+        discovered_mcp_ids = {
+            self._extract_runtime_arn(item.federationMetadata)
+            for item in discovered_mcp
+            if self._extract_runtime_arn(item.federationMetadata)
+        }
+        discovered_a2a_ids = {
+            self._extract_runtime_arn(item.federationMetadata)
+            for item in discovered_a2a
+            if self._extract_runtime_arn(item.federationMetadata)
+        }
         all_discovered_runtime_arns = (
             discovered_mcp_ids
             | discovered_a2a_ids
@@ -254,7 +269,7 @@ class AgentCoreImportService:
 
         duration = round(time.time() - start_time, 3)
         return {
-            "runtime_filter_count": 0,
+            "runtime_filter_count": len(runtime_arns or []),
             "discovered": {
                 "mcp_servers": len(discovered_mcp),
                 "a2a_agents": len(discovered_a2a),
@@ -293,16 +308,11 @@ class AgentCoreImportService:
         """
         Import single server with conflict handling.
         """
-        federation_id = discovered_server.federationId
-        if not federation_id:
-            raise ValueError("discovered server is missing federationId")
+        runtime_arn = self._extract_runtime_arn(discovered_server.federationMetadata)
+        if not runtime_arn:
+            raise ValueError("discovered server is missing runtimeArn in federationMetadata")
 
-        existing = await ExtendedMCPServer.find_one(
-            {
-                "federationSource": FederationSource.AGENTCORE,
-                "federationId": federation_id,
-            }
-        )
+        existing = await ExtendedMCPServer.find_one({"federationMetadata.runtimeArn": runtime_arn})
 
         if existing:
             changes = self._detect_changes(existing, discovered_server)
@@ -411,9 +421,6 @@ class AgentCoreImportService:
         merged_config["enabled"] = discovered_server.status == "active"
         created_server.config = merged_config
         created_server.status = discovered_server.status or created_server.status
-        created_server.federationSource = FederationSource.AGENTCORE
-        created_server.federationId = discovered_server.federationId
-        created_server.federationSyncedAt = now
         created_server.federationMetadata = discovered_server.federationMetadata
         created_server.updatedAt = now
         await created_server.save(session=self._get_current_session_or_none())
@@ -436,16 +443,11 @@ class AgentCoreImportService:
         viewer_id: PydanticObjectId | None,
         dry_run: bool,
     ) -> dict[str, Any]:
-        federation_id = discovered_agent.federationId
-        if not federation_id:
-            raise ValueError("discovered A2A agent is missing federationId")
+        runtime_arn = self._extract_runtime_arn(discovered_agent.federationMetadata)
+        if not runtime_arn:
+            raise ValueError("discovered A2A agent is missing runtimeArn in federationMetadata")
 
-        existing = await A2AAgent.find_one(
-            {
-                "federationSource": FederationSource.AGENTCORE,
-                "federationId": federation_id,
-            }
-        )
+        existing = await A2AAgent.find_one({"federationMetadata.runtimeArn": runtime_arn})
 
         agent_name = discovered_agent.card.name
         if existing:
@@ -517,8 +519,6 @@ class AgentCoreImportService:
 
         now = datetime.now(UTC)
         discovered_agent.author = owner_id
-        discovered_agent.federationSource = FederationSource.AGENTCORE
-        discovered_agent.federationSyncedAt = now
         discovered_agent.createdAt = discovered_agent.createdAt or now
         discovered_agent.updatedAt = now
         await discovered_agent.insert(session=self._get_current_session_or_none())
@@ -549,9 +549,6 @@ class AgentCoreImportService:
         existing.status = new_data.status
         existing.isEnabled = new_data.isEnabled
         existing.wellKnown = new_data.wellKnown
-        existing.federationSource = FederationSource.AGENTCORE
-        existing.federationId = new_data.federationId
-        existing.federationSyncedAt = datetime.now(UTC)
         existing.federationMetadata = new_data.federationMetadata
         existing.updatedAt = datetime.now(UTC)
         await existing.save(session=self._get_current_session_or_none())
@@ -583,9 +580,6 @@ class AgentCoreImportService:
         existing.status = new_data.status or existing.status
         existing.config["enabled"] = existing.status == "active"
         existing.numTools = new_data.numTools
-        existing.federationSource = FederationSource.AGENTCORE
-        existing.federationId = new_data.federationId
-        existing.federationSyncedAt = datetime.now(UTC)
         existing.federationMetadata = new_data.federationMetadata
         existing.updatedAt = datetime.now(UTC)
 
@@ -636,34 +630,32 @@ class AgentCoreImportService:
         stale_a2a: list[A2AAgent] = []
 
         existing_mcp = await ExtendedMCPServer.find(
-            {"federationSource": FederationSource.AGENTCORE, "federationId": {"$exists": True, "$ne": None}}
+            {"federationMetadata.runtimeArn": {"$exists": True, "$ne": None}}
         ).to_list()
-        existing_a2a = await A2AAgent.find(
-            {"federationSource": FederationSource.AGENTCORE, "federationId": {"$exists": True, "$ne": None}}
-        ).to_list()
+        existing_a2a = await A2AAgent.find({"federationMetadata.runtimeArn": {"$exists": True, "$ne": None}}).to_list()
 
         for server in existing_mcp:
-            federation_id = server.federationId
-            if not federation_id:
+            runtime_arn = self._extract_runtime_arn(server.federationMetadata)
+            if not runtime_arn:
                 continue
             if (server.federationMetadata or {}).get("sourceType") != "runtime":
                 continue
-            if federation_id not in all_discovered_runtime_arns:
+            if runtime_arn not in all_discovered_runtime_arns:
                 stale_mcp.append(server)
                 continue
-            if federation_id not in discovered_mcp_ids:
+            if runtime_arn not in discovered_mcp_ids:
                 stale_mcp.append(server)
 
         for agent in existing_a2a:
-            federation_id = agent.federationId
-            if not federation_id:
+            runtime_arn = self._extract_runtime_arn(agent.federationMetadata)
+            if not runtime_arn:
                 continue
             if (agent.federationMetadata or {}).get("sourceType") != "runtime":
                 continue
-            if federation_id not in all_discovered_runtime_arns:
+            if runtime_arn not in all_discovered_runtime_arns:
                 stale_a2a.append(agent)
                 continue
-            if federation_id not in discovered_a2a_ids:
+            if runtime_arn not in discovered_a2a_ids:
                 stale_a2a.append(agent)
 
         return stale_mcp, stale_a2a
@@ -676,14 +668,14 @@ class AgentCoreImportService:
     ) -> dict[str, Any]:
         server_name = stale_server.serverName
         server_id = str(stale_server.id) if stale_server.id else None
-        federation_id = stale_server.federationId
+        runtime_arn = self._extract_runtime_arn(stale_server.federationMetadata)
 
         if dry_run:
             return {
                 "action": "would_delete",
                 "server_name": server_name,
                 "server_id": server_id,
-                "changes": [f"delete stale federated MCP server ({federation_id})"],
+                "changes": [f"delete stale federated MCP server ({runtime_arn})"],
                 "error": None,
             }
 
@@ -694,7 +686,7 @@ class AgentCoreImportService:
             "action": "deleted",
             "server_name": server_name,
             "server_id": server_id,
-            "changes": [f"deleted stale federated MCP server ({federation_id})"],
+            "changes": [f"deleted stale federated MCP server ({runtime_arn})"],
             "error": None,
         }
 
@@ -706,14 +698,14 @@ class AgentCoreImportService:
     ) -> dict[str, Any]:
         agent_name = stale_agent.card.name
         agent_id = str(stale_agent.id) if stale_agent.id else None
-        federation_id = stale_agent.federationId
+        runtime_arn = self._extract_runtime_arn(stale_agent.federationMetadata)
 
         if dry_run:
             return {
                 "action": "would_delete",
                 "agent_name": agent_name,
                 "agent_id": agent_id,
-                "changes": [f"delete stale federated A2A agent ({federation_id})"],
+                "changes": [f"delete stale federated A2A agent ({runtime_arn})"],
                 "error": None,
             }
 
@@ -724,9 +716,16 @@ class AgentCoreImportService:
             "action": "deleted",
             "agent_name": agent_name,
             "agent_id": agent_id,
-            "changes": [f"deleted stale federated A2A agent ({federation_id})"],
+            "changes": [f"deleted stale federated A2A agent ({runtime_arn})"],
             "error": None,
         }
+
+    @staticmethod
+    def _extract_runtime_arn(metadata: dict[str, Any] | None) -> str | None:
+        if not metadata:
+            return None
+        runtime_arn = metadata.get("runtimeArn")
+        return str(runtime_arn) if runtime_arn else None
 
     async def _resolve_identities(
         self, user_id: str | None, dry_run: bool

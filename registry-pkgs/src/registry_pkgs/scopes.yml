@@ -13,6 +13,8 @@ group_mappings:
     - agents-read
     - agents-write
     - server-write
+    - federations-read
+    - federations-write
     - servers-share
     - agents-share
     - system-ops
@@ -25,6 +27,8 @@ group_mappings:
     - agents-read
     - agents-write
     - server-write
+    - federations-read
+    - federations-write
     - servers-share
     - agents-share
     - user-read
@@ -36,12 +40,15 @@ group_mappings:
     - agents-read
     - agents-write
     - server-write
+    - federations-read
+    - federations-write
     - user-read
     - acl-read
     - mcp-proxy-ops
   jarvis-registry-read-only:
     - servers-read
     - agents-read
+    - federations-read
     - user-read
     - acl-read
 
@@ -118,6 +125,28 @@ server-write:
   - action: toggle_service
     method: POST
     endpoint: /servers/{server_id}/toggle
+
+federations-read:
+  - action: list_federations
+    method: GET
+    endpoint: /federations
+  - action: get_federation
+    method: GET
+    endpoint: /federations/{federation_id}
+
+federations-write:
+  - action: create_federation
+    method: POST
+    endpoint: /federations
+  - action: update_federation
+    method: PUT
+    endpoint: /federations/{federation_id}
+  - action: delete_federation
+    method: DELETE
+    endpoint: /federations/{federation_id}
+  - action: sync_federation
+    method: POST
+    endpoint: /federations/{federation_id}/sync
 
 servers-share:
   - action: share_service

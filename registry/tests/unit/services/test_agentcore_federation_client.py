@@ -195,7 +195,7 @@ class TestAgentCoreFederationClient:
             client,
             "_transform_runtime_to_a2a_agent",
             lambda runtime_detail, _region, _author_id=None: SimpleNamespace(
-                federationId=runtime_detail["agentRuntimeArn"]
+                federationMetadata={"runtimeArn": runtime_detail["agentRuntimeArn"]}
             ),
         )
 
@@ -203,7 +203,7 @@ class TestAgentCoreFederationClient:
             result = await client.discover_runtime_entities(runtime_arns=[target_arn], enrich_protocol_payloads=False)
 
         assert len(result["a2a_agents"]) == 1
-        assert result["a2a_agents"][0].federationId == target_arn
+        assert result["a2a_agents"][0].federationMetadata["runtimeArn"] == target_arn
 
     async def test_build_runtime_mcp_url_uses_invocations_with_qualifier(self):
         client = AgentCoreFederationClient(region="us-east-1")
@@ -224,6 +224,21 @@ class TestAgentCoreFederationClient:
 
         with pytest.raises(KeyError):
             client._transform_runtime_to_mcp_server(runtime_detail, "us-east-1")
+
+    async def test_discover_runtime_entities_raises_when_runtime_listing_fails(self, monkeypatch):
+        client = AgentCoreFederationClient(region="us-east-1")
+
+        async def _get_control_client(_region):
+            return object()
+
+        def _list_runtime_summaries(_client):
+            raise RuntimeError("Token has expired and refresh failed")
+
+        monkeypatch.setattr(client, "_get_control_client", _get_control_client)
+        monkeypatch.setattr(client, "_list_runtime_summaries", _list_runtime_summaries)
+
+        with pytest.raises(RuntimeError, match="Failed to list AgentCore runtimes in us-east-1"):
+            await client.discover_runtime_entities(enrich_protocol_payloads=False)
 
 
 def _async_return(value):

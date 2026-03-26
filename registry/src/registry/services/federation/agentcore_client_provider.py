@@ -17,8 +17,9 @@ class AgentCoreClientProvider:
     a credentials provider callback for SigV4 HTTP fallback.
     """
 
-    def __init__(self, default_region: str):
+    def __init__(self, default_region: str, assume_role_arn: str | None = None):
         self.default_region = default_region
+        self.assume_role_arn = assume_role_arn
         self._control_clients: dict[str, Any] = {}
         self._runtime_clients: dict[str, Any] = {}
         self._credential_providers: dict[str, Any] = {}
@@ -66,7 +67,9 @@ class AgentCoreClientProvider:
         access_key = settings.aws_access_key_id
         secret_key = settings.aws_secret_access_key
         session_token = settings.aws_session_token
-        assume_role_arn = settings.agentcore_assume_role_arn
+        assume_role_arn = (
+            self.assume_role_arn if self.assume_role_arn is not None else settings.agentcore_assume_role_arn
+        )
 
         if access_key and secret_key:
             base_session = boto3.Session(
