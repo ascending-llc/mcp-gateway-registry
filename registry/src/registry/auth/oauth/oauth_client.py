@@ -49,11 +49,18 @@ class OAuthClient:
         client_info = flow_metadata.client_info
         metadata = flow_metadata.metadata
 
-        # Determine client authentication method
-        auth_method = "client_secret_post"
-        if metadata.token_endpoint_auth_methods_supported:
-            if "client_secret_basic" in metadata.token_endpoint_auth_methods_supported:
-                auth_method = "client_secret_basic"
+        # Prefer client_secret_post (credentials in POST body) over client_secret_basic
+        # (credentials in Authorization header). Many third-party MCP servers (e.g. HubSpot)
+        # only accept client_secret_post, while others support both. Using post as the
+        # default keeps maximum compatibility.
+        supported_methods = metadata.token_endpoint_auth_methods_supported or []
+        if "client_secret_post" in supported_methods:
+            auth_method = "client_secret_post"
+        elif "client_secret_basic" in supported_methods:
+            auth_method = "client_secret_basic"
+        else:
+            auth_method = "client_secret_post"  # safe default when server does not advertise methods
+        logger.debug(f"Token endpoint auth method selected: {auth_method} (supported: {supported_methods})")
 
         # Create Authlib client
         client = AsyncOAuth2Client(
@@ -105,6 +112,10 @@ class OAuthClient:
         if client_info.additional_params:
             params.update(client_info.additional_params)
 
+        # Add resource parameter for RFC 8707 Resource Indicator support
+        if flow_metadata.resource_metadata and flow_metadata.resource_metadata.resource:
+            params["resource"] = flow_metadata.resource_metadata.resource
+
         # Build authorization URL using Authlib
         authorization_url, _ = client.create_authorization_url(
             metadata.authorization_endpoint,
@@ -147,6 +158,10 @@ class OAuthClient:
             if flow_metadata.client_info.additional_params:
                 extra_params.update(flow_metadata.client_info.additional_params)
 
+            # Add resource parameter for RFC 8707 Resource Indicator support
+            if flow_metadata.resource_metadata and flow_metadata.resource_metadata.resource:
+                extra_params["resource"] = flow_metadata.resource_metadata.resource
+
             # Exchange code for tokens using Authlib
             # Authlib automatically handles PKCE, client authentication, and token response parsing
             token_response = await client.fetch_token(
@@ -167,6 +182,14 @@ class OAuthClient:
                 expires_at=token_response.get("expires_at"),  # Authlib calculates this automatically
             )
 
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"Token exchange HTTP error: {e.response.status_code} from {e.request.url}\n"
+                f"Request headers: {dict(e.request.headers)}\n"
+                f"Response body: {e.response.text}",
+                exc_info=True,
+            )
+            return None
         except Exception as e:
             logger.error(f"Failed to exchange code for tokens: {e}", exc_info=True)
             return None
