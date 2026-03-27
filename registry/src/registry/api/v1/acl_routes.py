@@ -5,7 +5,6 @@ RESTful API endpoints for managing ACL permissions using MongoDB.
 """
 
 import logging
-from typing import Any
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
