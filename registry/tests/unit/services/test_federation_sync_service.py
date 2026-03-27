@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from beanie import PydanticObjectId
 
-from registry.services.federation.sync_handlers import AwsAgentCoreSyncHandler, AzureAiFoundrySyncHandler
+from registry.services.federation.federation_handlers import AwsAgentCoreSyncHandler, AzureAiFoundrySyncHandler
 from registry.services.federation_sync_service import FederationSyncService
 from registry_pkgs.models.enums import FederationProviderType, FederationStatus, FederationSyncStatus
 
@@ -30,6 +30,7 @@ def _make_federation(provider_type: FederationProviderType, provider_config: dic
         providerConfig=provider_config,
         status=FederationStatus.ACTIVE,
         syncStatus=FederationSyncStatus.IDLE,
+        version=1,
         createdAt=now,
         updatedAt=now,
     )
@@ -55,7 +56,14 @@ async def test_discover_entities_dispatches_to_aws_handler(federation_sync_servi
 
 @pytest.mark.asyncio
 async def test_aws_handler_passes_resource_tags_filter_to_client():
-    handler = AwsAgentCoreSyncHandler()
+    fake_discovery_client = MagicMock()
+    fake_runtime_invoker = MagicMock()
+    fake_runtime_invoker.enrich_mcp_server = AsyncMock()
+    fake_runtime_invoker.enrich_a2a_agent = AsyncMock()
+    handler = AwsAgentCoreSyncHandler(
+        discovery_client=fake_discovery_client,
+        runtime_invoker=fake_runtime_invoker,
+    )
     federation = _make_federation(
         FederationProviderType.AWS_AGENTCORE,
         {
@@ -64,16 +72,16 @@ async def test_aws_handler_passes_resource_tags_filter_to_client():
             "resourceTagsFilter": {"env": "production", "team": "platform"},
         },
     )
-    fake_client = MagicMock()
-    fake_client.discover_runtime_entities = AsyncMock(
+    fake_discovery_client.discover_runtime_entities = AsyncMock(
         return_value={"mcp_servers": [], "a2a_agents": [], "skipped_runtimes": []}
     )
-    handler.build_client = MagicMock(return_value=fake_client)
 
     result = await handler.discover_entities(federation)
 
-    fake_client.discover_runtime_entities.assert_awaited_once_with(
+    fake_discovery_client.discover_runtime_entities.assert_awaited_once_with(
         author_id=None,
+        region="us-east-1",
+        assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
         resource_tags_filter={"env": "production", "team": "platform"},
     )
     assert result == {"mcp_servers": [], "a2a_agents": [], "skipped_runtimes": []}
@@ -124,3 +132,42 @@ async def test_run_delete_restores_active_status_when_delete_fails(federation_sy
         federation, "delete failed"
     )
     federation_sync_service.federation_job_service.mark_failed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_update_federation_and_create_resync_job_creates_pending_job(
+    federation_sync_service: FederationSyncService,
+):
+    federation = _make_federation(
+        FederationProviderType.AWS_AGENTCORE,
+        {"region": "us-east-1", "assumeRoleArn": "arn:aws:iam::123456789012:role/TestRole"},
+    )
+    updated = SimpleNamespace(
+        **{
+            **federation.__dict__,
+            "providerConfig": {"region": "us-west-2", "assumeRoleArn": "arn:aws:iam::123456789012:role/TestRole"},
+            "version": 2,
+        }
+    )
+    job = SimpleNamespace(id=PydanticObjectId())
+
+    federation_sync_service.federation_crud_service.update_federation = AsyncMock(return_value=updated)
+    federation_sync_service.federation_job_service.create_job = AsyncMock(return_value=job)
+    federation_sync_service.federation_crud_service.mark_sync_pending = AsyncMock(return_value=updated)
+
+    result, created_job = await FederationSyncService.update_federation_and_create_resync_job.__wrapped__(
+        federation_sync_service,
+        federation=federation,
+        display_name="Updated",
+        description="Updated",
+        tags=["prod"],
+        normalized_provider_config={"region": "us-west-2", "assumeRoleArn": "arn:aws:iam::123456789012:role/TestRole"},
+        version=federation.version,
+        updated_by="user-1",
+    )
+
+    federation_sync_service.federation_crud_service.update_federation.assert_awaited_once()
+    federation_sync_service.federation_job_service.create_job.assert_awaited_once()
+    federation_sync_service.federation_crud_service.mark_sync_pending.assert_awaited_once_with(updated)
+    assert result == updated
+    assert created_job == job

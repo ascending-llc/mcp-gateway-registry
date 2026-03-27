@@ -9,7 +9,6 @@ from registry_pkgs.models.enums import FederationStateMachine, FederationStatus
 from ....auth.dependencies import CurrentUser
 from ....deps import (
     get_federation_crud_service,
-    get_federation_job_service,
     get_federation_sync_service,
 )
 from ....schemas.errors import ErrorCode, create_error_detail
@@ -49,6 +48,30 @@ def _raise_sync_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=http_status.HTTP_502_BAD_GATEWAY,
             detail=create_error_detail(ErrorCode.EXTERNAL_SERVICE_ERROR, message),
+        ) from exc
+
+    raise HTTPException(
+        status_code=http_status.HTTP_400_BAD_REQUEST,
+        detail=create_error_detail(ErrorCode.INVALID_REQUEST, message),
+    ) from exc
+
+
+def _raise_federation_value_error(exc: ValueError) -> None:
+    message = str(exc)
+    if "not implemented yet" in message:
+        raise HTTPException(
+            status_code=http_status.HTTP_501_NOT_IMPLEMENTED,
+            detail=create_error_detail(ErrorCode.NOT_IMPLEMENTED, message),
+        ) from exc
+
+    if message in {
+        "Federation version conflict",
+        "Federation already has an active sync job",
+        "Federation already has an active job",
+    }:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=create_error_detail(ErrorCode.CONFLICT, message),
         ) from exc
 
     raise HTTPException(
@@ -129,49 +152,64 @@ def _to_list_item(item) -> FederationListItemResponse:
     )
 
 
-def _ensure_update_allowed(federation) -> None:
-    if FederationStateMachine.can_update(federation.status):
-        return
-    raise HTTPException(
-        status_code=http_status.HTTP_409_CONFLICT,
-        detail=create_error_detail(
-            ErrorCode.CONFLICT,
-            f"Federation in status '{federation.status}' cannot be updated",
+def _to_paged_response(items, total: int, page: int, per_page: int) -> FederationPagedResponse:
+    total_pages = math.ceil(total / per_page) if total > 0 else 0
+    return FederationPagedResponse(
+        federations=[_to_list_item(x) for x in items],
+        pagination=PaginationMetadata(
+            total=total,
+            page=page,
+            perPage=per_page,
+            totalPages=total_pages,
         ),
     )
 
 
-def _ensure_sync_allowed(federation) -> None:
-    if federation.status != FederationStatus.ACTIVE:
-        raise HTTPException(
-            status_code=http_status.HTTP_409_CONFLICT,
-            detail=create_error_detail(
-                ErrorCode.CONFLICT,
-                f"Federation in status '{federation.status}' cannot be synced",
-            ),
-        )
-
-    if FederationStateMachine.can_start_sync(federation.syncStatus):
-        return
-
-    raise HTTPException(
-        status_code=http_status.HTTP_409_CONFLICT,
-        detail=create_error_detail(
-            ErrorCode.CONFLICT,
-            f"Federation in sync status '{federation.syncStatus}' cannot start a new sync",
-        ),
+def _to_delete_response(federation, job) -> FederationDeleteResponse:
+    return FederationDeleteResponse(
+        federationId=str(federation.id),
+        jobId=str(job.id),
+        status="deleted",
     )
 
 
-def _ensure_delete_allowed(federation) -> None:
-    if FederationStateMachine.can_delete(federation.status):
-        return
+async def _get_required_federation(federation_id: str, federation_crud_service):
+    federation = await federation_crud_service.get_federation(federation_id)
+    if federation:
+        return federation
+    raise HTTPException(
+        status_code=http_status.HTTP_404_NOT_FOUND,
+        detail=create_error_detail(ErrorCode.NOT_FOUND, "Federation not found"),
+    )
+
+
+async def _to_detail_response(federation, federation_crud_service) -> FederationDetailResponse:
+    recent_jobs = await federation_crud_service.get_recent_jobs(federation.id, limit=10)
+    return FederationDetailResponse(
+        id=str(federation.id),
+        providerType=federation.providerType,
+        displayName=federation.displayName,
+        description=federation.description,
+        tags=federation.tags,
+        status=federation.status,
+        syncStatus=federation.syncStatus,
+        syncMessage=federation.syncMessage,
+        providerConfig=federation.providerConfig,
+        stats=_to_stats_response(federation.stats),
+        lastSync=_to_last_sync_response(federation.lastSync),
+        recentJobs=[_to_job_response(j) for j in recent_jobs],
+        version=federation.version,
+        createdBy=federation.createdBy,
+        updatedBy=federation.updatedBy,
+        createdAt=federation.createdAt,
+        updatedAt=federation.updatedAt,
+    )
+
+
+def _raise_conflict(message: str) -> None:
     raise HTTPException(
         status_code=http_status.HTTP_409_CONFLICT,
-        detail=create_error_detail(
-            ErrorCode.CONFLICT,
-            f"Federation in status '{federation.status}' cannot be deleted",
-        ),
+        detail=create_error_detail(ErrorCode.CONFLICT, message),
     )
 
 
@@ -211,27 +249,7 @@ async def create_federation(
             detail=create_error_detail(ErrorCode.INVALID_REQUEST, str(exc)),
         ) from exc
     logger.info(f"Created federation {federation.id}")
-    recent_jobs = await federation_crud_service.get_recent_jobs(federation.id, limit=10)
-
-    return FederationDetailResponse(
-        id=str(federation.id),
-        providerType=federation.providerType,
-        displayName=federation.displayName,
-        description=federation.description,
-        tags=federation.tags,
-        status=federation.status,
-        syncStatus=federation.syncStatus,
-        syncMessage=federation.syncMessage,
-        providerConfig=federation.providerConfig,
-        stats=_to_stats_response(federation.stats),
-        lastSync=_to_last_sync_response(federation.lastSync),
-        recentJobs=[_to_job_response(j) for j in recent_jobs],
-        version=federation.version,
-        createdBy=federation.createdBy,
-        updatedBy=federation.updatedBy,
-        createdAt=federation.createdAt,
-        updatedAt=federation.updatedAt,
-    )
+    return await _to_detail_response(federation, federation_crud_service)
 
 
 @router.get("", response_model=FederationPagedResponse)
@@ -276,16 +294,7 @@ async def list_federations(
         page=page,
         page_size=effective_per_page,
     )
-    total_pages = math.ceil(total / effective_per_page) if total > 0 else 0
-    return FederationPagedResponse(
-        federations=[_to_list_item(x) for x in items],
-        pagination=PaginationMetadata(
-            total=total,
-            page=page,
-            perPage=effective_per_page,
-            totalPages=total_pages,
-        ),
-    )
+    return _to_paged_response(items, total, page, effective_per_page)
 
 
 @router.get("/{federation_id}", response_model=FederationDetailResponse)
@@ -302,34 +311,8 @@ async def get_federation(
     Returns:
 
     """
-    federation = await federation_crud_service.get_federation(federation_id)
-    if not federation:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=create_error_detail(ErrorCode.NOT_FOUND, "Federation not found"),
-        )
-
-    recent_jobs = await federation_crud_service.get_recent_jobs(federation.id, limit=10)
-
-    return FederationDetailResponse(
-        id=str(federation.id),
-        providerType=federation.providerType,
-        displayName=federation.displayName,
-        description=federation.description,
-        tags=federation.tags,
-        status=federation.status,
-        syncStatus=federation.syncStatus,
-        syncMessage=federation.syncMessage,
-        providerConfig=federation.providerConfig,
-        stats=_to_stats_response(federation.stats),
-        lastSync=_to_last_sync_response(federation.lastSync),
-        recentJobs=[_to_job_response(j) for j in recent_jobs],
-        version=federation.version,
-        createdBy=federation.createdBy,
-        updatedBy=federation.updatedBy,
-        createdAt=federation.createdAt,
-        updatedAt=federation.updatedAt,
-    )
+    federation = await _get_required_federation(federation_id, federation_crud_service)
+    return await _to_detail_response(federation, federation_crud_service)
 
 
 @router.put("/{federation_id}", response_model=FederationDetailResponse)
@@ -338,7 +321,6 @@ async def update_federation(
     data: FederationUpdateRequest,
     user_context: CurrentUser,
     federation_crud_service=Depends(get_federation_crud_service),
-    federation_job_service=Depends(get_federation_job_service),
     federation_sync_service=Depends(get_federation_sync_service),
 ):
     """
@@ -348,96 +330,34 @@ async def update_federation(
         data:
         user_context:
         federation_crud_service:
-        federation_job_service:
         federation_sync_service:
 
     Returns:
 
     """
-    federation = await federation_crud_service.get_federation(federation_id)
-    if not federation:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=create_error_detail(ErrorCode.NOT_FOUND, "Federation not found"),
-        )
-    _ensure_update_allowed(federation)
-
-    old_provider_config = dict(federation.providerConfig or {})
-    user_id = user_context.get("user_id")
-    need_resync = data.syncAfterUpdate and old_provider_config != data.providerConfig
-
-    if need_resync:
-        active_job = await federation_job_service.get_active_job(federation.id)
-        if active_job:
-            raise HTTPException(
-                status_code=http_status.HTTP_409_CONFLICT,
-                detail=create_error_detail(ErrorCode.CONFLICT, "Federation already has an active sync job"),
-            )
+    federation = await _get_required_federation(federation_id, federation_crud_service)
+    if not FederationStateMachine.can_update(federation.status):
+        _raise_conflict(f"Federation in status '{federation.status}' cannot be updated")
 
     try:
-        federation = await federation_crud_service.update_federation(
+        federation, job = await federation_sync_service.update_federation_with_optional_resync(
             federation=federation,
             display_name=data.displayName,
             description=data.description,
             tags=data.tags,
             provider_config=data.providerConfig,
             version=data.version,
-            updated_by=user_id,
+            updated_by=user_context.get("user_id"),
+            sync_after_update=data.syncAfterUpdate,
         )
+        if job is not None:
+            logger.info(f"Updated federation {federation_id}: {federation},job: {job}")
     except ValueError as exc:
         logger.error(f"Failed to update federation {federation_id}: {exc}")
-        status_code = (
-            http_status.HTTP_409_CONFLICT
-            if str(exc) == "Federation version conflict"
-            else http_status.HTTP_400_BAD_REQUEST
-        )
-        error_code = ErrorCode.CONFLICT if status_code == http_status.HTTP_409_CONFLICT else ErrorCode.INVALID_REQUEST
-        raise HTTPException(
-            status_code=status_code,
-            detail=create_error_detail(error_code, str(exc)),
-        ) from exc
-
-    if need_resync:
-        job = await federation_job_service.create_job(
-            federation_id=federation.id,
-            job_type="config_resync",
-            trigger_type="api",
-            triggered_by=user_id,
-            request_snapshot={
-                "providerType": _enum_value(federation.providerType),
-                "providerConfig": federation.providerConfig,
-            },
-        )
-        federation = await federation_crud_service.mark_sync_pending(federation)
-        try:
-            await federation_sync_service.run_sync(
-                federation=federation,
-                job=job,
-                user_id=user_id,
-            )
-        except Exception as exc:
-            _raise_sync_error(exc)
-        logger.info(f"Updated federation {federation_id}: {federation},job: {job}")
-    recent_jobs = await federation_crud_service.get_recent_jobs(federation.id, limit=10)
-    return FederationDetailResponse(
-        id=str(federation.id),
-        providerType=federation.providerType,
-        displayName=federation.displayName,
-        description=federation.description,
-        tags=federation.tags,
-        status=federation.status,
-        syncStatus=federation.syncStatus,
-        syncMessage=federation.syncMessage,
-        providerConfig=federation.providerConfig,
-        stats=_to_stats_response(federation.stats),
-        lastSync=_to_last_sync_response(federation.lastSync),
-        recentJobs=[_to_job_response(j) for j in recent_jobs],
-        version=federation.version,
-        createdBy=federation.createdBy,
-        updatedBy=federation.updatedBy,
-        createdAt=federation.createdAt,
-        updatedAt=federation.updatedAt,
-    )
+        _raise_federation_value_error(exc)
+    except Exception as exc:
+        _raise_sync_error(exc)
+    return await _to_detail_response(federation, federation_crud_service)
 
 
 @router.post("/{federation_id}/sync", response_model=FederationSyncJobResponse)
@@ -446,7 +366,6 @@ async def sync_federation(
     data: FederationSyncRequest,
     user_context: CurrentUser,
     federation_crud_service=Depends(get_federation_crud_service),
-    federation_job_service=Depends(get_federation_job_service),
     federation_sync_service=Depends(get_federation_sync_service),
 ):
     """
@@ -456,7 +375,6 @@ async def sync_federation(
         data:
         user_context:
         federation_crud_service:
-        federation_job_service:
         federation_sync_service:
 
     Returns: FederationSyncJobResponse
@@ -501,13 +419,11 @@ async def sync_federation(
                 Update Job:
                 status = success
     """
-    federation = await federation_crud_service.get_federation(federation_id)
-    if not federation:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=create_error_detail(ErrorCode.NOT_FOUND, "Federation not found"),
-        )
-    _ensure_sync_allowed(federation)
+    federation = await _get_required_federation(federation_id, federation_crud_service)
+    if federation.status != FederationStatus.ACTIVE:
+        _raise_conflict(f"Federation in status '{federation.status}' cannot be synced")
+    if not FederationStateMachine.can_start_sync(federation.syncStatus):
+        _raise_conflict(f"Federation in sync status '{federation.syncStatus}' cannot start a new sync")
     try:
         federation_crud_service.validate_provider_config(federation.providerType, federation.providerConfig)
     except ValueError as exc:
@@ -515,37 +431,19 @@ async def sync_federation(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=create_error_detail(ErrorCode.INVALID_REQUEST, str(exc)),
         ) from exc
-
-    logger.info(f"sync federation {federation.id}, {federation.providerType}")
-    active_job = await federation_job_service.get_active_job(federation.id)
-    if active_job:
-        raise HTTPException(
-            status_code=http_status.HTTP_409_CONFLICT,
-            detail=create_error_detail(ErrorCode.CONFLICT, "Federation already has an active sync job"),
-        )
-
-    job_type = "force_sync" if data.force else "full_sync"
-    job = await federation_job_service.create_job(
-        federation_id=federation.id,
-        job_type=job_type,
-        trigger_type="manual",
-        triggered_by=user_context.get("user_id"),
-        request_snapshot={
-            "providerType": _enum_value(federation.providerType),
-            "providerConfig": federation.providerConfig,
-            "reason": data.reason,
-        },
-    )
-    await federation_crud_service.mark_sync_pending(federation)
     try:
-        await federation_sync_service.run_sync(
+        logger.info(f"sync federation {federation.id}, {federation.providerType}")
+        job = await federation_sync_service.start_manual_sync(
             federation=federation,
-            job=job,
-            user_id=user_context.get("user_id"),
+            force=data.force,
+            reason=data.reason,
+            triggered_by=user_context.get("user_id"),
         )
+        return _to_job_response(job)
+    except ValueError as exc:
+        _raise_federation_value_error(exc)
     except Exception as exc:
         _raise_sync_error(exc)
-    return _to_job_response(job)
 
 
 @router.delete("/{federation_id}", response_model=FederationDeleteResponse)
@@ -553,7 +451,6 @@ async def delete_federation(
     federation_id: str,
     user_context: CurrentUser,
     federation_crud_service=Depends(get_federation_crud_service),
-    federation_job_service=Depends(get_federation_job_service),
     federation_sync_service=Depends(get_federation_sync_service),
 ):
     """
@@ -562,47 +459,22 @@ async def delete_federation(
         federation_id:
         user_context:
         federation_crud_service:
-        federation_job_service:
         federation_sync_service:
 
     Returns:
 
     """
-    federation = await federation_crud_service.get_federation(federation_id)
-    if not federation:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=create_error_detail(ErrorCode.NOT_FOUND, "Federation not found"),
-        )
-    _ensure_delete_allowed(federation)
-
-    active_job = await federation_job_service.get_active_job(federation.id)
-    if active_job:
-        raise HTTPException(
-            status_code=http_status.HTTP_409_CONFLICT,
-            detail=create_error_detail(ErrorCode.CONFLICT, "Federation already has an active job"),
-        )
-
-    await federation_crud_service.mark_deleting(federation)
-
-    job = await federation_job_service.create_job(
-        federation_id=federation.id,
-        job_type="delete_sync",
-        trigger_type="manual",
-        triggered_by=user_context.get("user_id"),
-        request_snapshot={
-            "providerType": _enum_value(federation.providerType),
-            "providerConfig": federation.providerConfig,
-        },
-    )
+    federation = await _get_required_federation(federation_id, federation_crud_service)
+    if not FederationStateMachine.can_delete(federation.status):
+        _raise_conflict(f"Federation in status '{federation.status}' cannot be deleted")
 
     try:
-        await federation_sync_service.run_delete(federation=federation, job=job)
+        job = await federation_sync_service.start_delete(
+            federation=federation,
+            triggered_by=user_context.get("user_id"),
+        )
+        return _to_delete_response(federation, job)
+    except ValueError as exc:
+        _raise_federation_value_error(exc)
     except Exception as exc:
         _raise_sync_error(exc)
-
-    return FederationDeleteResponse(
-        federationId=str(federation.id),
-        jobId=str(job.id),
-        status="deleted",
-    )

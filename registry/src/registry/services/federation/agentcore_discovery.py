@@ -1,18 +1,14 @@
 import asyncio
-import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
-import boto3
 from beanie import PydanticObjectId
 
-from registry.core.config import settings
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 
-from .agentcore_client_provider import AgentCoreClientProvider
-from .runtime_invoker import AgentCoreRuntimeInvoker
+from .agentcore_clients import AgentCoreClientProvider
 
 logger = logging.getLogger(__name__)
 
@@ -24,31 +20,24 @@ class AgentCoreFederationClient:
     This client discovers AgentCore runtimes and transforms them into:
     - A2AAgent (for A2A runtimes)
     - ExtendedMCPServer (for MCP runtimes)
+
+    Field convention:
+    - AWS SDK payloads use `agentRuntimeArn`
+    - Service-layer runtime dictionaries use canonical `runtimeArn`
     """
 
     def __init__(
         self,
-        region: str | None = None,
         client_provider: AgentCoreClientProvider | None = None,
-        runtime_invoker: AgentCoreRuntimeInvoker | None = None,
     ):
-        self.region = region or settings.aws_region or "us-east-1"
-        self._control_clients: dict[str, Any] = {}
-        self._client_locks: dict[str, asyncio.Lock] = {}
-        self.client_provider = client_provider or AgentCoreClientProvider(default_region=self.region)
-        self.runtime_invoker = runtime_invoker or AgentCoreRuntimeInvoker(
-            default_region=self.region,
-            get_runtime_client=self.client_provider.get_runtime_client,
-            get_runtime_credentials_provider=self.client_provider.get_runtime_credentials_provider,
-            extract_region_from_arn=self.extract_region_from_arn,
-        )
+        self.client_provider = client_provider or AgentCoreClientProvider()
 
     async def discover_runtime_entities(
         self,
+        region: str,
         runtime_arns: list[str] | None = None,
         author_id: PydanticObjectId | None = None,
-        enrich_protocol_payloads: bool = True,
-        region: str | None = None,
+        assume_role_arn: str | None = None,
         resource_tags_filter: dict[str, str] | None = None,
     ) -> dict[str, list[Any]]:
         """
@@ -66,15 +55,14 @@ class AgentCoreFederationClient:
         - If resource_tags_filter is provided, only runtimes whose AWS resource
           tags fully match the filter are imported.
         """
-        selected_region = region or self.region
-        control_client = await self._get_control_client(selected_region)
+        control_client = await self.client_provider.get_control_client(region, assume_role_arn)
         normalized_tag_filter = dict(resource_tags_filter or {})
 
         try:
             runtime_summaries = await asyncio.to_thread(self._list_runtime_summaries, control_client)
         except Exception as exc:
-            logger.error("Failed to list AgentCore runtimes in %s: %s", selected_region, exc, exc_info=True)
-            raise RuntimeError(f"Failed to list AgentCore runtimes in {selected_region}: {exc}") from exc
+            logger.error("Failed to list AgentCore runtimes in %s: %s", region, exc, exc_info=True)
+            raise RuntimeError(f"Failed to list AgentCore runtimes in {region}: {exc}") from exc
 
         summary_by_arn = {s["agentRuntimeArn"]: s for s in runtime_summaries if "agentRuntimeArn" in s}
         selected_arns = runtime_arns or list(summary_by_arn.keys())
@@ -88,13 +76,14 @@ class AgentCoreFederationClient:
             selected_summaries.append(summary)
 
         runtime_details = await asyncio.to_thread(self._get_runtime_details, control_client, selected_summaries)
+        runtime_details = [self._normalize_runtime_detail(detail) for detail in runtime_details]
         total_candidates = len(runtime_details)
         filtered_out_count = 0
 
         if normalized_tag_filter:
             logger.info(
                 "Applying AgentCore runtime tag filter in region %s: filter=%s total_candidates=%d",
-                selected_region,
+                region,
                 normalized_tag_filter,
                 total_candidates,
             )
@@ -110,7 +99,7 @@ class AgentCoreFederationClient:
 
         logger.info(
             "AgentCore discovery candidates in region %s: total=%d matched_after_tag_filter=%d filtered_out=%d",
-            selected_region,
+            region,
             total_candidates,
             len(runtime_details),
             filtered_out_count,
@@ -121,24 +110,20 @@ class AgentCoreFederationClient:
         skipped_runtimes: list[dict[str, Any]] = list(filtered_runtimes)
 
         for runtime_detail in runtime_details:
-            runtime_arn = runtime_detail["agentRuntimeArn"]
+            runtime_arn = runtime_detail["runtimeArn"]
             runtime_id = runtime_detail["agentRuntimeId"]
             runtime_name = runtime_detail["agentRuntimeName"]
             protocol = self._extract_runtime_protocol(runtime_detail)
 
             if protocol == "A2A":
                 await self._reconcile_runtime_type(runtime_arn=runtime_arn, target_type="a2a")
-                a2a_agent = self._transform_runtime_to_a2a_agent(runtime_detail, selected_region, author_id)
-                if enrich_protocol_payloads:
-                    await self._enrich_a2a_agent(a2a_agent, runtime_detail, selected_region)
+                a2a_agent = self._transform_runtime_to_a2a_agent(runtime_detail, region, author_id)
                 a2a_agents.append(a2a_agent)
                 continue
 
             if protocol == "MCP":
                 await self._reconcile_runtime_type(runtime_arn=runtime_arn, target_type="mcp")
-                mcp_server = self._transform_runtime_to_mcp_server(runtime_detail, selected_region, author_id)
-                if enrich_protocol_payloads:
-                    await self._enrich_mcp_server(mcp_server)
+                mcp_server = self._transform_runtime_to_mcp_server(runtime_detail, region, author_id)
                 mcp_servers.append(mcp_server)
                 continue
 
@@ -153,7 +138,7 @@ class AgentCoreFederationClient:
 
         logger.info(
             "AgentCore discovery completed in region %s: matched_runtimes=%d mcp_servers=%d a2a_agents=%d skipped=%d",
-            selected_region,
+            region,
             len(runtime_details),
             len(mcp_servers),
             len(a2a_agents),
@@ -164,42 +149,6 @@ class AgentCoreFederationClient:
             "mcp_servers": mcp_servers,
             "skipped_runtimes": skipped_runtimes,
         }
-
-    def _init_boto3_client(self, region: str):
-        if region in self._control_clients:
-            return self._control_clients[region]
-
-        access_key = settings.aws_access_key_id
-        secret_key = settings.aws_secret_access_key
-        session_token = settings.aws_session_token
-
-        if access_key and secret_key:
-            base_session = boto3.Session(
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                aws_session_token=session_token,
-            )
-            logger.info("Initialized AgentCore AWS session with explicit access keys")
-        else:
-            base_session = boto3.Session(region_name=region)
-            logger.info("Initialized AgentCore AWS session with default credential chain")
-
-        client = base_session.client("bedrock-agentcore-control", region_name=region)
-        self._control_clients[region] = client
-        return client
-
-    async def _get_control_client(self, region: str) -> Any:
-        cached = self._control_clients.get(region)
-        if cached:
-            return cached
-
-        lock = self._client_locks.setdefault(region, asyncio.Lock())
-        async with lock:
-            cached = self._control_clients.get(region)
-            if cached:
-                return cached
-            return await asyncio.to_thread(self._init_boto3_client, region)
 
     def _list_runtime_summaries(self, control_client: Any) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
@@ -232,7 +181,18 @@ class AgentCoreFederationClient:
         return dict(response.get("tags", {}) or {})
 
     @staticmethod
+    def _normalize_runtime_detail(runtime_detail: dict[str, Any]) -> dict[str, Any]:
+        detail = dict(runtime_detail)
+        runtime_arn = detail.get("runtimeArn") or detail.get("agentRuntimeArn")
+        if runtime_arn:
+            detail["runtimeArn"] = runtime_arn
+        return detail
+
+    @staticmethod
     def _matches_resource_tags(runtime_tags: dict[str, str], required_tags: dict[str, str]) -> bool:
+        """
+        match all tags
+        """
         return all(str(runtime_tags.get(key)) == str(expected) for key, expected in required_tags.items())
 
     def _filter_runtime_details_by_tags(
@@ -245,7 +205,7 @@ class AgentCoreFederationClient:
         filtered_runtimes: list[dict[str, Any]] = []
 
         for runtime_detail in runtime_details:
-            runtime_arn = runtime_detail["agentRuntimeArn"]
+            runtime_arn = runtime_detail["runtimeArn"]
             runtime_name = runtime_detail.get("agentRuntimeName")
             runtime_tags = self._list_runtime_tags(control_client, runtime_arn)
             runtime_detail["tags"] = runtime_tags
@@ -275,128 +235,13 @@ class AgentCoreFederationClient:
 
         return matched_details, filtered_runtimes
 
-    async def _enrich_mcp_server(self, server: ExtendedMCPServer) -> None:
-        config = server.config or {}
-        runtime_url = config.get("url")
-        if not runtime_url:
-            return
-
-        try:
-            result = await self.runtime_invoker.fetch_mcp_payloads(
-                runtime_url=runtime_url,
-                transport_type=config.get("type"),
-                metadata=server.federationMetadata or {},
-                runtime_detail=server.federationMetadata or {},
-            )
-        except Exception as exc:
-            logger.warning("MCP runtime enrichment failed for %s: %s", server.serverName, exc)
-            metadata = dict(server.federationMetadata or {})
-            metadata["enrichmentError"] = f"mcp enrichment failed: {exc}"
-            metadata["enrichedAt"] = datetime.now(UTC)
-            server.federationMetadata = metadata
-            return
-
-        if result.error_message:
-            logger.warning("MCP runtime enrichment returned error for %s: %s", server.serverName, result.error_message)
-            metadata = dict(server.federationMetadata or {})
-            metadata["enrichedAt"] = datetime.now(UTC)
-            metadata["enrichmentError"] = result.error_message
-            server.federationMetadata = metadata
-            return
-
-        tools = result.tools or []
-        resources = result.resources or []
-        prompts = result.prompts or []
-        capabilities = result.capabilities or {}
-
-        config["toolFunctions"] = self._convert_tools_to_tool_functions(tools, server.serverName)
-        config["tools"] = ", ".join([tool.get("name", "") for tool in tools if tool.get("name")])
-        config["resources"] = resources
-        config["prompts"] = prompts
-        config["capabilities"] = json.dumps(capabilities, ensure_ascii=False) if capabilities else "{}"
-        config["requiresInit"] = bool(result.requires_init) if result.requires_init is not None else False
-        server.config = config
-        server.numTools = len(tools)
-
-        metadata = dict(server.federationMetadata or {})
-        metadata["enrichedAt"] = datetime.now(UTC)
-        metadata["enrichmentError"] = result.error_message
-        server.federationMetadata = metadata
-
-    async def _enrich_a2a_agent(self, agent: A2AAgent, runtime_detail: dict[str, Any], region: str) -> None:
-        runtime_arn = runtime_detail["agentRuntimeArn"]
-        escaped_runtime_arn = quote(runtime_arn, safe="")
-        card_url = (
-            f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{escaped_runtime_arn}/invocations"
-            f"/.well-known/agent-card.json?qualifier=DEFAULT"
-        )
-
-        try:
-            card_data = await self.runtime_invoker.fetch_a2a_card(
-                card_url=card_url,
-                metadata=agent.federationMetadata or {},
-                runtime_detail=runtime_detail,
-            )
-        except Exception as exc:
-            logger.warning("A2A runtime enrichment failed for %s: %s", agent.card.name, exc)
-            if agent.wellKnown:
-                agent.wellKnown.lastSyncStatus = "failed"
-                agent.wellKnown.syncError = str(exc)
-                agent.wellKnown.lastSyncAt = datetime.now(UTC)
-            metadata = dict(agent.federationMetadata or {})
-            metadata["enrichedAt"] = datetime.now(UTC)
-            metadata["enrichmentError"] = f"a2a enrichment failed: {exc}"
-            agent.federationMetadata = metadata
-            return
-
-        card_payload = self._extract_a2a_card_payload(card_data)
-        fallback_card = agent.card.model_dump(mode="json")
-        merged = {**fallback_card, **card_payload}
-        merged["url"] = fallback_card.get("url")
-
-        refreshed = A2AAgent.from_a2a_agent_card(
-            card_data=merged,
-            path=agent.path,
-            author=agent.author,
-            isEnabled=agent.isEnabled,
-            status=agent.status,
-            tags=agent.tags,
-            registeredBy=agent.registeredBy,
-            registeredAt=agent.registeredAt,
-            federationRefId=agent.federationRefId,
-            federationMetadata=agent.federationMetadata,
-            wellKnown=agent.wellKnown.model_dump(mode="json") if agent.wellKnown else None,
-        )
-
-        agent.card = refreshed.card
-        if agent.wellKnown:
-            agent.wellKnown.lastSyncStatus = "success"
-            agent.wellKnown.syncError = None
-            agent.wellKnown.lastSyncAt = datetime.now(UTC)
-            agent.wellKnown.lastSyncVersion = str(agent.card.version)
-
-        metadata = dict(agent.federationMetadata or {})
-        metadata["enrichedAt"] = datetime.now(UTC)
-        metadata["enrichmentError"] = None
-        agent.federationMetadata = metadata
-
-    @staticmethod
-    def _extract_a2a_card_payload(payload: dict[str, Any]) -> dict[str, Any]:
-        if not isinstance(payload, dict):
-            return {}
-        if isinstance(payload.get("agentCard"), dict):
-            return payload["agentCard"]
-        if isinstance(payload.get("card"), dict):
-            return payload["card"]
-        return payload
-
     def _transform_runtime_to_a2a_agent(
         self,
         runtime_detail: dict[str, Any],
         region: str,
         author_id: PydanticObjectId | None = None,
     ) -> A2AAgent:
-        runtime_arn = runtime_detail["agentRuntimeArn"]
+        runtime_arn = runtime_detail["runtimeArn"]
         runtime_id = runtime_detail["agentRuntimeId"]
         runtime_version = runtime_detail["agentRuntimeVersion"]
         runtime_name = runtime_detail["agentRuntimeName"]
@@ -456,7 +301,7 @@ class AgentCoreFederationClient:
         region: str,
         author_id: PydanticObjectId | None = None,
     ) -> ExtendedMCPServer:
-        runtime_arn = runtime_detail["agentRuntimeArn"]
+        runtime_arn = runtime_detail["runtimeArn"]
         runtime_id = runtime_detail["agentRuntimeId"]
         runtime_name = runtime_detail["agentRuntimeName"]
         runtime_version = runtime_detail["agentRuntimeVersion"]
@@ -495,17 +340,6 @@ class AgentCoreFederationClient:
         }
         return ExtendedMCPServer.from_server_info(server_info=server_info, is_enabled=status == "READY")
 
-    def _runtime_requires_oauth(self, runtime_detail: dict[str, Any]) -> bool:
-        mode = self._detect_runtime_auth_mode(metadata=runtime_detail, runtime_detail=runtime_detail)
-        return mode == "JWT"
-
-    def _detect_runtime_auth_mode(
-        self,
-        metadata: dict[str, Any],
-        runtime_detail: dict[str, Any] | None = None,
-    ) -> str:
-        return self.runtime_invoker.detect_runtime_auth_mode(metadata=metadata, runtime_detail=runtime_detail)
-
     @staticmethod
     def _map_agentcore_status_to_registry_status(agentcore_status: str | None) -> str:
         status = (agentcore_status or "").upper()
@@ -518,27 +352,6 @@ class AgentCoreFederationClient:
     def _extract_runtime_protocol(self, runtime_detail: dict[str, Any]) -> str:
         config = runtime_detail.get("protocolConfiguration") or {}
         return str(config.get("serverProtocol", "")).upper()
-
-    @staticmethod
-    def _convert_tools_to_tool_functions(tool_list: list[dict[str, Any]], server_name: str) -> dict[str, Any]:
-        tool_functions: dict[str, Any] = {}
-        server_suffix = "".join(ch for ch in server_name.lower() if ch.isalnum() or ch == "_")
-
-        for tool in tool_list:
-            tool_name = str(tool.get("name", "")).strip()
-            if not tool_name:
-                continue
-            function_name = f"{tool_name}_mcp_{server_suffix}"
-            tool_functions[function_name] = {
-                "type": "function",
-                "function": {
-                    "name": function_name,
-                    "description": tool.get("description", ""),
-                    "parameters": tool.get("inputSchema", {"type": "object", "properties": {}}),
-                },
-                "mcpToolName": tool_name,
-            }
-        return tool_functions
 
     async def _reconcile_runtime_type(self, runtime_arn: str, target_type: str) -> None:
         if target_type == "a2a":

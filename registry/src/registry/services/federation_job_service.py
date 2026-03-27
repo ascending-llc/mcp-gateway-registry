@@ -4,6 +4,7 @@ from typing import Any
 
 from beanie import PydanticObjectId
 
+from registry_pkgs.database.decorators import get_current_session
 from registry_pkgs.models.enums import (
     FederationJobPhase,
     FederationJobStateMachine,
@@ -21,6 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 class FederationJobService:
+    @staticmethod
+    def _get_current_session_or_none():
+        try:
+            return get_current_session()
+        except RuntimeError:
+            return None
+
     async def get_active_job(self, federation_id: PydanticObjectId) -> FederationSyncJob | None:
         return await FederationSyncJob.find_one(
             {
@@ -53,14 +61,14 @@ class FederationJobService:
             discoverySummary=FederationDiscoverySummary(),
             applySummary=FederationApplySummary(),
         )
-        await job.insert()
+        await job.insert(session=self._get_current_session_or_none())
         return job
 
     async def mark_syncing(self, job: FederationSyncJob, phase: FederationJobPhase) -> FederationSyncJob:
         job.status = FederationJobStateMachine.transition_to_syncing(job.status)
         job.phase = phase
         job.startedAt = job.startedAt or datetime.now(UTC)
-        await job.save()
+        await job.save(session=self._get_current_session_or_none())
         return job
 
     async def update_discovery_summary(
@@ -73,7 +81,7 @@ class FederationJobService:
             discoveredMcpServers=discovered_mcp_servers,
             discoveredAgents=discovered_agents,
         )
-        await job.save()
+        await job.save(session=self._get_current_session_or_none())
         return job
 
     async def update_apply_summary(
@@ -82,14 +90,14 @@ class FederationJobService:
         apply_summary: FederationApplySummary,
     ) -> FederationSyncJob:
         job.applySummary = apply_summary
-        await job.save()
+        await job.save(session=self._get_current_session_or_none())
         return job
 
     async def mark_success(self, job: FederationSyncJob) -> FederationSyncJob:
         job.status = FederationJobStateMachine.transition_to_success(job.status)
         job.phase = FederationJobPhase.COMPLETED
         job.finishedAt = datetime.now(UTC)
-        await job.save()
+        await job.save(session=self._get_current_session_or_none())
         return job
 
     async def mark_failed(self, job: FederationSyncJob, phase: FederationJobPhase, error: str) -> FederationSyncJob:
@@ -97,5 +105,5 @@ class FederationJobService:
         job.phase = phase
         job.error = error
         job.finishedAt = datetime.now(UTC)
-        await job.save()
+        await job.save(session=self._get_current_session_or_none())
         return job

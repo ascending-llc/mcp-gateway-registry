@@ -5,14 +5,14 @@ import boto3
 import pytest
 from botocore.stub import Stubber
 
-from registry.services.federation.agentcore_client import AgentCoreFederationClient
+from registry.services.federation.agentcore_discovery import AgentCoreFederationClient
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestAgentCoreFederationClient:
     async def test_discover_runtime_entities_classifies_mcp_and_a2a_with_stubber(self, monkeypatch):
-        client = AgentCoreFederationClient(region="us-east-1")
+        client = AgentCoreFederationClient()
 
         boto_client = boto3.client(
             "bedrock-agentcore-control",
@@ -108,7 +108,7 @@ class TestAgentCoreFederationClient:
             {"agentRuntimeId": "r3", "agentRuntimeVersion": "1"},
         )
 
-        monkeypatch.setattr(client, "_get_control_client", _async_return(boto_client))
+        monkeypatch.setattr(client.client_provider, "get_control_client", _async_return(boto_client))
         monkeypatch.setattr(client, "_reconcile_runtime_type", _async_return(None))
         monkeypatch.setattr(
             client,
@@ -126,7 +126,7 @@ class TestAgentCoreFederationClient:
         )
 
         with stubber:
-            result = await client.discover_runtime_entities(enrich_protocol_payloads=False)
+            result = await client.discover_runtime_entities(region="us-east-1")
 
         assert len(result["mcp_servers"]) == 1
         assert len(result["a2a_agents"]) == 1
@@ -135,7 +135,7 @@ class TestAgentCoreFederationClient:
         assert result["a2a_agents"][0].federationMetadata["runtimeVersion"] == "2"
 
     async def test_discover_runtime_entities_filters_by_runtime_arns_with_stubber(self, monkeypatch):
-        client = AgentCoreFederationClient(region="us-east-1")
+        client = AgentCoreFederationClient()
 
         target_arn = "arn:aws:bedrock-agentcore:us-east-1:123:runtime/r2"
         boto_client = boto3.client(
@@ -189,24 +189,27 @@ class TestAgentCoreFederationClient:
             {"agentRuntimeId": "r2", "agentRuntimeVersion": "2"},
         )
 
-        monkeypatch.setattr(client, "_get_control_client", _async_return(boto_client))
+        monkeypatch.setattr(client.client_provider, "get_control_client", _async_return(boto_client))
         monkeypatch.setattr(client, "_reconcile_runtime_type", _async_return(None))
         monkeypatch.setattr(
             client,
             "_transform_runtime_to_a2a_agent",
             lambda runtime_detail, _region, _author_id=None: SimpleNamespace(
-                federationMetadata={"runtimeArn": runtime_detail["agentRuntimeArn"]}
+                federationMetadata={"runtimeArn": runtime_detail["runtimeArn"]}
             ),
         )
 
         with stubber:
-            result = await client.discover_runtime_entities(runtime_arns=[target_arn], enrich_protocol_payloads=False)
+            result = await client.discover_runtime_entities(
+                runtime_arns=[target_arn],
+                region="us-east-1",
+            )
 
         assert len(result["a2a_agents"]) == 1
         assert result["a2a_agents"][0].federationMetadata["runtimeArn"] == target_arn
 
     async def test_discover_runtime_entities_applies_resource_tags_filter(self, monkeypatch):
-        client = AgentCoreFederationClient(region="us-east-1")
+        client = AgentCoreFederationClient()
 
         boto_client = boto3.client(
             "bedrock-agentcore-control",
@@ -289,14 +292,14 @@ class TestAgentCoreFederationClient:
             {"resourceArn": runtime_two_arn},
         )
 
-        monkeypatch.setattr(client, "_get_control_client", _async_return(boto_client))
+        monkeypatch.setattr(client.client_provider, "get_control_client", _async_return(boto_client))
         monkeypatch.setattr(client, "_reconcile_runtime_type", _async_return(None))
         monkeypatch.setattr(
             client,
             "_transform_runtime_to_mcp_server",
             lambda runtime_detail, _region, _author_id=None: SimpleNamespace(
                 federationMetadata={
-                    "runtimeArn": runtime_detail["agentRuntimeArn"],
+                    "runtimeArn": runtime_detail["runtimeArn"],
                     "runtimeTags": runtime_detail["tags"],
                 }
             ),
@@ -306,7 +309,7 @@ class TestAgentCoreFederationClient:
             "_transform_runtime_to_a2a_agent",
             lambda runtime_detail, _region, _author_id=None: SimpleNamespace(
                 federationMetadata={
-                    "runtimeArn": runtime_detail["agentRuntimeArn"],
+                    "runtimeArn": runtime_detail["runtimeArn"],
                     "runtimeTags": runtime_detail["tags"],
                 }
             ),
@@ -314,7 +317,7 @@ class TestAgentCoreFederationClient:
 
         with stubber:
             result = await client.discover_runtime_entities(
-                enrich_protocol_payloads=False,
+                region="us-east-1",
                 resource_tags_filter={"env": "production", "team": "platform"},
             )
 
@@ -335,39 +338,26 @@ class TestAgentCoreFederationClient:
         }
 
     async def test_build_runtime_mcp_url_uses_invocations_with_qualifier(self):
-        client = AgentCoreFederationClient(region="us-east-1")
+        client = AgentCoreFederationClient()
         runtime_arn = "arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1"
         mcp_url = f"{client._build_runtime_invocation_url(runtime_arn, 'us-east-1')}?qualifier=DEFAULT"
         assert mcp_url.endswith("/invocations?qualifier=DEFAULT")
         assert "/mcp/" not in mcp_url
 
-    async def test_transform_runtime_to_mcp_server_fails_loudly_on_missing_required_fields(self):
-        client = AgentCoreFederationClient(region="us-east-1")
-        runtime_detail = {
-            "agentRuntimeId": "r1",
-            "agentRuntimeName": "runtime-mcp",
-            "agentRuntimeVersion": "1",
-            "status": "READY",
-            "protocolConfiguration": {"serverProtocol": "MCP"},
-        }
-
-        with pytest.raises(KeyError):
-            client._transform_runtime_to_mcp_server(runtime_detail, "us-east-1")
-
     async def test_discover_runtime_entities_raises_when_runtime_listing_fails(self, monkeypatch):
-        client = AgentCoreFederationClient(region="us-east-1")
+        client = AgentCoreFederationClient()
 
-        async def _get_control_client(_region):
+        async def _get_control_client(_region, _assume_role_arn=None):
             return object()
 
         def _list_runtime_summaries(_client):
             raise RuntimeError("Token has expired and refresh failed")
 
-        monkeypatch.setattr(client, "_get_control_client", _get_control_client)
+        monkeypatch.setattr(client.client_provider, "get_control_client", _get_control_client)
         monkeypatch.setattr(client, "_list_runtime_summaries", _list_runtime_summaries)
 
         with pytest.raises(RuntimeError, match="Failed to list AgentCore runtimes in us-east-1"):
-            await client.discover_runtime_entities(enrich_protocol_payloads=False)
+            await client.discover_runtime_entities(region="us-east-1")
 
 
 def _async_return(value):

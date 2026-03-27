@@ -5,6 +5,9 @@ from typing import Any
 
 from beanie import PydanticObjectId
 
+from registry.services.federation.agentcore_clients import AgentCoreClientProvider
+from registry.services.federation.agentcore_discovery import AgentCoreFederationClient
+from registry.services.federation.agentcore_runtime import AgentCoreRuntimeInvoker
 from registry_pkgs.database.decorators import get_current_session, use_transaction
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 from registry_pkgs.models._generated import PrincipalType, ResourceType
@@ -15,9 +18,6 @@ from registry_pkgs.vector.repositories.mcp_server_repository import MCPServerRep
 from ..core.config import settings
 from ..schemas.server_api_schemas import ServerCreateRequest
 from .access_control_service import ACLService
-from .federation.agentcore_client import AgentCoreFederationClient
-from .federation.agentcore_client_provider import AgentCoreClientProvider
-from .federation.runtime_invoker import AgentCoreRuntimeInvoker
 from .server_service import ServerServiceV1
 from .user_service import UserService
 
@@ -51,16 +51,12 @@ class AgentCoreImportService:
         self.mcp_server_repo = mcp_server_repo
         self.a2a_agent_repo = a2a_agent_repo
 
-        default_region = settings.aws_region or "us-east-1"
-        client_provider = agentcore_client_provider or AgentCoreClientProvider(default_region=default_region)
+        client_provider = agentcore_client_provider or AgentCoreClientProvider()
         invoker = runtime_invoker or AgentCoreRuntimeInvoker(
-            default_region=client_provider.default_region,
-            get_runtime_client=client_provider.get_runtime_client,
-            get_runtime_credentials_provider=client_provider.get_runtime_credentials_provider,
+            client_provider=client_provider,
             extract_region_from_arn=AgentCoreFederationClient.extract_region_from_arn,
         )
         self.federation_client = federation_client or AgentCoreFederationClient(
-            region=client_provider.default_region,
             client_provider=client_provider,
             runtime_invoker=invoker,
         )
@@ -85,10 +81,11 @@ class AgentCoreImportService:
         system_owner_id, viewer_id = await self._resolve_identities(user_id=user_id, dry_run=dry_run)
 
         runtime_arns = [runtime_arn] if runtime_arn else None
+        resolved_region = aws_region or settings.aws_region or "us-east-1"
         discovered = await self.federation_client.discover_runtime_entities(
             runtime_arns=runtime_arns,
             author_id=system_owner_id or viewer_id,
-            region=aws_region,
+            region=resolved_region,
         )
         discovered_mcp = discovered.get("mcp_servers", [])
         discovered_a2a = discovered.get("a2a_agents", [])

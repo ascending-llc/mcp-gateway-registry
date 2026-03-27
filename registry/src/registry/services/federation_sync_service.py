@@ -2,12 +2,14 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from registry_pkgs.database.decorators import use_transaction
+from registry_pkgs.database.decorators import get_current_session, use_transaction
 from registry_pkgs.models import A2AAgent, ExtendedMCPServer
 from registry_pkgs.models.enums import (
     FederationJobPhase,
+    FederationJobType,
     FederationProviderType,
     FederationSyncStatus,
+    FederationTriggerType,
 )
 from registry_pkgs.models.federation import (
     Federation,
@@ -17,7 +19,7 @@ from registry_pkgs.models.federation import (
 )
 from registry_pkgs.models.federation_sync_job import FederationApplySummary, FederationSyncJob
 
-from .federation.sync_handlers import (
+from .federation.federation_handlers import (
     AwsAgentCoreSyncHandler,
     AzureAiFoundrySyncHandler,
     BaseFederationSyncHandler,
@@ -68,6 +70,13 @@ class FederationSyncService:
         logger.info("Dispatching federation %s sync to provider handler %s", federation.id, handler.__class__.__name__)
         return await handler.discover_entities(federation)
 
+    @staticmethod
+    def _get_current_session_or_none():
+        try:
+            return get_current_session()
+        except RuntimeError:
+            return None
+
     async def run_sync(
         self,
         federation: Federation,
@@ -76,103 +85,228 @@ class FederationSyncService:
     ) -> FederationSyncJob:
         """
         Sync execution follows a fixed flow:
-            1. mark job/federation as running
-            2. discover remote resources
-            3. apply the diff into local MongoDB documents
-            4. persist stats and lastSync
+            1. discover remote resources
+            2. apply federation/job/resource mutations in one transaction
+            3. persist stats and lastSync in the same transaction
             Any exception moves both the federation and the job into failed state.
         """
-        await self.federation_job_service.mark_syncing(job, FederationJobPhase.DISCOVERING)
-        await self.federation_crud_service.mark_syncing(federation)
-
         try:
-            # 1) discovery（事务外）
             discovered = await self._discover_entities(federation)
-            discovered_mcp = discovered.get("mcp_servers", [])
-            discovered_a2a = discovered.get("a2a_agents", [])
-
-            await self.federation_job_service.update_discovery_summary(
-                job,
-                discovered_mcp_servers=len(discovered_mcp),
-                discovered_agents=len(discovered_a2a),
-            )
-
-            # 2) apply（事务内）
-            await self.federation_job_service.mark_syncing(job, FederationJobPhase.APPLYING)
-            apply_summary = await self._apply_sync_transaction(
+            await self._commit_sync_transaction(
                 federation=federation,
                 job=job,
-                discovered_mcp=discovered_mcp,
-                discovered_a2a=discovered_a2a,
-                user_id=user_id,
+                discovered=discovered,
             )
-
-            await self.federation_job_service.update_apply_summary(job, apply_summary)
-
-            # 3) 统计与 lastSync（事务后保存）
-            mcp_count = await ExtendedMCPServer.find(
-                {"federationRefId": federation.id, "status": {"$ne": "deleted"}}
-            ).count()
-            agent_count = await A2AAgent.find({"federationRefId": federation.id, "status": {"$ne": "deleted"}}).count()
-
-            mcp_servers = await ExtendedMCPServer.find(
-                {"federationRefId": federation.id, "status": {"$ne": "deleted"}}
-            ).to_list()
-            tool_count = sum(int(server.numTools or 0) for server in mcp_servers)
-
-            stats = FederationStats(
-                mcpServerCount=mcp_count,
-                agentCount=agent_count,
-                toolCount=tool_count,
-                importedTotal=mcp_count + agent_count,
-            )
-
-            last_sync = FederationLastSync(
-                jobId=job.id,
-                jobType=job.jobType,
-                status=FederationSyncStatus.SUCCESS,
-                startedAt=job.startedAt,
-                finishedAt=datetime.now(UTC),
-                summary=FederationLastSyncSummary(
-                    discoveredMcpServers=job.discoverySummary.discoveredMcpServers,
-                    discoveredAgents=job.discoverySummary.discoveredAgents,
-                    createdMcpServers=apply_summary.createdMcpServers,
-                    updatedMcpServers=apply_summary.updatedMcpServers,
-                    deletedMcpServers=apply_summary.deletedMcpServers,
-                    unchangedMcpServers=apply_summary.unchangedMcpServers,
-                    createdAgents=apply_summary.createdAgents,
-                    updatedAgents=apply_summary.updatedAgents,
-                    deletedAgents=apply_summary.deletedAgents,
-                    unchangedAgents=apply_summary.unchangedAgents,
-                    errors=0,
-                ),
-            )
-
-            await self.federation_crud_service.mark_sync_success(federation, last_sync, stats)
-            await self.federation_job_service.mark_success(job)
             return job
 
         except Exception as exc:
+            logger.exception("Failed to run federation sync")
             await self.federation_crud_service.mark_sync_failed(federation, str(exc))
             await self.federation_job_service.mark_failed(job, FederationJobPhase.FAILED, str(exc))
             raise
 
-    @use_transaction
-    async def _apply_sync_transaction(
+    async def update_federation_with_optional_resync(
         self,
+        *,
+        federation: Federation,
+        display_name: str,
+        description: str | None,
+        tags: list[str],
+        provider_config: dict[str, Any],
+        version: int,
+        updated_by: str | None,
+        sync_after_update: bool,
+    ) -> tuple[Federation, FederationSyncJob | None]:
+        normalized_provider_config = self.federation_crud_service.validate_provider_config(
+            federation.providerType,
+            provider_config,
+        )
+        need_resync = bool(sync_after_update and dict(federation.providerConfig or {}) != normalized_provider_config)
+
+        if not need_resync:
+            updated = await self.federation_crud_service.update_federation(
+                federation=federation,
+                display_name=display_name,
+                description=description,
+                tags=tags,
+                provider_config=provider_config,
+                version=version,
+                updated_by=updated_by,
+            )
+            return updated, None
+
+        active_job = await self.federation_job_service.get_active_job(federation.id)
+        if active_job:
+            raise ValueError("Federation already has an active sync job")
+
+        federation, job = await self.update_federation_and_create_resync_job(
+            federation=federation,
+            display_name=display_name,
+            description=description,
+            tags=tags,
+            normalized_provider_config=normalized_provider_config,
+            version=version,
+            updated_by=updated_by,
+        )
+        await self.run_sync(
+            federation=federation,
+            job=job,
+            user_id=updated_by,
+        )
+        return federation, job
+
+    @use_transaction
+    async def _commit_sync_transaction(
+        self,
+        *,
         federation: Federation,
         job: FederationSyncJob,
+        discovered: dict[str, list[Any]],
+    ) -> FederationSyncJob:
+        discovered_mcp = discovered.get("mcp_servers", [])
+        discovered_a2a = discovered.get("a2a_agents", [])
+
+        await self.federation_job_service.mark_syncing(job, FederationJobPhase.DISCOVERING)
+        await self.federation_crud_service.mark_syncing(federation)
+        await self.federation_job_service.update_discovery_summary(
+            job,
+            discovered_mcp_servers=len(discovered_mcp),
+            discovered_agents=len(discovered_a2a),
+        )
+        await self.federation_job_service.mark_syncing(job, FederationJobPhase.APPLYING)
+        apply_summary = await self._apply_sync_mutations(
+            federation=federation,
+            discovered_mcp=discovered_mcp,
+            discovered_a2a=discovered_a2a,
+        )
+        await self.federation_job_service.update_apply_summary(job, apply_summary)
+        stats = await self._build_federation_stats(federation.id)
+        last_sync = self._build_last_sync(job, apply_summary)
+        await self.federation_crud_service.mark_sync_success(federation, last_sync, stats)
+        await self.federation_job_service.mark_success(job)
+        return job
+
+    @use_transaction
+    async def update_federation_and_create_resync_job(
+        self,
+        *,
+        federation: Federation,
+        display_name: str,
+        description: str | None,
+        tags: list[str],
+        normalized_provider_config: dict[str, Any],
+        version: int,
+        updated_by: str | None,
+    ) -> tuple[Federation, FederationSyncJob]:
+        federation = await self.federation_crud_service.update_federation(
+            federation=federation,
+            display_name=display_name,
+            description=description,
+            tags=tags,
+            provider_config=normalized_provider_config,
+            version=version,
+            updated_by=updated_by,
+        )
+        job = await self.federation_job_service.create_job(
+            federation_id=federation.id,
+            job_type=FederationJobType.CONFIG_RESYNC,
+            trigger_type=FederationTriggerType.API,
+            triggered_by=updated_by,
+            request_snapshot={
+                "providerType": _enum_value(federation.providerType),
+                "providerConfig": federation.providerConfig,
+            },
+        )
+        await self.federation_crud_service.mark_sync_pending(federation)
+        return federation, job
+
+    @use_transaction
+    async def create_sync_job_and_mark_pending(
+        self,
+        *,
+        federation: Federation,
+        job_type: str,
+        trigger_type: str,
+        triggered_by: str | None,
+        request_snapshot: dict[str, Any],
+    ) -> FederationSyncJob:
+        job = await self.federation_job_service.create_job(
+            federation_id=federation.id,
+            job_type=job_type,
+            trigger_type=trigger_type,
+            triggered_by=triggered_by,
+            request_snapshot=request_snapshot,
+        )
+        await self.federation_crud_service.mark_sync_pending(federation)
+        return job
+
+    async def start_manual_sync(
+        self,
+        *,
+        federation: Federation,
+        force: bool,
+        reason: str | None,
+        triggered_by: str | None,
+    ) -> FederationSyncJob:
+        active_job = await self.federation_job_service.get_active_job(federation.id)
+        if active_job:
+            raise ValueError("Federation already has an active sync job")
+
+        job_type = "force_sync" if force else "full_sync"
+        job = await self.create_sync_job_and_mark_pending(
+            federation=federation,
+            job_type=job_type,
+            trigger_type="manual",
+            triggered_by=triggered_by,
+            request_snapshot={
+                "providerType": _enum_value(federation.providerType),
+                "providerConfig": federation.providerConfig,
+                "reason": reason,
+            },
+        )
+        await self.run_sync(
+            federation=federation,
+            job=job,
+            user_id=triggered_by,
+        )
+        return job
+
+    async def start_delete(
+        self,
+        *,
+        federation: Federation,
+        triggered_by: str | None,
+    ) -> FederationSyncJob:
+        active_job = await self.federation_job_service.get_active_job(federation.id)
+        if active_job:
+            raise ValueError("Federation already has an active job")
+
+        await self.federation_crud_service.mark_deleting(federation)
+        job = await self.federation_job_service.create_job(
+            federation_id=federation.id,
+            job_type=FederationJobType.DELETE_SYNC,
+            trigger_type=FederationTriggerType.MANUAL,
+            triggered_by=triggered_by,
+            request_snapshot={
+                "providerType": _enum_value(federation.providerType),
+                "providerConfig": federation.providerConfig,
+            },
+        )
+        await self.run_delete(federation=federation, job=job)
+        return job
+
+    async def _apply_sync_mutations(
+        self,
+        *,
+        federation: Federation,
         discovered_mcp: list[Any],
         discovered_a2a: list[Any],
-        user_id: str | None,
     ) -> FederationApplySummary:
-        """
-        Inside the transaction, only mutate MongoDB source-of-truth documents.
-        """
         apply_summary = FederationApplySummary()
+        session = self._get_current_session_or_none()
 
         # -------- MCP --------
-        existing_mcp = await ExtendedMCPServer.find({"federationRefId": federation.id}).to_list()
+        existing_mcp = await ExtendedMCPServer.find({"federationRefId": federation.id}, session=session).to_list()
         existing_mcp_by_remote = {
             self._extract_runtime_arn(item.federationMetadata): item
             for item in existing_mcp
@@ -194,7 +328,7 @@ class FederationSyncService:
                 server.federationRefId = federation.id
                 server.federationMetadata = server.federationMetadata or {}
                 server.federationMetadata["providerType"] = _enum_value(federation.providerType)
-                await server.insert()
+                await server.insert(session=session)
                 apply_summary.createdMcpServers += 1
             else:
                 old_version = (existing.federationMetadata or {}).get("runtimeVersion")
@@ -210,7 +344,7 @@ class FederationSyncService:
                     existing.status = item.status or existing.status
                     existing.numTools = item.numTools
                     existing.federationMetadata = item.federationMetadata
-                    await existing.save()
+                    await existing.save(session=session)
                     apply_summary.updatedMcpServers += 1
 
         stale_mcp = [
@@ -220,11 +354,11 @@ class FederationSyncService:
             and self._extract_runtime_arn(item.federationMetadata) not in discovered_mcp_ids
         ]
         for stale in stale_mcp:
-            await stale.delete()
+            await stale.delete(session=session)
             apply_summary.deletedMcpServers += 1
 
         # -------- A2A --------
-        existing_a2a = await A2AAgent.find({"federationRefId": federation.id}).to_list()
+        existing_a2a = await A2AAgent.find({"federationRefId": federation.id}, session=session).to_list()
         existing_a2a_by_remote = {
             self._extract_runtime_arn(item.federationMetadata): item
             for item in existing_a2a
@@ -246,7 +380,7 @@ class FederationSyncService:
                 agent.federationRefId = federation.id
                 agent.federationMetadata = agent.federationMetadata or {}
                 agent.federationMetadata["providerType"] = _enum_value(federation.providerType)
-                await agent.insert()
+                await agent.insert(session=session)
                 apply_summary.createdAgents += 1
             else:
                 old_version = (existing.federationMetadata or {}).get("runtimeVersion")
@@ -262,7 +396,7 @@ class FederationSyncService:
                     existing.isEnabled = item.isEnabled
                     existing.wellKnown = item.wellKnown
                     existing.federationMetadata = item.federationMetadata
-                    await existing.save()
+                    await existing.save(session=session)
                     apply_summary.updatedAgents += 1
 
         stale_a2a = [
@@ -272,7 +406,7 @@ class FederationSyncService:
             and self._extract_runtime_arn(item.federationMetadata) not in discovered_a2a_ids
         ]
         for stale in stale_a2a:
-            await stale.delete()
+            await stale.delete(session=session)
             apply_summary.deletedAgents += 1
 
         return apply_summary
@@ -306,15 +440,61 @@ class FederationSyncService:
             await self.federation_job_service.mark_failed(job, FederationJobPhase.FAILED, str(exc))
             raise
 
+    async def _build_federation_stats(self, federation_id) -> FederationStats:
+        session = self._get_current_session_or_none()
+        mcp_count = await ExtendedMCPServer.find(
+            {"federationRefId": federation_id, "status": {"$ne": "deleted"}},
+            session=session,
+        ).count()
+        agent_count = await A2AAgent.find(
+            {"federationRefId": federation_id, "status": {"$ne": "deleted"}},
+            session=session,
+        ).count()
+        mcp_servers = await ExtendedMCPServer.find(
+            {"federationRefId": federation_id, "status": {"$ne": "deleted"}},
+            session=session,
+        ).to_list()
+        tool_count = sum(int(server.numTools or 0) for server in mcp_servers)
+        return FederationStats(
+            mcpServerCount=mcp_count,
+            agentCount=agent_count,
+            toolCount=tool_count,
+            importedTotal=mcp_count + agent_count,
+        )
+
+    @staticmethod
+    def _build_last_sync(job: FederationSyncJob, apply_summary: FederationApplySummary) -> FederationLastSync:
+        return FederationLastSync(
+            jobId=job.id,
+            jobType=job.jobType,
+            status=FederationSyncStatus.SUCCESS,
+            startedAt=job.startedAt,
+            finishedAt=datetime.now(UTC),
+            summary=FederationLastSyncSummary(
+                discoveredMcpServers=job.discoverySummary.discoveredMcpServers,
+                discoveredAgents=job.discoverySummary.discoveredAgents,
+                createdMcpServers=apply_summary.createdMcpServers,
+                updatedMcpServers=apply_summary.updatedMcpServers,
+                deletedMcpServers=apply_summary.deletedMcpServers,
+                unchangedMcpServers=apply_summary.unchangedMcpServers,
+                createdAgents=apply_summary.createdAgents,
+                updatedAgents=apply_summary.updatedAgents,
+                deletedAgents=apply_summary.deletedAgents,
+                unchangedAgents=apply_summary.unchangedAgents,
+                errors=0,
+            ),
+        )
+
     @use_transaction
     async def _delete_transaction(self, federation: Federation) -> None:
-        mcp_list = await ExtendedMCPServer.find({"federationRefId": federation.id}).to_list()
+        session = self._get_current_session_or_none()
+        mcp_list = await ExtendedMCPServer.find({"federationRefId": federation.id}, session=session).to_list()
         for item in mcp_list:
-            await item.delete()
+            await item.delete(session=session)
 
-        a2a_list = await A2AAgent.find({"federationRefId": federation.id}).to_list()
+        a2a_list = await A2AAgent.find({"federationRefId": federation.id}, session=session).to_list()
         for item in a2a_list:
-            await item.delete()
+            await item.delete(session=session)
 
     @staticmethod
     def _extract_runtime_arn(metadata: dict[str, Any] | None) -> str | None:
