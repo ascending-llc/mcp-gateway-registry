@@ -73,78 +73,113 @@ async def call_tool_via_sse_ephemeral(
     Flow:
       1. Open GET /sse and wait for endpoint event
       2. POST initialize
-      3. POST notifications/initialized
-      4. POST tools/call
-      5. Read matching JSON-RPC response from SSE stream
+      3. Await the initialize JSON-RPC response from the SSE stream
+      4. POST notifications/initialized
+      5. POST tools/call
+      6. Read the matching JSON-RPC tool response from the SSE stream
     """
     request_id = request_body.get("id")
 
     init_request = deepcopy(MCP_INITIALIZE_REQUEST)
     initialized_notification = deepcopy(MCP_INITIALIZED_NOTIFICATION)
+    init_request_id = init_request.get("id")
 
     sse_headers = dict(headers)
     sse_headers["Accept"] = "text/event-stream"
     sse_headers.pop("Content-Type", None)
 
-    async def _await_response(stream_ready: asyncio.Future[str]) -> dict[str, Any]:
-        async with http_client.stream("GET", sse_url, headers=sse_headers) as sse_resp:
-            if not sse_resp.is_success:
-                raw = await sse_resp.aread()
-                if not stream_ready.done():
-                    stream_ready.set_exception(
-                        ConnectionError(
-                            "Error opening downstream SSE stream for tool call: "
-                            f"status={sse_resp.status_code}, body={raw.decode('utf-8', errors='replace')}"
-                        )
+    loop = asyncio.get_running_loop()
+    init_response_future: asyncio.Future[dict[str, Any]] = loop.create_future()
+    tool_response_future: asyncio.Future[dict[str, Any]] = loop.create_future()
+
+    def _set_response_future_result(response_obj: dict[str, Any]) -> bool:
+        response_id = response_obj.get("id")
+        if str(response_id) == str(init_request_id) and not init_response_future.done():
+            init_response_future.set_result(response_obj)
+            return True
+
+        if request_id is not None and str(response_id) == str(request_id) and not tool_response_future.done():
+            tool_response_future.set_result(response_obj)
+            return True
+
+        if request_id is None and not tool_response_future.done():
+            tool_response_future.set_result(response_obj)
+            return True
+
+        return False
+
+    def _fail_pending_responses(error: BaseException) -> None:
+        for response_future in (init_response_future, tool_response_future):
+            if not response_future.done():
+                response_future.set_exception(error)
+
+    def _raise_for_rpc_error(response_obj: dict[str, Any], action: str) -> None:
+        error_obj = response_obj.get("error")
+        if isinstance(error_obj, dict):
+            raise ConnectionError(
+                f"Downstream SSE MCP {action} failed: {json.dumps(error_obj, default=str, sort_keys=True)}"
+            )
+
+    async def _pump_responses(stream_ready: asyncio.Future[str]) -> None:
+        try:
+            async with http_client.stream("GET", sse_url, headers=sse_headers) as sse_resp:
+                if not sse_resp.is_success:
+                    raw = await sse_resp.aread()
+                    error = ConnectionError(
+                        "Error opening downstream SSE stream for tool call: "
+                        f"status={sse_resp.status_code}, body={raw.decode('utf-8', errors='replace')}"
                     )
-                raise ConnectionError(
-                    "Error opening downstream SSE stream for tool call: "
-                    f"status={sse_resp.status_code}, body={raw.decode('utf-8', errors='replace')}"
-                )
-
-            event_source = EventSource(sse_resp)
-            async for event in event_source.aiter_sse():
-                if event.event == "endpoint":
-                    endpoint_path = event.data.strip()
-                    if endpoint_path.startswith("/"):
-                        parsed = urlparse(sse_url)
-                        new_messages_url = f"{parsed.scheme}://{parsed.netloc}{endpoint_path}"
-                    else:
-                        new_messages_url = endpoint_path
-
                     if not stream_ready.done():
-                        stream_ready.set_result(new_messages_url)
-                    continue
+                        stream_ready.set_exception(error)
+                    raise error
 
-                if event.event != "message":
-                    continue
+                event_source = EventSource(sse_resp)
+                async for event in event_source.aiter_sse():
+                    if event.event == "endpoint":
+                        endpoint_path = event.data.strip()
+                        if endpoint_path.startswith("/"):
+                            parsed = urlparse(sse_url)
+                            new_messages_url = f"{parsed.scheme}://{parsed.netloc}{endpoint_path}"
+                        else:
+                            new_messages_url = endpoint_path
 
-                try:
-                    obj = event.json()
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    continue
+                        if not stream_ready.done():
+                            stream_ready.set_result(new_messages_url)
+                        continue
 
-                if not isinstance(obj, dict):
-                    continue
+                    if event.event != "message":
+                        continue
 
-                if obj.get("jsonrpc") != "2.0":
-                    continue
+                    try:
+                        obj = event.json()
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        continue
 
-                method = obj.get("method")
-                if isinstance(method, str) and method.startswith("notifications/"):
-                    if on_notification is not None:
-                        await on_notification(obj)
-                    continue
+                    if not isinstance(obj, dict):
+                        continue
 
-                response_id = obj.get("id")
-                has_result_or_error = isinstance(obj.get("result"), dict) or isinstance(obj.get("error"), dict)
-                if has_result_or_error and (request_id is None or str(response_id) == str(request_id)):
-                    return obj
+                    if obj.get("jsonrpc") != "2.0":
+                        continue
 
-        raise ValueError("Downstream SSE stream ended without a matching JSON-RPC tool response.")
+                    method = obj.get("method")
+                    if isinstance(method, str) and method.startswith("notifications/"):
+                        if on_notification is not None:
+                            await on_notification(obj)
+                        continue
+
+                    has_result_or_error = isinstance(obj.get("result"), dict) or isinstance(obj.get("error"), dict)
+                    if has_result_or_error:
+                        _set_response_future_result(obj)
+
+                raise ValueError("Downstream SSE stream ended without the expected JSON-RPC responses.")
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            _fail_pending_responses(error)
+            raise
 
     stream_ready: asyncio.Future[str] = asyncio.get_running_loop().create_future()
-    response_task = asyncio.create_task(_await_response(stream_ready))
+    response_task = asyncio.create_task(_pump_responses(stream_ready))
 
     try:
         new_messages_url = await asyncio.wait_for(stream_ready, timeout=timeout_seconds)
@@ -156,6 +191,9 @@ async def call_tool_via_sse_ephemeral(
                     "Error initializing downstream SSE MCP session: "
                     f"status code: {init_resp.status_code}, body: {raw_body.decode('utf-8', errors='replace')}"
                 )
+
+        init_response = await asyncio.wait_for(init_response_future, timeout=timeout_seconds)
+        _raise_for_rpc_error(init_response, "initialize")
 
         async with http_client.stream(
             "POST",
@@ -190,7 +228,9 @@ async def call_tool_via_sse_ephemeral(
                 response_task.cancel()
                 return response_obj
 
-        return await asyncio.wait_for(response_task, timeout=timeout_seconds)
+        tool_response = await asyncio.wait_for(tool_response_future, timeout=timeout_seconds)
+        _raise_for_rpc_error(tool_response, "tool call")
+        return tool_response
     finally:
         if not response_task.done():
             response_task.cancel()
