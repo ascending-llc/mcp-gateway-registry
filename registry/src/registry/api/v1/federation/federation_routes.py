@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
 
 from registry_pkgs.database.decorators import use_transaction
-from registry_pkgs.models._generated import PrincipalType, ResourceType
+from registry_pkgs.models._generated import PrincipalType
 from registry_pkgs.models.enums import FederationStateMachine, FederationStatus, RoleBits
+from registry_pkgs.models.extended_acl_entry import ExtendedResourceType
 
 from ....auth.dependencies import CurrentUser
 from ....core.telemetry_decorators import track_registry_operation
@@ -264,7 +265,7 @@ async def create_federation(
         await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
             principal_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.FEDERATION,
+            resource_type=ExtendedResourceType.FEDERATION,
             resource_id=federation.id,
             perm_bits=RoleBits.OWNER,
         )
@@ -305,7 +306,7 @@ async def list_federations(
     user_id = user_context.get("user_id")
     accessible_ids = await acl_service.get_accessible_resource_ids(
         user_id=PydanticObjectId(user_id),
-        resource_type=ResourceType.FEDERATION,
+        resource_type=ExtendedResourceType.FEDERATION,
     )
 
     items, total = await federation_crud_service.list_federations(
@@ -322,7 +323,7 @@ async def list_federations(
     for federation in items:
         permissions_by_id[str(federation.id)] = await acl_service.get_user_permissions_for_resource(
             user_id=PydanticObjectId(user_id),
-            resource_type=ResourceType.FEDERATION,
+            resource_type=ExtendedResourceType.FEDERATION,
             resource_id=federation.id,
         )
     return _to_paged_response(items, total, page, effective_per_page, permissions_by_id)
@@ -338,17 +339,11 @@ async def get_federation(
 ):
     """
     Get a federation.
-    Args:
-        federation_id:
-        federation_crud_service:
-
-    Returns:
-
     """
     federation = await _get_required_federation(federation_id, federation_crud_service)
     permissions = await acl_service.check_user_permission(
         user_id=PydanticObjectId(user_context.get("user_id")),
-        resource_type=ResourceType.FEDERATION.value,
+        resource_type=ExtendedResourceType.FEDERATION,
         resource_id=federation.id,
         required_permission="VIEW",
     )
@@ -367,20 +362,13 @@ async def update_federation(
 ):
     """
     Update a federation.
-    Args:
-        federation_id:
-        data:
-        user_context:
-        federation_crud_service:
-        federation_sync_service:
-
     Returns:
 
     """
     federation = await _get_required_federation(federation_id, federation_crud_service)
     permissions = await acl_service.check_user_permission(
         user_id=PydanticObjectId(user_context.get("user_id")),
-        resource_type=ResourceType.FEDERATION.value,
+        resource_type=ExtendedResourceType.FEDERATION,
         resource_id=federation.id,
         required_permission="EDIT",
     )
@@ -464,7 +452,7 @@ async def sync_federation(
     federation = await _get_required_federation(federation_id, federation_crud_service)
     await acl_service.check_user_permission(
         user_id=PydanticObjectId(user_context.get("user_id")),
-        resource_type=ResourceType.FEDERATION.value,
+        resource_type=ExtendedResourceType.FEDERATION,
         resource_id=federation.id,
         required_permission="EDIT",
     )
@@ -505,33 +493,25 @@ async def delete_federation(
     acl_service: ACLService = Depends(get_acl_service),
 ):
     """
-        Trigger delete job and remove all attached MCP/A2A resources.
-    Args:
-        federation_id:
-        user_context:
-        federation_crud_service:
-        federation_sync_service:
-
-    Returns:
+    Trigger delete job and remove all attached MCP/A2A resources.
 
     """
     federation = await _get_required_federation(federation_id, federation_crud_service)
     await acl_service.check_user_permission(
         user_id=PydanticObjectId(user_context.get("user_id")),
-        resource_type=ResourceType.FEDERATION.value,
+        resource_type=ExtendedResourceType.FEDERATION,
         resource_id=federation.id,
         required_permission="DELETE",
     )
     if not FederationStateMachine.can_delete(federation.status):
         _raise_conflict(f"Federation in status '{federation.status}' cannot be deleted")
-
     try:
         job = await federation_sync_service.start_delete(
             federation=federation,
             triggered_by=user_context.get("user_id"),
         )
         await acl_service.delete_acl_entries_for_resource(
-            resource_type=ResourceType.FEDERATION,
+            resource_type=ExtendedResourceType.FEDERATION,
             resource_id=federation.id,
         )
         return _to_delete_response(federation, job)
