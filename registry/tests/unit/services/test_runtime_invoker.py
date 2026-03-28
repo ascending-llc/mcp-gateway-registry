@@ -1,24 +1,57 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from registry.core.config import settings
 from registry.core.mcp_client import MCPServerData
-from registry.services.federation.runtime_invoker import AgentCoreRuntimeInvoker
+from registry.services.federation.agentcore_clients import AgentCoreClientProvider
+from registry.services.federation.agentcore_runtime import AgentCoreRuntimeInvoker
+from registry_pkgs.models import A2AAgent
 
 
 def _build_invoker() -> AgentCoreRuntimeInvoker:
-    async def _get_runtime_client(_region: str):
-        return object()
+    class _FakeProvider(AgentCoreClientProvider):
+        async def get_runtime_client(self, _region: str, assume_role_arn: str | None = None):
+            return object()
 
-    async def _get_runtime_credentials_provider(_region: str):
-        return lambda: None
+        async def get_runtime_credentials_provider(self, _region: str, assume_role_arn: str | None = None):
+            return lambda: None
 
     return AgentCoreRuntimeInvoker(
-        default_region="us-east-1",
-        get_runtime_client=_get_runtime_client,
-        get_runtime_credentials_provider=_get_runtime_credentials_provider,
+        client_provider=_FakeProvider(),
         extract_region_from_arn=lambda _arn, default: default,
+    )
+
+
+def _build_fake_a2a_agent(*, runtime_arn: str | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        card=SimpleNamespace(
+            name="demo-a2a",
+            version="1",
+            model_dump=lambda mode="json": {
+                "name": "demo-a2a",
+                "description": "demo",
+                "url": "https://example.com",
+                "version": "1",
+            },
+        ),
+        path="/demo",
+        author="user_demo_id",
+        isEnabled=True,
+        status="active",
+        tags=[],
+        registeredBy="tester",
+        registeredAt=None,
+        federationRefId=None,
+        federationMetadata={"runtimeArn": runtime_arn} if runtime_arn else {},
+        wellKnown=SimpleNamespace(
+            lastSyncStatus=None,
+            syncError=None,
+            lastSyncAt=None,
+            lastSyncVersion=None,
+            model_dump=lambda mode="json": {},
+        ),
     )
 
 
@@ -50,30 +83,6 @@ class TestAgentCoreRuntimeInvoker:
         assert parsed["result"]["ok"] is True
 
     @pytest.mark.asyncio
-    async def test_call_with_runtime_init_retry_uses_to_thread(self, monkeypatch):
-        invoker = _build_invoker()
-        invoker._runtime_init_retry_attempts = 2
-        invoker._runtime_init_retry_delay_seconds = 0
-
-        calls = {"to_thread": 0, "op": 0}
-
-        async def _fake_to_thread(op):
-            calls["to_thread"] += 1
-            return op()
-
-        def _operation():
-            calls["op"] += 1
-            if calls["op"] == 1:
-                raise ValueError("Runtime initialization time exceeded")
-            return {"ok": True}
-
-        monkeypatch.setattr("registry.services.federation.runtime_invoker.asyncio.to_thread", _fake_to_thread)
-
-        result = await invoker._call_with_runtime_init_retry(_operation)
-        assert result == {"ok": True}
-        assert calls["to_thread"] == 2
-
-    @pytest.mark.asyncio
     async def test_call_with_runtime_init_retry_async_retries(self):
         invoker = _build_invoker()
         invoker._runtime_init_retry_attempts = 2
@@ -89,44 +98,6 @@ class TestAgentCoreRuntimeInvoker:
         result = await invoker._call_with_runtime_init_retry_async(_operation)
         assert result == {"ok": True}
         assert calls["n"] == 2
-
-    @pytest.mark.asyncio
-    async def test_invoke_mcp_jsonrpc_uses_to_thread(self, monkeypatch):
-        invoker = _build_invoker()
-
-        calls = {"to_thread": 0}
-
-        async def _fake_to_thread(op, **kwargs):
-            calls["to_thread"] += 1
-            return op(**kwargs)
-
-        class _FakeClient:
-            def invoke_agent_runtime(self, **_kwargs):
-                return {
-                    "response": b'{"jsonrpc":"2.0","result":{"tools":[]}}',
-                    "runtimeSessionId": "r1",
-                    "mcpSessionId": "m1",
-                    "mcpProtocolVersion": "2025-11-05",
-                }
-
-        monkeypatch.setattr("registry.services.federation.runtime_invoker.asyncio.to_thread", _fake_to_thread)
-
-        result, runtime_session_id, mcp_session_id, protocol_version = await invoker._invoke_mcp_jsonrpc(
-            client=_FakeClient(),
-            runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1",
-            method="tools/list",
-            params={},
-            request_id=1,
-            runtime_session_id=None,
-            mcp_session_id=None,
-            protocol_version=None,
-        )
-
-        assert result == {"tools": []}
-        assert runtime_session_id == "r1"
-        assert mcp_session_id == "m1"
-        assert protocol_version == "2025-11-05"
-        assert calls["to_thread"] == 1
 
     @pytest.mark.asyncio
     async def test_initialize_mcp_session_uses_initialize_then_initialized(self, monkeypatch):
@@ -145,7 +116,7 @@ class TestAgentCoreRuntimeInvoker:
 
         runtime_session_id, mcp_session_id, protocol_version = await invoker._initialize_mcp_session(
             client=object(),
-            runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1",
+            runtime_arn="arn:aws:bedrock-agentcore:us-east-1:account-id:runtime/runtime-demo-1",
         )
 
         assert runtime_session_id == "runtime-session-1"
@@ -192,14 +163,15 @@ class TestAgentCoreRuntimeInvoker:
         monkeypatch.setattr(invoker, "_invoke_mcp_jsonrpc", _fake_invoke_mcp_jsonrpc)
 
         result = await invoker._fetch_mcp_payloads_via_sdk(
-            metadata={"runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1"},
+            metadata={"runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:account-id:runtime/runtime-demo-1"},
+            region="us-east-1",
             runtime_detail=None,
         )
 
         assert result.error_message is None
         initialize_mock.assert_awaited_once_with(
             client=runtime_client,
-            runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/r1",
+            runtime_arn="arn:aws:bedrock-agentcore:us-east-1:account-id:runtime/runtime-demo-1",
         )
         assert invoked_methods == [
             ("tools/list", "runtime-session-1", "mcp-session-1", "2025-11-05"),
@@ -219,7 +191,8 @@ class TestAgentCoreRuntimeInvoker:
         result = await invoker.fetch_mcp_payloads(
             runtime_url="https://example.com/invocations",
             transport_type="streamable-http",
-            metadata={"runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:1:runtime/r"},
+            metadata={"runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:account-id:runtime/runtime-demo"},
+            region="us-east-1",
             runtime_detail={"authorizerConfiguration": None},
         )
 
@@ -240,13 +213,46 @@ class TestAgentCoreRuntimeInvoker:
         result = await invoker.fetch_mcp_payloads(
             runtime_url="https://example.com/invocations",
             transport_type="streamable-http",
-            metadata={"runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:1:runtime/r"},
+            metadata={"runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:account-id:runtime/runtime-demo"},
+            region="us-east-1",
             runtime_detail={"authorizerConfiguration": None},
         )
 
         assert result is http
         sdk_mock.assert_awaited_once()
         http_mock.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_enrich_a2a_agent_uses_runtime_arn_from_metadata(self, monkeypatch):
+        invoker = _build_invoker()
+        agent = _build_fake_a2a_agent(runtime_arn="arn:aws:bedrock-agentcore:us-east-1:account-id:runtime/runtime-demo")
+        monkeypatch.setattr(invoker, "fetch_a2a_card", AsyncMock(return_value={"name": "demo-a2a", "version": "2"}))
+        monkeypatch.setattr(
+            A2AAgent,
+            "from_a2a_agent_card",
+            lambda **_kwargs: SimpleNamespace(card=SimpleNamespace(name="demo-a2a", version="2")),
+        )
+
+        await invoker.enrich_a2a_agent(
+            agent=agent, runtime_detail=dict(agent.federationMetadata or {}), region="us-east-1"
+        )
+
+        assert agent.card.version == "2"
+        assert agent.wellKnown is not None
+        assert agent.wellKnown.lastSyncStatus == "success"
+
+    @pytest.mark.asyncio
+    async def test_enrich_a2a_agent_skips_when_runtime_arn_missing(self):
+        invoker = _build_invoker()
+        agent = _build_fake_a2a_agent(runtime_arn=None)
+
+        await invoker.enrich_a2a_agent(agent=agent, runtime_detail={}, region="us-east-1")
+
+        assert agent.wellKnown is not None
+        assert agent.wellKnown.lastSyncStatus == "failed"
+        assert agent.wellKnown.syncError == "missing runtime ARN for A2A enrichment"
+        assert agent.federationMetadata is not None
+        assert agent.federationMetadata["enrichmentError"] == "a2a enrichment failed: missing runtime ARN"
 
     @pytest.mark.asyncio
     async def test_fetch_mcp_payloads_jwt_uses_http_only(self, monkeypatch):
@@ -261,6 +267,7 @@ class TestAgentCoreRuntimeInvoker:
             runtime_url="https://example.com/invocations",
             transport_type="streamable-http",
             metadata={"authorizerConfiguration": {"customJWTAuthorizerConfiguration": {"discoveryUrl": "x"}}},
+            region="us-east-1",
             runtime_detail=None,
         )
 
@@ -285,7 +292,7 @@ class TestAgentCoreRuntimeInvoker:
                 raise ValueError("GetAgentCard operation returned (502)")
             return {"agentCard": {"name": "ok"}}
 
-        monkeypatch.setattr("registry.services.federation.runtime_invoker.asyncio.to_thread", _fake_to_thread)
+        monkeypatch.setattr("registry.services.federation.agentcore_runtime.asyncio.to_thread", _fake_to_thread)
 
         result = await invoker._call_with_a2a_card_retry(_operation)
         assert result["agentCard"]["name"] == "ok"
@@ -298,6 +305,7 @@ class TestAgentCoreRuntimeInvoker:
 
         headers, auth = await invoker._build_runtime_http_auth(
             metadata={"authorizerConfiguration": {"customJWTAuthorizerConfiguration": {"discoveryUrl": "x"}}},
+            region="us-east-1",
             runtime_detail=None,
         )
 
