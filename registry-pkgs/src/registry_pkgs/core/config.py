@@ -255,6 +255,10 @@ class JarvisBaseSettings(BaseSettings):
     entra_client_id: str | None = None
     entra_client_secret: str | None = None
 
+    # ==================== Google Cloud Identity Groups (service account) ====================
+    # Raw JSON key content for the Workspace Groups Reader service account
+    google_service_account_key_json: str = ""
+
     # ==================== Scopes ====================
     scopes_config_path: str = ""
 
