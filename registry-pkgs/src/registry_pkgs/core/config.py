@@ -245,7 +245,7 @@ class JarvisBaseSettings(BaseSettings):
     @field_validator("auth_provider")
     @classmethod
     def validate_auth_provider(cls, v: str) -> str:
-        allowed = ["cognito", "keycloak", "entra"]
+        allowed = ["cognito", "keycloak", "entra", "google"]
         if v.lower() not in allowed:
             raise ValueError(f"auth_provider must be one of {allowed}, got '{v}'")
         return v.lower()
