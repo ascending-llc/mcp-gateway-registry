@@ -60,6 +60,7 @@ from ..deps import (
 from ..models.client_registration import ClientRegistrationRequest, ClientRegistrationResponse
 from ..models.device_flow import DeviceCodeResponse, DeviceTokenResponse
 from ..providers.base import AuthProvider
+from ..providers.google import GoogleDomainNotAllowedError, GoogleEmailNotVerifiedError
 from ..services.client_registration_service import ClientRegistrationError, ClientRegistrationService
 from ..services.oauth_client_policy import (
     is_registry_client as _is_registry_client,
@@ -286,6 +287,10 @@ def _redirect_to_provider(
         "state": session_data["state"],
         "redirect_uri": callback_uri,
     }
+    # Google's `hd` narrows the account picker to the allowed Workspace domain (UX only —
+    # the authoritative check is the server-side hd-claim validation in GoogleProvider).
+    if provider == "google" and provider_config.get("allowed_hd"):
+        auth_params["hd"] = provider_config["allowed_hd"]
     auth_url = f"{provider_config['auth_url']}?{urlencode(auth_params)}"
 
     response = RedirectResponse(url=auth_url, status_code=302)
@@ -741,8 +746,8 @@ async def get_oauth2_providers(oauth2_config: OAuth2Config = Depends(get_oauth2_
     try:
         enabled = []
         for provider_name, config in cast(dict[str, AuthProviderConfig], oauth2_config["providers"]).items():
-            # Always return one provider that is both enabled and matches that AUTH_PROVIDER env var.
-            if config.get("enabled", False) and provider_name == settings.auth_provider:
+            # Return every enabled provider so the login page can render one button per IdP.
+            if config.get("enabled", False):
                 enabled.append(
                     {"name": provider_name, "display_name": config.get("display_name", provider_name.title())}
                 )
@@ -1140,7 +1145,7 @@ async def oauth2_callback(
                     }
                 else:
                     raise ValueError("No ID token and access token claims unavailable")
-            elif provider == "entra":
+            elif provider in ("entra", "google"):
                 user_info = await auth_provider.get_user_info(
                     access_token=token_data["access_token"], id_token=token_data.get("id_token")
                 )
@@ -1153,7 +1158,15 @@ async def oauth2_callback(
                 }
             else:
                 raise ValueError(f"Unsupported provider {provider}")
-        except (InvalidSignatureError, InvalidTokenError, InvalidIssuerError, InvalidAudienceError):
+        except (
+            InvalidSignatureError,
+            InvalidTokenError,
+            InvalidIssuerError,
+            InvalidAudienceError,
+            GoogleEmailNotVerifiedError,
+            GoogleDomainNotAllowedError,
+        ):
+            # Login-gate rejections must not fall through to the generic userInfo path.
             raise
         except Exception:
             logger.exception("Falling back to userInfo on token parsing error")
@@ -1272,6 +1285,12 @@ async def oauth2_callback(
 
         return _finish_oauth2_callback(token_data, mapped_user, session_data, resolved_scopes, store)
 
+    except GoogleEmailNotVerifiedError:
+        logger.warning(f"Google login rejected: email not verified (provider={provider})")
+        return RedirectResponse(url=f"{error_url}?error=google_email_unverified", status_code=302)
+    except GoogleDomainNotAllowedError:
+        logger.warning(f"Google login rejected: domain not allowed (provider={provider})")
+        return RedirectResponse(url=f"{error_url}?error=google_domain_not_allowed", status_code=302)
     except Exception:
         logger.exception(f"Error in OAuth2 callback for {provider}")
 
