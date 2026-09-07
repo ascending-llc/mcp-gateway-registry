@@ -57,7 +57,9 @@ async def test_list_groups_paginates_and_maps():
     assert groups[1].display_name == "G2"
     assert client._http.get.await_count == 2
     calls = client._http.get.await_args_list
-    assert calls[0].kwargs["params"]["query"] == "member_key_id == 'ada@x.com'"
+    assert calls[0].kwargs["params"]["query"] == (
+        "member_key_id == 'ada@x.com' && 'cloudidentity.googleapis.com/groups.discussion_forum' in labels"
+    )
     assert calls[1].kwargs["params"]["pageToken"] == "abc"
 
 

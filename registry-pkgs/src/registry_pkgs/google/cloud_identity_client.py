@@ -10,6 +10,7 @@ from registry_pkgs.core.jwt_utils import build_jwt_payload, encode_jwt
 logger = logging.getLogger(__name__)
 
 _CLOUD_IDENTITY_BASE_URL = "https://cloudidentity.googleapis.com/v1"
+_GROUPS_DISCUSSION_FORUM_LABEL = "cloudidentity.googleapis.com/groups.discussion_forum"
 _GROUPS_READONLY_SCOPE = "https://www.googleapis.com/auth/cloud-identity.groups.readonly"
 _JWT_BEARER_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 _ASSERTION_TTL_SECONDS = 3600
@@ -89,9 +90,7 @@ class CloudIdentityGroupsClient:
     async def list_transitive_groups_for_member(self, member_email: str) -> list[GoogleWorkspaceGroupInfo]:
         """Paginates groups.memberships.searchTransitiveGroups via nextPageToken."""
         url = f"{_CLOUD_IDENTITY_BASE_URL}/groups/-/memberships:searchTransitiveGroups"
-        # member_email is a normalized Workspace address (EmailValue-validated upstream); it is
-        # interpolated into the CIG query DSL, so callers must not pass unsanitized input here.
-        params = {"query": f"member_key_id == '{member_email}'"}
+        params = {"query": f"member_key_id == '{member_email}' && '{_GROUPS_DISCUSSION_FORUM_LABEL}' in labels"}
         memberships = await self._search_memberships(url, params)
         return [
             GoogleWorkspaceGroupInfo(
@@ -101,6 +100,17 @@ class CloudIdentityGroupsClient:
             )
             for m in memberships
         ]
+
+    async def get_group(self, group_resource_name: str) -> dict:
+        """groups.get — GET /v1/{name=groups/*}. Returns the raw group resource dict.
+
+        Unlike the transitive-membership responses, this exposes the group's `description`.
+        """
+        token = await self._get_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = await self._http.get(f"{_CLOUD_IDENTITY_BASE_URL}/{group_resource_name}", headers=headers)
+        resp.raise_for_status()
+        return resp.json()
 
     async def list_transitive_members_of_group(self, group_resource_name: str) -> list[str]:
         """Paginates groups.memberships.searchTransitiveMemberships via nextPageToken."""
