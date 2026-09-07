@@ -724,7 +724,7 @@ class TestACLService:
             )
 
     @pytest.mark.asyncio
-    @patch("registry.services.access_control_service.Group")
+    @patch("registry.services.access_control_service.ExtendedGroup")
     @patch("registry.services.access_control_service.RegistryAclEntry")
     async def test_get_resource_permissions_returns_group_principal(self, mock_acl_entry, mock_group):
         service = ACLService(user_service=Mock(), group_service=Mock(), role_cache={})
@@ -793,11 +793,11 @@ class TestACLService:
         assert len(result["principals"]) == 3
 
     @pytest.mark.asyncio
-    @patch("registry.services.group_service.Group")
+    @patch("registry.services.group_service.ExtendedGroup")
     async def test_search_groups_applies_limit(self, mock_group):
         mock_group.find.return_value.limit.return_value.to_list = AsyncMock(return_value=[])
 
-        service = GroupService(group_directory_client=MagicMock())
+        service = GroupService(directory_clients={})
         result = await service.search_groups("alpha", limit=5)
 
         assert result == []
