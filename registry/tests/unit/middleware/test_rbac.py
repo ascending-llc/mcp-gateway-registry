@@ -747,14 +747,14 @@ class TestIntegrationScenarios:
         # Mock the group mapping function
         from registry.auth import dependencies as deps_module
 
-        def mock_map_groups(groups):
+        def mock_map_groups(groups, _config):
             mappings = mock_settings.scopes_config.get("group_mappings", {})
             scopes = []
             for group in groups:
                 scopes.extend(mappings.get(group, []))
             return scopes
 
-        monkeypatch.setattr(deps_module, "map_cognito_groups_to_scopes", mock_map_groups)
+        monkeypatch.setattr(deps_module, "map_groups_to_scopes", mock_map_groups)
 
         app = self._build_app()
         app.add_middleware(ScopePermissionMiddleware)
