@@ -3,6 +3,7 @@ import logging
 import time
 
 import httpx
+from httpx import AsyncClient
 from pydantic import BaseModel
 
 from registry_pkgs.core.jwt_utils import build_jwt_payload, encode_jwt
@@ -31,7 +32,17 @@ class CloudIdentityGroupsClient:
         self._token_uri: str = "https://oauth2.googleapis.com/token"
         self._access_token: str | None = None
         self._token_expiry: float = 0.0
-        self._http = httpx.AsyncClient(timeout=30.0)
+        self._http: httpx.AsyncClient | None = None
+
+    def _client(self) -> AsyncClient | None:
+        if self._http is None:
+            self._http = httpx.AsyncClient(timeout=30.0)
+        return self._http
+
+    async def aclose(self) -> None:
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
 
     def _load_key(self) -> None:
         if self._client_email is not None:
@@ -57,7 +68,7 @@ class CloudIdentityGroupsClient:
         )
         assertion = encode_jwt(payload, self._private_key)
 
-        resp = await self._http.post(
+        resp = await self._client().post(
             self._token_uri,
             data={"grant_type": _JWT_BEARER_GRANT, "assertion": assertion},
         )
@@ -79,7 +90,7 @@ class CloudIdentityGroupsClient:
             page_params = dict(params)
             if page_token:
                 page_params["pageToken"] = page_token
-            resp = await self._http.get(url, params=page_params, headers=headers)
+            resp = await self._client().get(url, params=page_params, headers=headers)
             resp.raise_for_status()
             data = resp.json()
             memberships.extend(data.get("memberships", []))
@@ -108,7 +119,7 @@ class CloudIdentityGroupsClient:
         """
         token = await self._get_token()
         headers = {"Authorization": f"Bearer {token}"}
-        resp = await self._http.get(f"{_CLOUD_IDENTITY_BASE_URL}/{group_resource_name}", headers=headers)
+        resp = await self._client().get(f"{_CLOUD_IDENTITY_BASE_URL}/{group_resource_name}", headers=headers)
         resp.raise_for_status()
         return resp.json()
 

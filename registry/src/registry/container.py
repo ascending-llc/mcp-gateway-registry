@@ -560,6 +560,7 @@ class RegistryContainer:
         await self.mcp_proxy_client.aclose()
         await self.a2a_httpx_client.aclose()
         await self.a2a_client_registry.close()
+        await self.cloud_identity_client.aclose()
 
     def _initialize_federation(self) -> None:
         """Run optional federation sync on startup without failing the whole application."""

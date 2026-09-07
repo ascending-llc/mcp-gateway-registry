@@ -862,7 +862,7 @@ async def _atomic_write_decision(
 async def _refresh_triggering_auth_context(
     run: WorkflowRun,
     current_auth_context: UserContextDict | None = None,
-):
+) -> UserContextDict | None:
     """Rebuild auth context from current user/group state before HITL resume.
 
     Returns ``None`` when no ``triggering_user_id`` was captured (e.g. script-driven

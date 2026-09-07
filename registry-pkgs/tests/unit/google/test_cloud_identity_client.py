@@ -118,3 +118,24 @@ async def test_token_failure_raises():
 
     with pytest.raises(ValueError):
         await client.list_transitive_groups_for_member("a@x.com")
+
+
+async def test_client_and_http_are_lazy():
+    client = CloudIdentityGroupsClient("")
+    assert client._http is None
+    assert client._client() is client._http is not None
+
+
+async def test_aclose_is_noop_when_never_used():
+    client = CloudIdentityGroupsClient("")
+    await client.aclose()  # must not raise
+    assert client._http is None
+
+
+async def test_aclose_closes_and_resets_http():
+    client = CloudIdentityGroupsClient("")
+    mock_http = AsyncMock()
+    client._http = mock_http
+    await client.aclose()
+    mock_http.aclose.assert_awaited_once()
+    assert client._http is None
