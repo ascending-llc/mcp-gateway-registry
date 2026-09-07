@@ -155,7 +155,7 @@ class TokenGrantService:
             "user_id": user_id,
             "groups": user_info.get("groups", []),
             "token_use": ACCESS_USE,
-            "auth_provider": settings.auth_provider,
+            "auth_provider": user_info.get("provider", settings.auth_provider),
         }
         if include_identity_claims:
             extra_claims.update({"name": user_info.get("name"), "idp_id": user_info.get("idp_id")})

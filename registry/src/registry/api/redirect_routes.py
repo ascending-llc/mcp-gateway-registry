@@ -347,10 +347,7 @@ async def oauth2_callback(
             )
 
         try:
-            await group_service.sync_user_group_memberships(
-                user_obj,
-                enabled=settings.entra_group_sync_enabled,
-            )
+            await group_service.sync_user_group_memberships(user_obj)
         except Exception:
             logger.warning(
                 "Group sync failed for user %s; login will proceed.",
